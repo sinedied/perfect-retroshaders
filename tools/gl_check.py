@@ -17,9 +17,9 @@ import numpy as np
 import moderngl
 from crt_preview import DEFAULTS, SOURCES, render_crt
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GLSL = os.path.join(REPO, "shaders")
-SHADER = os.path.join(GLSL, "crt-perfect.glsl")
+from paths import SHADERS as GLSL, shader_path
+
+SHADER = shader_path("crt-perfect.glsl")
 
 HEADER = "#version 410 core\n"
 

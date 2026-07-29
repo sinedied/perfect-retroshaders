@@ -22,6 +22,7 @@ SOFTWARE.
 
 ---
 
-shaders/pixellate.glsl is not covered by the above. It is third-party, by Fes,
-2011-2012, under its own permissive licence reproduced in the file header. It
-is included only as a performance baseline.
+shaders/ is covered by the above. Shaders under tools/vendor/ are not: they are
+third-party, included only as benchmark and comparison references, and each is
+governed by its own licence as reproduced in its file header. Currently that is
+pixellate.glsl by Fes, 2011-2012, under its own permissive licence.

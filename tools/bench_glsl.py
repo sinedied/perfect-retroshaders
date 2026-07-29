@@ -18,8 +18,7 @@ import numpy as np
 import moderngl
 from gl_check import stage_source
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GLSL = os.path.join(REPO, "shaders")
+from paths import shader_path
 OW, OH = 1024, 768
 IW, IH = 320, 240
 DRAWS = 200
@@ -41,7 +40,7 @@ CASES = [
 
 
 def build(ctx, fn, params):
-    src = open(os.path.join(GLSL, fn)).read()
+    src = open(shader_path(fn)).read()
     p = ctx.program(vertex_shader=stage_source(src, "vert"),
                     fragment_shader=stage_source(src, "frag"))
     for k, v in params.items():

@@ -35,7 +35,9 @@ background. These are built the other way round — the constraint comes first.
 | `shaders/crt-perfect-v5.glsl` | **current.** Scanlines, RGB mask, pixel-perfect scaling, gamma |
 | `shaders/crt-perfect-v5b.glsl` | same, with gamma applied after scaling — cheaper, slightly less moiré-immune |
 | `shaders/crt-perfect-v4.glsl` … `crt-perfect.glsl` | earlier iterations, kept so the trade-offs stay visible |
-| `shaders/pixellate.glsl` | third-party (Fes), included as the performance baseline |
+
+Third-party shaders used only as benchmark references live in
+[`tools/vendor/`](tools/vendor) and are not part of this project's licence.
 
 ### Parameters
 
@@ -88,5 +90,5 @@ out to be wrong.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). `shaders/pixellate.glsl` is third-party, by Fes, under
-its own permissive licence reproduced in the file header.
+MIT — see [LICENSE](LICENSE). Shaders under `tools/vendor/` are third-party, kept only
+as benchmark references, each under its own licence as stated in its file header.

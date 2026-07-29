@@ -3,8 +3,7 @@
 GLSL retro shaders (CRT scanlines + RGB mask + pixel-perfect scaling) for cheap
 handhelds. Target: **Trimui Brick, 1024x768, Mali G31 MP2, GLES 3.2, 60fps** — that is
 47 Mfrag/s, and the shader also pays for a final 1:1 blit. Also expected to work down
-to a 640x480 output. MIT, except `shaders/pixellate.glsl` which is third-party (Fes)
-and included only as the performance baseline — do not relicense or edit it.
+to a 640x480 output. MIT.
 
 No build, no test suite. Verification is the Python harness in `tools/`.
 
@@ -15,8 +14,18 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | `shaders/crt-perfect-v5.glsl` | current version. Host-neutral header, `cp_`-prefixed params |
 | `shaders/crt-perfect-v5b.glsl` | v5 with gamma applied after scaling instead of per-tap |
 | `shaders/crt-perfect{,-v2,-v3,-v4}.glsl` | historical iterations, kept for comparison |
-| `shaders/pixellate.glsl` | **performance baseline**: 30 SFU slots, ships on the target and holds 60fps |
 | `tools/` | the verification harness |
+| `tools/vendor/` | **third-party shaders**, benchmark and comparison references only |
+
+`shaders/` holds only shaders this repo owns and licenses. Anything third-party lives
+in `tools/vendor/`: not part of the MIT grant, not edited, present purely to measure
+against. Currently `pixellate.glsl` (Fes) — **30 SFU slots**, ships on the target
+device and holds 60fps there, so it is the budget yardstick every cost figure here is
+quoted against.
+
+Tools resolve a bare shader filename against `shaders/` then `tools/vendor/` via
+`tools/paths.py`, so a new benchmark shader only needs dropping into `vendor/`.
+`spirv_cost.py` discovers both automatically.
 
 v1–v4 headers still document frontend-specific pass settings and their own version
 history; that is deliberate, they are the record of how each step was reached. v5 and
@@ -180,5 +189,4 @@ Both masks are luminance-neutral, which three primaries 120° apart reproduce ex
 
 ## Commits
 
-Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `perf:`. Scope
-by shader when useful, e.g. `fix(crt-perfect-v5): clamp pow base to avoid NaN on black`.
+Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `perf:`. 

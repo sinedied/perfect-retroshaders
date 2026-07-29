@@ -16,14 +16,13 @@ import tempfile
 
 from gl_check import stage_source
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GLSL = os.path.join(REPO, "shaders")
+from paths import shader_path, list_shaders
 COST = {'Pow': 2, 'Exp': 1, 'Exp2': 1, 'Log': 1, 'Log2': 1, 'Sqrt': 1,
         'InverseSqrt': 1, 'Sin': 1, 'Cos': 1, 'Tan': 2, 'Atan': 2}
 
 
 def disassemble(fn):
-    src = open(os.path.join(GLSL, fn)).read()
+    src = open(shader_path(fn)).read()
     with tempfile.NamedTemporaryFile('w', suffix='.frag', delete=False) as f:
         f.write(stage_source(src, 'frag'))
         tmp = f.name
@@ -103,9 +102,7 @@ def analyse(fn):
 
 if __name__ == '__main__':
     print(f"{'shader':<28s} {'ops':>4s} {'tex':>4s} {'SFU slots':>10s}   breakdown (scalar lanes)")
-    for fn in ['pixellate.glsl', 'crt-perfect.glsl', 'crt-perfect-v2.glsl',
-               'crt-perfect-v3.glsl', 'crt-perfect-v4.glsl',
-               'crt-perfect-v5.glsl', 'crt-perfect-v5b.glsl']:
+    for fn in list_shaders(include_vendor=True):
         a = analyse(fn)
         if not a:
             print(f"{fn:<28s} skip")
