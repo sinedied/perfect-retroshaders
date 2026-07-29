@@ -230,6 +230,19 @@ the grid on dark pixels") is **not** safe here: it computes the gain from the bl
 colour and multiplies it back, which is a non-linearity after the blend. Measure
 before adopting.
 
+**Out of scope for `lcd-perfect`, decided deliberately** (this used to live in the
+shader header; it is here so it is not re-litigated):
+
+- **Response-time ghosting.** Needs the previous frame, so it needs a feedback pass,
+  and the intended hosts run single-pass GLSL only.
+- **Backlit versus reflective response, and panel colour casts.** Those belong to a
+  colour pass, not to a geometry one.
+- **Non-square pixels.** Every panel in scope is square-pixel.
+
+One measured wrinkle to know about: the stripes leave a tint of about one 8-bit level
+on a white field, because the `sqrt` is applied per channel and the three stripes do
+not sample the same phases.
+
 ## GLSL traps that actually bit
 
 - **`pow(0.0, k)` is undefined** and returned NaN on a real driver, rendering whole
