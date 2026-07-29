@@ -1,46 +1,39 @@
-/*
-    crt-perfect - scanlines and an RGB mask over a pixel-perfect scale.
-    -------------------------------------------------------------------------------
-    Author:  sinedied
-    Licence: MIT - Copyright (c) 2026 sinedied
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy of
-    this software and associated documentation files (the "Software"), to deal in
-    the Software without restriction, including without limitation the rights to
-    use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
-    of the Software, and to permit persons to whom the Software is furnished to do
-    so, subject to the following conditions: the above copyright notice and this
-    permission notice shall be included in all copies or substantial portions of
-    the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-    -------------------------------------------------------------------------------
-    PARAMETERS
-
-      cp_scanlines   0.00 - 1.00  Scanline visibility. 0 disables them.
-      cp_rgb_mask    0.00 - 1.00  RGB mask visibility. 0 disables it.
-      cp_mask_type   0 / 1 / 2    Mask style: off, aperture grille, slot grille.
-      cp_mask_size   0.25 - 2.00  Mask triads per source pixel.
-      cp_brightness  0.25 - 4.00  Output gain, compensates the pattern darkening.
-      cp_min_pitch   2.00 - 6.00  Smallest pattern pitch, in output pixels.
-      cp_gamma       0.50 - 2.00  Gamma applied after scaling. 1.00 disables it.
-    -------------------------------------------------------------------------------
-    Scales the source into uniform pixel blocks, then modulates it with two pure
-    sinusoids: one across the source lines, one across the source columns in three
-    colour phases. Both are band-limited by construction, so neither beats against
-    the pixel grid at any scale factor. The scanline count follows the source -
-    224-line content gets 224 scanlines with no configuration - until the output no
-    longer has room for one line each, at which point both patterns fall back to a
-    fixed pitch of cp_min_pitch output pixels.
-
-    Render this at the final output resolution, one output pixel per display pixel:
-    anything that rescales its result afterwards will alias the mask. Two settings
-    trade range for quality and are best left near their defaults - cp_brightness
-    above ~1.2 clips beam peaks to white, and cp_gamma away from 1.00 reintroduces
-    moire, because it is applied after the scaler's blend and any non-linearity
-    there beats with the pixel grid. At cp_min_pitch 2.00 a triad has too few pixels
-    to carry three primaries and the mask degenerates into two-colour columns; 2.50
-    and up keep it intact, and every 0.25 step repeats over a whole number of output
-    pixels.
-*/
+// crt-perfect - scanlines and an RGB mask over a pixel-perfect scale.
+// -----------------------------------------------------------------------------
+// Author:  sinedied
+// Licence: MIT - Copyright (c) 2026 sinedied
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions: the above copyright
+// notice and this permission notice shall be included in all copies or
+// substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS",
+// WITHOUT WARRANTY OF ANY KIND.
+// -----------------------------------------------------------------------------
+// PARAMETERS
+//
+//   cp_scanlines   0.00 - 1.00  Scanline visibility. 0 disables them.
+//   cp_rgb_mask    0.00 - 1.00  RGB mask visibility. 0 disables it.
+//   cp_mask_type   0 / 1 / 2    Off, aperture grille, slot grille.
+//   cp_mask_size   0.25 - 2.00  Mask triads per source pixel.
+//   cp_brightness  0.25 - 4.00  Output gain, compensates the darkening.
+//   cp_min_pitch   2.00 - 6.00  Smallest pattern pitch, in output pixels.
+//   cp_gamma       0.50 - 2.00  Output gamma. 1.00 disables it.
+// -----------------------------------------------------------------------------
+// Scales the source into uniform pixel blocks, then modulates it with two pure
+// sinusoids: one across the source lines, one across the source columns in
+// three colour phases. Both are band-limited, so neither beats against the
+// pixel grid. The scanline count follows the source resolution, falling back to
+// a fixed cp_min_pitch once the output has no room for one line each.
+//
+// Notes:
+// - Render at the output resolution, 1:1 with the display. Rescaling its result
+//   aliases the mask.
+// - At cp_min_pitch 2.00 the mask degenerates to two-colour columns; use 2.50
+//   or more.
 
 #pragma parameter cp_scanlines  "Scanline visibility"        0.55 0.00 1.00 0.05
 #pragma parameter cp_rgb_mask   "RGB mask visibility"        0.40 0.00 1.00 0.05

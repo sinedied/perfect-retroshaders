@@ -91,37 +91,38 @@ be made identically in GLSL and in numpy to slip through. It has happened once (
 
 ## Shader header format
 
-Every shipped shader opens with this block. Order is fixed: **name, licence,
-parameters, prose**. Separator is 4 spaces + 79 dashes (column 83).
+Every shipped shader opens with this block. **Line comments, hard 80-column limit**
+(the separator is `// ` + 77 dashes). Order is fixed: name, licence, parameters,
+description, notes.
 
 ```glsl
-/*
-    <name> - <one-line description, lowercase, ends with a period.>
-    -------------------------------------------------------------------------------
-    Author:  sinedied
-    Licence: MIT - Copyright (c) 2026 sinedied
-
-    <the 8-line MIT paragraph, identical in every file>
-    -------------------------------------------------------------------------------
-    PARAMETERS
-
-      <xx_name>   <range>   <Sentence describing it. What 0 or 1.00 does.>
-    -------------------------------------------------------------------------------
-    <What it does and its characteristics — one short paragraph.>
-
-    <Caveats and advice: what not to change, where it degrades, what a setting
-     costs. One short paragraph. Omit if there is genuinely nothing to warn about.>
-*/
+// <name> - <one-line description, lowercase, ends with a period.>
+// -----------------------------------------------------------------------------
+// Author:  sinedied
+// Licence: MIT - Copyright (c) 2026 sinedied
+//
+// <the MIT paragraph, wrapped to 80, identical in every file>
+// -----------------------------------------------------------------------------
+// PARAMETERS
+//
+//   <xx_name>   <range>   <Sentence. What 0 or 1.00 does.>
+// -----------------------------------------------------------------------------
+// <What it does, in one short paragraph. Five lines is plenty.>
+//
+// Notes:
+// - <One or two phrases. Omit the section if there is nothing to warn about.>
 ```
 
 Rules that matter:
 
-- **Two short paragraphs of prose, maximum.** The header is a user-facing reference,
-  not the design record. Rationale, measurements and rejected approaches belong in
-  this file or in a commit message.
+- **One short paragraph of prose, then `Notes:`.** Each note is one or two phrases,
+  not a paragraph. The header is a user-facing reference; rationale, measurements and
+  rejected approaches belong in this file or in a commit message.
 - **Write the block out whole; never patch it incrementally.** Regex-editing these
   headers during the repo extraction produced stray `..` fragments and a duplicated
-  copyright block, and took three attempts to get right. Regenerate, then diff.
+  copyright block, and took three attempts to get right. Regenerate, then diff. The
+  generator in the `docs(crt-perfect)` commit is the pattern: build the lines, assert
+  none exceeds 80, splice on the first delimiter.
 - Parameter identifiers are prefixed per shader (`cp_`, `lp_`, `pp_`) and lowercase.
 - **The `#pragma parameter` label and the identifier are both user-visible, on
   different hosts.** RetroArch and RetroShader Lab render the quoted label; **minarch
@@ -129,8 +130,10 @@ Rules that matter:
   has to read acceptably on its own *and* the label has to be worth reading. Do not
   flatten the label into a copy of the identifier — that happened between v4 and v5
   and lost the descriptions on every host that shows them.
-- Keep the `#pragma` lines column-aligned; the PARAMETERS block and the pragmas must
-  agree on defaults and ranges, and nothing checks that for you.
+- Keep the `#pragma` lines column-aligned and inside 80 too. The PARAMETERS block and
+  the pragmas must agree on ranges, and nothing checks that for you.
+- The 80-column rule covers the header and the pragmas. The shader bodies predate it
+  and are not being reflowed.
 
 Only `crt-perfect.glsl` follows this format so far. `lcd-perfect.glsl` and
 `pixel-perfect.glsl` predate it and are to be converted once the format settles.
