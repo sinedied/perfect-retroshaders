@@ -162,33 +162,27 @@ def report():
         ((256, 192), (640, 480)),
         ((160, 144), (640, 480)),
     ]
-    # only the shipped defaults are gated. The rest are there to show what the
-    # parameters cost, and "full strength" is deliberately past the point where
-    # the beat is visible - that is the trade the header documents, not a bug.
-    variants = [
-        ("defaults", {}, True),
-        ("grid only", dict(lp_subpixels=0.0), True),
-        ("gamma 0.7", dict(lp_gamma=0.7), True),
-        ("full strength", dict(lp_grid=1.0, lp_subpixels=1.0, lp_gap=0.35), False),
-        ("crt-perfect", None, True),
-    ]
-    print("  " + " " * 22 + "".join(f"{n[:13]:>15s}" for n, _, _ in variants))
-    print("  " + " " * 22 + "".join(f"{'(gated)' if g else '(info)':>15s}"
-                                    for _, _, g in variants))
-    worst = 0.0
+    # Each shader at its own shipped defaults, which is the only configuration
+    # that gets gated; a parameter pushed past its default is the user's choice
+    # and the headers document what it costs.
+    from shaders import REGISTRY
+    cols = [(n.replace(".glsl", "").replace("lcd-perfect", "lcd"), n)
+            for n in REGISTRY if n.startswith("lcd-")]
+    cols.append(("crt-perfect", "crt-perfect.glsl"))
+
+    print("  " + " " * 22 + "".join(f"{n:>14s}" for n, _ in cols))
+    worst, worst_at = 0.0, ""
     for (sw, sh), (ow, oh) in scales:
         row = []
-        for _, p, gated in variants:
-            if p is None:
-                r = measure(_v5(after=True), sw, sh, ow, oh)
-            else:
-                r = measure(lambda s, w, h, p=p: render_lcd(
-                    s, w, h, dict(DEFAULTS_LCD, **p), quantise=False), sw, sh, ow, oh)
-            if gated:
-                worst = max(worst, r)
-            row.append(f"{r:15.3f}")
+        for _, name in cols:
+            model = REGISTRY[name]
+            r = measure(lambda s, w, h, m=model: m.render(
+                s, w, h, dict(m.defaults)) / 255.0, sw, sh, ow, oh)
+            if r > worst:
+                worst, worst_at = r, f"{name} at {sw}x{sh} -> {ow}x{oh}"
+            row.append(f"{r:14.3f}")
         print(f"  {sw}x{sh} -> {ow}x{oh}".ljust(24) + "".join(row))
-    print(f"\n  worst gated beat: {worst:.3f}   "
+    print(f"\n  worst at defaults: {worst:.3f} ({worst_at})   "
           f"{'OK' if worst <= VISIBLE else 'VISIBLE MOIRE'}")
     return worst
 

@@ -50,8 +50,11 @@ GAP_ASPECT = 0.4
 
 TAU = 2.0 * np.pi
 
-# Stripe fade window, in output pixels per cell. Must match both shaders.
-STRIPE_FADE = (2.5, 5.0)
+# Stripe fade window, in output pixels per cell. Must match the shader it
+# belongs to - v1 shipped with 3 to 6, which leaves the stripes at 1.3% strength
+# at 3.2 px/cell and so inert at 320x240 into 1024x768; v2 widens it.
+STRIPE_FADE = (3.0, 6.0)
+STRIPE_FADE_V2 = (2.5, 5.0)
 
 
 def smoothstep(e0, e1, x):
@@ -172,7 +175,8 @@ def area_average(src, out_w, out_h, sharpness=1.0, gamma=1.0,
     return color, px, py, dx, dy, gain
 
 
-def stripe_factor(p, px, dx, out_w, out_h, st, mode="edge"):
+def stripe_factor(p, px, dx, out_w, out_h, st, mode="edge",
+                  fade=STRIPE_FADE):
     """The RGB stripe modulation, shared by every lcd-perfect variant.
 
     Three trapezoid apertures of a third of a cell each, box filtered the same
@@ -187,7 +191,7 @@ def stripe_factor(p, px, dx, out_w, out_h, st, mode="edge"):
     stripe = np.ones((out_h, out_w, 3))
     if p["lp_subpixels"] <= 0.0:
         return stripe
-    amount = p["lp_subpixels"] * smoothstep(*STRIPE_FADE, 1.0 / dx)
+    amount = p["lp_subpixels"] * smoothstep(*fade, 1.0 / dx)
     if amount <= 0.0:
         return stripe
     third = 1.0 / 3.0
@@ -233,7 +237,8 @@ def render_lcd(src_u8, out_w, out_h, p=None, mode="edge", quantise=True,
 
     stripe = stripe_factor(p, px, dx, out_w, out_h,
                            st=min(max(0.5 * p["lp_gap"], 1e-4), 0.15 / 3.0),
-                           mode=mode)
+                           mode=mode,
+                           fade=STRIPE_FADE_V2 if balance else STRIPE_FADE)
 
     m = np.sqrt(np.maximum(stripe * (gain * p["lp_brightness"])[..., None], 0.0))
     out = np.clip(color * m, 0.0, 1.0)
@@ -276,7 +281,8 @@ def render_lcd_v2a(src_u8, out_w, out_h, p=None, quantise=True):
     color, px, py, dx, dy, gain = area_average(
         src, out_w, out_h, 1.0, p["lp_gamma"], aperture=aperture)
 
-    stripe = stripe_factor(p, px, dx, out_w, out_h, st=0.05)
+    stripe = stripe_factor(p, px, dx, out_w, out_h, st=0.05,
+                           fade=STRIPE_FADE_V2)
 
     m = np.sqrt(np.maximum(stripe * (gain * p["lp_brightness"])[..., None], 0.0))
     out = np.clip(color * m, 0.0, 1.0)

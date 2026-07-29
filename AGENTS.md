@@ -241,6 +241,56 @@ Three things that took measuring:
   stay at 1 for white to stay white, which inherently puts its peak near 3. Faking
   subpixels either darkens or clips; there is no third option.
 
+### Aperture shape decides how strong a grid you can afford
+
+Matching `lcd1x`'s look means a **column-dominant** grid at a 4:1 column-to-row swing
+ratio. Measured, at 320x240 -> 1024x768 on white:
+
+| | mean | row | col | col/row | beat |
+|---|---|---|---|---|---|
+| `lcd1x`, the target | 75.3% | 24.0 | 96.0 | 4.00 | 1.865 |
+| `lcd-perfect` v1 | 85.0% | 57.6 | 25.4 | 0.44 | 0.244 |
+| v2b, hard matrix + balance | 80.7% | 15.2 | 71.0 | 4.65 | 0.385 |
+| v2a, sinusoid + balance | 72.6% | 24.4 | 96.2 | 3.94 | **0.144** |
+
+**The sinusoid reaches it and the hard matrix cannot.** Every v2b configuration at a
+4:1 ratio with a column swing near 96 measures past 0.4; its best inside the budget is
+71, a quarter short. A hard-edged aperture is mostly harmonics, they fold back, and
+the stronger you make it the worse that gets — which is the same thing v1's ramp was
+compensating for, arriving structurally instead of empirically. **Want a strong grid,
+use a smooth profile.**
+
+The sinusoid is also *cheaper*, 515 ops against 646, because it needs no `floor`, no
+`clamp` and no ramp integral. It costs 6 more SFU lanes, which is a good trade.
+
+Two things it does not get for free:
+
+- **Even-integer scales lose all contrast.** The edge-aligned trapezoid fixed those by
+  construction; a sinusoid puts both samples of a cell on symmetric points of the
+  cosine and reads the same value from each, so at 2.0 output pixels per cell the grid
+  vanishes. An **unconditional** half-output-pixel shift removes every dropout over a
+  dense 2.0-8.0 sweep and is never worse than not shifting (min contrast 0 -> 60,
+  median unchanged). Do not ramp it in; there is nothing to trade.
+- **The blend identity needs re-checking, not assuming.** The aperture-weighted blend
+  is free only because `A(n) == n` at integers. For `A(x) = x - m*sin(TAU*x)/TAU` it
+  holds exactly, and once phase-shifted `A(n) - n` is a constant across the draw, so
+  it stays free. Verified numerically to 6e-14 before any shader was written.
+
+### Do not hardcode a geometry ratio
+
+v1 hardcoded `GAP_ASPECT = 0.4` from the Game Boy Color panel measurement, which is
+physically right - real panels are row-dominant. It also made the `lcd1x` look
+*unreachable*: the constant caps the column gap at 40% of the row gap, so the ratio
+tops out at 0.61 no matter how far `lp_gap` is pushed. Authenticity and the look
+people actually want are different targets; the ratio is a parameter (`lp_balance`),
+not a constant.
+
+Same shape of mistake in the stripe fade: `smoothstep(3, 6, px_per_cell)` leaves the
+stripes at 1.3% strength at 3.2 px/cell, which is 320x240 into 1024x768 - the most
+common scale there is. A threshold chosen against one failure mode was silently
+disabling the feature everywhere else. Measure a fade window across the scales that
+actually occur.
+
 `simpletex_lcd`'s luma-biased grid (`lineWeight *= luma + (1-luma)*(1-BIAS)`, "hide
 the grid on dark pixels") is **not** safe here: it computes the gain from the blended
 colour and multiplies it back, which is a non-linearity after the blend. Measure
@@ -342,6 +392,11 @@ reproduces the ordering exactly at a consistent ~1.9× scale (spread 1.33×), so
 threshold is 0.4 rather than 0.2; the original tool was not in the repo and had to be
 rebuilt from its description. A metric whose ratio to the record *drifts* per
 construction is measuring something else and must not be trusted.
+
+Also: a shared constant between a model and several shaders is a trap. Widening
+`STRIPE_FADE` in `lcd_preview.py` silently changed v1's model while v1's `.glsl` kept
+the old window - `gl_check.py` catches it, but only if it is run over *every* shader
+rather than the ones just edited. Per-variant constants, or run the whole gate.
 
 Also: the desktop GL context is 4.1 Core, so ESSL-1.00 shaders do not run there. The
 harness compiles them as `#version 410 core` via the compat macros; the device is the

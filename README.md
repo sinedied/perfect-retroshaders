@@ -133,6 +133,45 @@ for three stripes, so it fades out below that and is off almost everywhere at 64
 
 Needs a NEAREST sampler. Upscaling only.
 
+#### lcd-perfect v2
+
+Two iterations aimed at `lcd1x`'s look, which v1 cannot reach: `lcd1x` is
+vertical-dominant at a 4:1 column-to-row swing ratio, v1 is horizontal-dominant at
+0.44:1, and v1's `GAP_ASPECT` constant caps the column gap at 40% of the row gap — so
+pushing `lp_gap` to maximum still only reaches 0.61. Both v2 shaders replace that
+constant with an **`lp_balance`** parameter (0 = rows only, 0.5 = even, 1 = columns
+only; the ratio is `b/(1−b)`), and both widen the stripe fade, which at v1's setting
+left the stripes at 1.3% strength at 3.2 output pixels per cell — inert at the most
+common scale there is.
+
+**v2a** additionally replaces the trapezoid aperture with a **sinusoid**, which is
+the shape `lcd1x` actually uses. A sinusoid carries no harmonics to fold back past
+Nyquist, so it needs none of the ramp machinery the hard-edged aperture needs to stay
+clean — and that machinery was most of v1's cost.
+
+Measured on a white field at 320×240 → 1024×768, all rendered on the GPU:
+
+| | mean | row swing | col swing | col/row | moiré | ops | SFU |
+|---|---|---|---|---|---|---|---|
+| **`lcd1x`** (the target) | 75.3% | 24.0 | 96.0 | **4.00** | 1.865 | 54 | 2 |
+| `lcd3x` | 82.3% | 68.6 | 5.8 | 0.08 | 8.207 | 70 | 4 |
+| `lcd-perfect` (v1) | 85.0% | 57.6 | 25.4 | 0.44 | 0.244 | 646 | 27 |
+| `lcd-perfect-v2b` | 80.7% | 15.2 | 71.0 | 4.65 | 0.385 | 651 | 27 |
+| **`lcd-perfect-v2a`** | **72.6%** | **24.4** | **96.2** | **3.94** | **0.144** | 515 | 33 |
+
+**v2a lands on `lcd1x` within a couple of percent on every axis, at one thirteenth
+the moiré** — and with even pixel blocks, which `lcd1x` has no scaler to provide.
+
+**v2b cannot get there.** Every configuration at a 4:1 ratio with a column swing near
+96 measures past the 0.4 visible threshold; its best inside the budget is a column
+swing of 71, a quarter short. A column-dominant *hard-edged* matrix is mostly
+harmonics and they fold back into the visible band. That is the same lesson v1's
+ramp taught, arriving structurally: if you want a strong vertical grid, you want a
+smooth profile.
+
+`lp_grid` and `lp_balance` are shared; v2b keeps `lp_gap`, v2a has no use for one
+because a sinusoid has no thickness.
+
 ## Performance
 
 TODO: performance tests 
