@@ -271,6 +271,10 @@ Two things it does not get for free:
   vanishes. An **unconditional** half-output-pixel shift removes every dropout over a
   dense 2.0-8.0 sweep and is never worse than not shifting (min contrast 0 -> 60,
   median unchanged). Do not ramp it in; there is nothing to trade.
+- **But the shift is worth more than it costs.** At 320x240 -> 640x480, exactly 2.0
+  output pixels per cell, v2a keeps a column swing of 71.5 against its own 96.2 at
+  1024x768 - 74% retained. `lcd1x`, an unshifted sinusoid, keeps 19.1 of 96.0, so 20%.
+  The minimum supported resolution is where this decision is worth the most.
 - **The blend identity needs re-checking, not assuming.** The aperture-weighted blend
   is free only because `A(n) == n` at integers. For `A(x) = x - m*sin(TAU*x)/TAU` it
   holds exactly, and once phase-shifted `A(n) - n` is a constant across the draw, so

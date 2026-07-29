@@ -162,6 +162,20 @@ Measured on a white field at 320×240 → 1024×768, all rendered on the GPU:
 **v2a lands on `lcd1x` within a couple of percent on every axis, at one thirteenth
 the moiré** — and with even pixel blocks, which `lcd1x` has no scaler to provide.
 
+It also survives the drop to 640×480, where the scale is exactly 2.0 output pixels
+per cell and every other shader here loses its grid:
+
+| at 320×240 → 640×480 | mean | row swing | col swing | col retained |
+|---|---|---|---|---|
+| `lcd1x` | 75.3% | 3.6 | 19.1 | 20% |
+| `lcd-perfect` (v1) | 85.4% | 20.5 | 5.5 | 22% |
+| `lcd-perfect-v2b` | 81.0% | 3.0 | 32.0 | 45% |
+| **`lcd-perfect-v2a`** | 72.5% | 17.8 | **71.5** | **74%** |
+
+An even-integer scale puts both samples of a cell on symmetric points of the profile,
+which is why `lcd1x` — an unshifted sinusoid — nearly vanishes. v2a shifts by half an
+output pixel unconditionally, which costs nothing and removes every such dropout.
+
 **v2b cannot get there.** Every configuration at a 4:1 ratio with a column swing near
 96 measures past the 0.4 visible threshold; its best inside the budget is a column
 swing of 71, a quarter short. A column-dominant *hard-edged* matrix is mostly
