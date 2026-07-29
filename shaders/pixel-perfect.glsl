@@ -27,10 +27,7 @@
 // four taps with separable weights evaluate it exactly.
 //
 // Notes:
-// - Render at the output resolution, 1:1 with the display, sampler NEAREST.
-//   Rescaling its result destroys the block structure.
-// - Upscaling only: below 1:1 a footprint spans more than two texels per axis
-//   and four taps stop averaging correctly.
+// - Render at the output resolution, 1:1 with the display.
 
 #pragma parameter pp_sharpness "Transition width in px" 1.00 0.20 1.00 0.05
 

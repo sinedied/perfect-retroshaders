@@ -30,8 +30,7 @@
 // a fixed cp_min_pitch once the output has no room for one line each.
 //
 // Notes:
-// - Render at the output resolution, 1:1 with the display. Rescaling its result
-//   aliases the mask.
+// - Render at the output resolution, 1:1 with the display.
 // - At cp_min_pitch 2.00 the mask degenerates to two-colour columns: use 2.50
 //   or more to keep the triads visible.
 

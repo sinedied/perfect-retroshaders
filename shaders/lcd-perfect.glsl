@@ -30,12 +30,9 @@
 // own as the cells approach the pixel grid.
 //
 // Notes:
-// - Render at the output resolution, 1:1 with the display, sampler NEAREST.
-//   Upscaling only.
-// - To brighten, prefer lp_gamma below 1.00: lp_brightness is a gain into a
-//   hard clamp, which brings back moire.
+// - Render at the output resolution, 1:1 with the display.
 // - The stripes need about three output pixels per cell and fade out below
-//   that, so they only show on small sources.
+//   that, so they only show on small sources or high output resolutions.
 
 #pragma parameter lp_grid       "Grid visibility"          0.30 0.00 1.00 0.05
 #pragma parameter lp_gap        "Matrix thickness"         0.16 0.00 0.50 0.01

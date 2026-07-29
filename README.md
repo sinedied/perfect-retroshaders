@@ -32,6 +32,9 @@ dmg-perfect
 budget: 8 params max per shader
 
 
+Note: all shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to be work at non-integer scaling factor without any visible moire patterns, though the image will still always be better at integer scales.
+
+
 | File | |
 |---|---|
 | `shaders/pixel-perfect.glsl` | **scaling only.** Uniform pixel blocks, no shimmer, no blur |
