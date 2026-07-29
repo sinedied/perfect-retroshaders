@@ -1,6 +1,6 @@
 /*
     pixel-perfect - uniform pixel blocks with no shimmer, at minimal cost.
-
+    -------------------------------------------------------------------------------
     Author:  sinedied
     Licence: MIT - Copyright (c) 2026 sinedied
 
@@ -12,7 +12,7 @@
     so, subject to the following conditions: the above copyright notice and this
     permission notice shall be included in all copies or substantial portions of
     the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-
+    -------------------------------------------------------------------------------
     Scales an image so every source pixel becomes an even block, with a single soft
     pixel wherever a block boundary falls between two output pixels. Integer scale
     factors come out exact. Nearest-neighbour would instead give blocks of uneven

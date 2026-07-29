@@ -1,34 +1,41 @@
 #!/usr/bin/env python3
-"""Run the real crt-perfect.glsl on the GPU and diff it against crt_preview.py.
+"""Run the real shipped .glsl files on the GPU and diff them against their models.
 
-Loads the shipped .glsl, applies the same preprocessing generic_video.c does
-(minus the ESSL version, since macOS only offers a 4.1 core context), feeds it
-the uniforms runShaderPass() would set, renders into an FBO the size of the
-on-screen rect, and compares the readback with the numpy reference model.
+For every entry in shaders.py: loads the .glsl, applies the same preprocessing
+generic_video.c does (minus the ESSL version, since macOS only offers a 4.1 core
+context), feeds it the uniforms runShaderPass() would set, renders into an FBO the
+size of the on-screen rect, and compares the readback with the numpy model.
 
-Run:  /tmp/crtvenv/bin/python gl_check.py
+The two implementations are independent on purpose - an error has to be made
+identically in GLSL and in numpy to slip through. Target is worst <= 1/255, which
+is pure float32-vs-float64 rounding; anything above that means one of the two is
+wrong.
+
+Run:  cd tools && PYTHONPATH=. ../.venv/bin/python gl_check.py [-v] [shader ...]
 """
 
-import os
 import sys
 
 import numpy as np
 
 import moderngl
-from crt_preview import DEFAULTS, SOURCES, render_crt
+from crt_preview import SOURCES
 
-from paths import SHADERS as GLSL, shader_path
-
-SHADER = shader_path("crt-perfect.glsl")
+from paths import shader_path
+from shaders import REGISTRY
 
 HEADER = "#version 410 core\n"
+
+# rounding between float32 on the GPU and float64 in the model
+TOLERANCE = 1
 
 
 def stage_source(src, stage):
     body = "".join(
         l + "\n" for l in src.split("\n") if not l.startswith("#pragma parameter")
     )
-    define = "#define VERTEX\n" if stage == "vert" else "#define FRAGMENT\n#define PARAMETER_UNIFORM\n"
+    define = ("#define VERTEX\n" if stage == "vert"
+              else "#define FRAGMENT\n#define PARAMETER_UNIFORM\n")
     return HEADER + define + body
 
 
@@ -39,14 +46,15 @@ def gl_render(ctx, prog, src_u8, out_w, out_h, params):
     tex.repeat_x = tex.repeat_y = False  # CLAMP_TO_EDGE
     tex.use(0)
 
-    p = dict(DEFAULTS, **(params or {}))
-    for k, v in p.items():
+    for k, v in params.items():
         if k in prog:
             prog[k].value = float(v)
     prog["Texture"].value = 0
     prog["OutputSize"].value = (float(out_w), float(out_h))
     prog["TextureSize"].value = (float(in_w), float(in_h))
     prog["InputSize"].value = (float(in_w), float(in_h))
+    if "OrigInputSize" in prog:
+        prog["OrigInputSize"].value = (float(in_w), float(in_h))
     prog["MVPMatrix"].write(np.identity(4, "f4").tobytes())
 
     # same quad runShaderPass() uploads: x,y,z,w, u,v,s,t
@@ -57,13 +65,8 @@ def gl_render(ctx, prog, src_u8, out_w, out_h, params):
          1.0, -1.0, 0.0, 1.0,  1.0, 0.0, 0.0, 0.0,
     ], "f4")
     vbo = ctx.buffer(verts.tobytes())
-    binding = []
-    if "VertexCoord" in prog:
-        binding.append("4f4")
-    if "TexCoord" in prog:
-        binding.append("4f4")
     names = [n for n in ("VertexCoord", "TexCoord") if n in prog]
-    vao = ctx.vertex_array(prog, [(vbo, " ".join(binding), *names)])
+    vao = ctx.vertex_array(prog, [(vbo, " ".join("4f4" for _ in names), *names)])
 
     fbo = ctx.framebuffer(color_attachments=[ctx.texture((out_w, out_h), 3)])
     fbo.use()
@@ -77,42 +80,64 @@ def gl_render(ctx, prog, src_u8, out_w, out_h, params):
     return data
 
 
-def main():
+def check(ctx, name, model, verbose=False):
+    src = open(shader_path(name)).read()
+    try:
+        prog = ctx.program(vertex_shader=stage_source(src, "vert"),
+                           fragment_shader=stage_source(src, "frag"))
+    except Exception as exc:
+        print(f"  {name:24s} FAILED TO LINK\n{exc}")
+        return None
+
+    runs = [("defaults", {})] + model.variants
+    worst, worst_where = 0, ""
+    for label, overrides in runs:
+        params = dict(model.defaults, **overrides)
+        for case, (sw, sh), (ow, oh) in model.cases:
+            for sname in model.sources:
+                s = SOURCES[sname](sw, sh)
+                gpu = gl_render(ctx, prog, s, ow, oh, params).astype(int)
+                ref = model.render(s, ow, oh, params).astype(int)
+                d = int(np.abs(gpu - ref).max())
+                if verbose:
+                    print(f"    {label:14s} {case:18s} {sname:6s} max {d}")
+                if d > worst:
+                    worst, worst_where = d, f"{label} / {case} / {sname}"
+
+    ok = worst <= model.tolerance
+    if worst <= TOLERANCE:
+        note = ""
+    elif ok:
+        note = f"   tolerated: {model.reason}"
+    else:
+        note = f"   worst at {worst_where}"
+    status = "OK" if worst <= TOLERANCE else ("tolerated" if ok else "MISMATCH")
+    print(f"  {name:24s} worst diff {worst:3d}/255 "
+          f"(tol {model.tolerance:2d})   {status}{note}")
+    return worst - model.tolerance
+
+
+def main(argv):
+    verbose = "-v" in argv
+    wanted = [a for a in argv[1:] if a != "-v"] or list(REGISTRY)
+    unknown = [n for n in wanted if n not in REGISTRY]
+    if unknown:
+        print(f"not in the registry: {', '.join(unknown)}")
+        return 2
+
     ctx = moderngl.create_standalone_context()
-    src = open(SHADER).read()
-    prog = ctx.program(
-        vertex_shader=stage_source(src, "vert"),
-        fragment_shader=stage_source(src, "frag"),
-    )
-    print("shader linked ok\n")
+    over = 0
+    failed = False
+    for name in wanted:
+        r = check(ctx, name, REGISTRY[name], verbose)
+        if r is None:
+            failed = True
+        else:
+            over = max(over, r)
 
-    cases = [
-        ("240p->1024x768 default", (320, 240), (1024, 768), "scene", {}),
-        ("240p->1024x768 white",   (320, 240), (1024, 768), "white", {}),
-        ("224p->1024x768 bars",    (256, 224), (1024, 768), "bars",  {}),
-        ("144p->1024x768 scene",   (160, 144), (1024, 768), "scene", {}),
-        ("240p->1280x720 slot",    (320, 240), (1280, 720), "bars",  dict(Mask_Type=2.0)),
-        ("480p->1280x720 fade",    (640, 480), (1280, 720), "scene", {}),
-        ("effects off",            (320, 240), (1024, 768), "bars",
-         dict(Scanlines=0.0, RGB_Mask=0.0, Brightness=1.0)),
-        ("strong",                 (320, 240), (1024, 768), "scene",
-         dict(Scanlines=1.0, RGB_Mask=1.0, Beam_Width=1.0, Mask_Size=0.5, Brightness=2.0)),
-    ]
-
-    worst = 0
-    for name, (sw, sh), (ow, oh), sname, params in cases:
-        s = SOURCES[sname](sw, sh)
-        gpu = gl_render(ctx, prog, s, ow, oh, params).astype(int)
-        ref = render_crt(s, ow, oh, params).astype(int)
-        d = np.abs(gpu - ref)
-        worst = max(worst, d.max())
-        pct = (d > 2).mean() * 100
-        print(f"  {name:26s} max diff {d.max():3d}   mean {d.mean():5.3f}   "
-              f"px >2: {pct:5.2f}%   {'OK' if d.max() <= 4 else 'MISMATCH'}")
-
-    print(f"\nworst absolute difference across all cases: {worst}/255")
-    return 0 if worst <= 4 else 1
+    print(f"\n{'all shaders within their tolerance' if over <= 0 else f'over tolerance by {over}/255'}")
+    return 1 if failed or over > 0 else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv))

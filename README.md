@@ -24,6 +24,14 @@ All shaders provided here follow these principles, and were tested on a real dev
 
 TODO
 
+crt-perfect
+lcd-perfect
+pixel-perfect
+dmg-perfect
+
+budget: 8 params max per shader
+
+
 | File | |
 |---|---|
 | `shaders/pixel-perfect.glsl` | **scaling only.** Uniform pixel blocks, no shimmer, no blur |
