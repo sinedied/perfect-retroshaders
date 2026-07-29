@@ -143,6 +143,22 @@ block and the `#pragma` lines agree on identifiers, order and ranges, and that e
 default sits inside its own range. Run it after editing a header; it exits non-zero,
 so it can gate a commit.
 
+## Preconditions every shader here assumes
+
+All three shipped shaders share the same four-tap scaler, so they share its
+requirements. These are **correctness** conditions, not preferences — break one and
+the output is wrong rather than merely different. They used to be stated in each
+header; the headers were cut down to user-facing advice, so they live here now.
+
+- **NEAREST sampling.** The shader computes its own area average from four taps. A
+  LINEAR sampler filters underneath it and the result is filtered twice.
+- **Render at the final output resolution, 1:1 with the display.** The mask, the
+  scanlines and the LCD grid are all defined in output pixels. Anything that rescales
+  the result aliases them and destroys the block structure.
+- **Upscaling only.** Below 1:1 an output pixel's footprint spans more than two source
+  texels per axis, and four taps can no longer average it. Downscaling is out of
+  scope, not merely untested.
+
 ## The one design rule
 
 **Nothing non-linear may be applied after the scaler's blend.**
