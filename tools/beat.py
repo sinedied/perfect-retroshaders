@@ -158,6 +158,12 @@ def report():
         ((256, 192), (1024, 768)),
         ((240, 160), (1024, 768)),
         ((160, 144), (1024, 768)),
+        # PSP is the hardest case in the set and was missing from it until a
+        # pattern turned up on a device that no measurement here predicted: at
+        # 640x480 it is 1.33 output pixels per cell, below the two per cycle
+        # where a pattern folds to a wrong coarser pitch at near-full amplitude.
+        ((480, 272), (1024, 768)),
+        ((480, 272), (640, 480)),
         ((320, 240), (640, 480)),
         ((256, 192), (640, 480)),
         ((160, 144), (640, 480)),
