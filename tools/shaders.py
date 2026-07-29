@@ -13,7 +13,8 @@ from crt_preview import (
     render_crt, render_crt_v3, render_crt_v4, render_crt_v5,
 )
 from lcd_preview import (
-    DEFAULTS_LCD, DEFAULTS_PP, render_lcd, render_pixel_perfect,
+    DEFAULTS_LCD, DEFAULTS_PP, DEFAULTS_V2A, DEFAULTS_V2B,
+    render_lcd, render_lcd_v2a, render_pixel_perfect,
 )
 
 # (label, source size, output size) - the scale factors that matter on the
@@ -92,6 +93,39 @@ REGISTRY = {
             ("stripes only", dict(lp_grid=0.0, lp_subpixels=1.0)),
             ("BGR", dict(lp_layout=1.0, lp_subpixels=1.0)),
             ("fat matrix", dict(lp_gap=0.35, lp_grid=1.0)),
+            ("gamma 0.7", dict(lp_gamma=0.7)),
+            ("gamma 1.6", dict(lp_gamma=1.6)),
+            ("bright", dict(lp_brightness=1.6)),
+        ],
+    ),
+    "lcd-perfect-v2b.glsl": Model(
+        render=lambda s, w, h, p: render_lcd(s, w, h, p, balance=True),
+        defaults=DEFAULTS_V2B,
+        variants=[
+            ("effects off", dict(lp_grid=0.0, lp_subpixels=0.0)),
+            ("grid only", dict(lp_subpixels=0.0)),
+            ("rows only", dict(lp_balance=0.0)),
+            ("columns only", dict(lp_balance=1.0)),
+            ("even balance", dict(lp_balance=0.5)),
+            ("fat matrix", dict(lp_gap=0.35, lp_grid=1.0)),
+            ("stripes only", dict(lp_grid=0.0, lp_subpixels=1.0)),
+            ("BGR", dict(lp_layout=1.0, lp_subpixels=1.0)),
+            ("gamma 0.7", dict(lp_gamma=0.7)),
+            ("gamma 1.6", dict(lp_gamma=1.6)),
+        ],
+    ),
+    "lcd-perfect-v2a.glsl": Model(
+        render=render_lcd_v2a,
+        defaults=DEFAULTS_V2A,
+        variants=[
+            ("effects off", dict(lp_grid=0.0, lp_subpixels=0.0)),
+            ("grid only", dict(lp_subpixels=0.0)),
+            ("rows only", dict(lp_balance=0.0)),
+            ("columns only", dict(lp_balance=1.0)),
+            ("even balance", dict(lp_balance=0.5)),
+            ("full grid", dict(lp_grid=1.0)),
+            ("stripes only", dict(lp_grid=0.0, lp_subpixels=1.0)),
+            ("BGR", dict(lp_layout=1.0, lp_subpixels=1.0)),
             ("gamma 0.7", dict(lp_gamma=0.7)),
             ("gamma 1.6", dict(lp_gamma=1.6)),
             ("bright", dict(lp_brightness=1.6)),

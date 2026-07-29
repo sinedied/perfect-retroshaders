@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline model of lcd-perfect.glsl.
+"""Offline model of the lcd-perfect family and pixel-perfect.
 
 Independent numpy reimplementation of the fragment shader, so gl_check.py can
 diff the real shipped .glsl running on a GPU against it. An error has to be made
@@ -23,9 +23,35 @@ DEFAULTS_LCD = dict(
     lp_gamma=1.00,
 )
 
+DEFAULTS_V2B = dict(
+    lp_grid=0.30,
+    lp_balance=0.80,
+    lp_gap=0.16,
+    lp_subpixels=0.20,
+    lp_layout=0.0,
+    lp_brightness=1.00,
+    lp_gamma=1.00,
+)
+
+DEFAULTS_V2A = dict(
+    lp_grid=0.35,
+    lp_balance=0.80,
+    lp_subpixels=0.20,
+    lp_layout=0.0,
+    lp_brightness=1.00,
+    lp_gamma=1.00,
+)
+
 # Column matrix as a fraction of the row matrix, measured off a Game Boy Color
-# panel. Must match GAP_ASPECT in the shader.
+# panel. Must match GAP_ASPECT in lcd-perfect.glsl. v2 replaces it with the
+# lp_balance parameter, because it caps the column gap at 40% of the row gap and
+# so cannot reach lcd1x's 4:1 the other way round.
 GAP_ASPECT = 0.4
+
+TAU = 2.0 * np.pi
+
+# Stripe fade window, in output pixels per cell. Must match both shaders.
+STRIPE_FADE = (3.0, 6.0)
 
 
 def smoothstep(e0, e1, x):
@@ -33,7 +59,7 @@ def smoothstep(e0, e1, x):
     return t * t * (3.0 - 2.0 * t)
 
 
-def aperture_integral(x, w, t, v, mode="edge"):
+def aperture_trapezoid(x, w, t, v, mode="edge"):
     """Antiderivative of the aperture profile, normalised so its mean over a cell
     is exactly 1 whatever the parameters are.
 
@@ -63,12 +89,17 @@ def aperture_integral(x, w, t, v, mode="edge"):
 
 
 def area_average(src, out_w, out_h, sharpness=1.0, gamma=1.0,
-                 aw=None, at=None, grid=0.0, mode="edge"):
+                 aw=None, at=None, grid=0.0, mode="edge", aperture=None):
     """The scaler pixel-perfect and lcd-perfect share, on encoded values.
 
     With aw given, the blend weights come from how much *aperture* falls on each
     side of the cell boundary rather than how much area, which makes the result
     the exact mean of source x grid instead of the product of their means.
+
+    aperture overrides that with a callable (coord, half_footprint, axis) ->
+    (Alo, Ahi, AB_minus_B, peak), which is how the sinusoidal variant plugs its
+    own profile in without duplicating the blend.
+
     Returns (colour, px, py, dx, dy, gain).
     """
     in_h, in_w = src.shape[:2]
@@ -88,15 +119,24 @@ def area_average(src, out_w, out_h, sharpness=1.0, gamma=1.0,
     Bx = np.floor(px + 0.5)
     By = np.floor(py + 0.5)
 
-    if aw is None:
+    if aperture is not None:
+        alo_x, ahi_x, abx, pkx = aperture(px, hx, 0)
+        alo_y, ahi_y, aby, pky = aperture(py, hy, 1)
+        Ix = np.maximum(ahi_x - alo_x, 1e-6)
+        Iy = np.maximum(ahi_y - alo_y, 1e-6)
+        wx = np.clip((Bx + abx - alo_x) / Ix, 0.0, 1.0)
+        wy = np.clip((By + aby - alo_y) / Iy, 0.0, 1.0)
+        gain = ((Iy / (2.0 * hy * pky))[:, None]
+                * (Ix / (2.0 * hx * pkx))[None, :])
+    elif aw is None:
         wx = np.clip((Bx - px + hx) / (2.0 * hx), 0.0, 1.0)
         wy = np.clip((By - py + hy) / (2.0 * hy), 0.0, 1.0)
         gain = np.ones((out_h, out_w))
     else:
-        alo_x = aperture_integral(px - hx, aw[0], at[0], grid, mode)
-        ahi_x = aperture_integral(px + hx, aw[0], at[0], grid, mode)
-        alo_y = aperture_integral(py - hy, aw[1], at[1], grid, mode)
-        ahi_y = aperture_integral(py + hy, aw[1], at[1], grid, mode)
+        alo_x = aperture_trapezoid(px - hx, aw[0], at[0], grid, mode)
+        ahi_x = aperture_trapezoid(px + hx, aw[0], at[0], grid, mode)
+        alo_y = aperture_trapezoid(py - hy, aw[1], at[1], grid, mode)
+        ahi_y = aperture_trapezoid(py + hy, aw[1], at[1], grid, mode)
         Ix = np.maximum(ahi_x - alo_x, 1e-6)
         Iy = np.maximum(ahi_y - alo_y, 1e-6)
         wx = np.clip((Bx - alo_x) / Ix, 0.0, 1.0)
@@ -132,6 +172,34 @@ def area_average(src, out_w, out_h, sharpness=1.0, gamma=1.0,
     return color, px, py, dx, dy, gain
 
 
+def stripe_factor(p, px, dx, out_w, out_h, st, mode="edge"):
+    """The RGB stripe modulation, shared by every lcd-perfect variant.
+
+    Three trapezoid apertures of a third of a cell each, box filtered the same
+    way as the grid. Their coverages sum to exactly one at every scale, so the
+    stripe is exactly luminance neutral, and blending toward white keeps that
+    true at any visibility.
+
+    Mean-normalised, not peak-normalised like the grid: a stripe concentrates one
+    channel's light into a third of a cell, so its mean is what must stay at 1
+    for white to stay white, which puts its peak near 3.
+    """
+    stripe = np.ones((out_h, out_w, 3))
+    if p["lp_subpixels"] <= 0.0:
+        return stripe
+    amount = p["lp_subpixels"] * smoothstep(*STRIPE_FADE, 1.0 / dx)
+    if amount <= 0.0:
+        return stripe
+    third = 1.0 / 3.0
+    hx = 0.4995 * dx
+    sx = px[:, None] - np.array([0.0, third, 2.0 * third])[None, :]
+    cov = (aperture_trapezoid(sx + hx, third, st, 1.0, mode)
+           - aperture_trapezoid(sx - hx, third, st, 1.0, mode)) / (2.0 * hx)
+    if p["lp_layout"] >= 0.5:
+        cov = cov[:, ::-1]
+    return np.repeat((1.0 + (cov - 1.0) * amount)[None, :, :], out_h, axis=0)
+
+
 def render_pixel_perfect(src_u8, out_w, out_h, p=None):
     """Mirrors pixel-perfect.glsl: the scaler on its own."""
     p = dict(DEFAULTS_PP, **(p or {}))
@@ -140,36 +208,76 @@ def render_pixel_perfect(src_u8, out_w, out_h, p=None):
     return (np.clip(color, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
 
-def render_lcd(src_u8, out_w, out_h, p=None, mode="edge", quantise=True):
-    """src_u8: (H,W,3) uint8 source frame -> (out_h,out_w,3) uint8 output."""
-    p = dict(DEFAULTS_LCD, **(p or {}))
+def render_lcd(src_u8, out_w, out_h, p=None, mode="edge", quantise=True,
+               balance=None):
+    """src_u8: (H,W,3) uint8 source frame -> (out_h,out_w,3) uint8 output.
+
+    balance given mirrors lcd-perfect-v2b.glsl, which splits the matrix between
+    the axes by lp_balance instead of by the fixed GAP_ASPECT constant.
+    """
+    p = dict(DEFAULTS_V2B if balance else DEFAULTS_LCD, **(p or {}))
     src = src_u8.astype(np.float64) / 255.0
 
-    awx = max(1.0 - p["lp_gap"] * GAP_ASPECT, 1e-3)
-    awy = max(1.0 - p["lp_gap"], 1e-3)
+    if balance:
+        b = p["lp_balance"]
+        awx = max(1.0 - p["lp_gap"] * 2.0 * b, 1e-3)
+        awy = max(1.0 - p["lp_gap"] * 2.0 * (1.0 - b), 1e-3)
+    else:
+        awx = max(1.0 - p["lp_gap"] * GAP_ASPECT, 1e-3)
+        awy = max(1.0 - p["lp_gap"], 1e-3)
     atx = min(max(2.0 * (1.0 - awx), 1e-4), 0.45 * awx)
     aty = min(max(2.0 * (1.0 - awy), 1e-4), 0.45 * awy)
     color, px, py, dx, dy, gain = area_average(
         src, out_w, out_h, 1.0, p["lp_gamma"], (awx, awy), (atx, aty),
         p["lp_grid"], mode)
 
-    # --- RGB stripes -----------------------------------------------------
-    stripe = np.ones((out_h, out_w, 3))
-    if p["lp_subpixels"] > 0.0:
-        amount = p["lp_subpixels"] * smoothstep(3.0, 6.0, 1.0 / dx)
-        if amount > 0.0:
-            third = 1.0 / 3.0
-            st = min(max(0.5 * p["lp_gap"], 1e-4), 0.15 / 3.0)
-            hx = 0.4995 * dx
-            sx = px[:, None] - np.array([0.0, third, 2.0 * third])[None, :]
-            cov = (aperture_integral(sx + hx, third, st, 1.0, mode)
-                   - aperture_integral(sx - hx, third, st, 1.0, mode)) / (2.0 * hx)
-            if p["lp_layout"] >= 0.5:
-                cov = cov[:, ::-1]
-            stripe = np.repeat((1.0 + (cov - 1.0) * amount)[None, :, :],
-                               out_h, axis=0)
+    stripe = stripe_factor(p, px, dx, out_w, out_h,
+                           st=min(max(0.5 * p["lp_gap"], 1e-4), 0.15 / 3.0),
+                           mode=mode)
 
     m = np.sqrt(np.maximum(stripe * (gain * p["lp_brightness"])[..., None], 0.0))
     out = np.clip(color * m, 0.0, 1.0)
     # quantise=False returns 0..1 floats, for beat.py; the maths is unchanged
+    return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
+
+
+def aperture_sine(x, m, phase):
+    """Antiderivative of a sinusoidal aperture of one cycle per cell:
+
+        a(x) = 1 - m * cos(TAU * (x - phase))
+        A(x) = x - m * sin(TAU * (x - phase)) / TAU
+
+    A(n) == n at integers when phase is 0, and A(n) - n is a constant otherwise,
+    which is what keeps the aperture-weighted blend free.
+    """
+    return x - m * np.sin(TAU * (x - phase)) / TAU
+
+
+def render_lcd_v2a(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors lcd-perfect-v2a.glsl: sinusoidal aperture, lp_balance."""
+    p = dict(DEFAULTS_V2A, **(p or {}))
+    src = src_u8.astype(np.float64) / 255.0
+    in_h, in_w = src.shape[:2]
+
+    amp = np.clip(p["lp_grid"] * 2.0
+                  * np.array([p["lp_balance"], 1.0 - p["lp_balance"]]), 0.0, 1.0)
+    d = (max(in_w / out_w, 1e-6), max(in_h / out_h, 1e-6))
+
+    def aperture(coord, half, axis):
+        m = amp[axis]
+        # half an output pixel, unconditionally: without it every even-integer
+        # scale reads the same value from both samples of a cell
+        phase = 0.5 * d[axis]
+        return (aperture_sine(coord - half, m, phase),
+                aperture_sine(coord + half, m, phase),
+                m * np.sin(TAU * phase) / TAU,
+                1.0 + m)
+
+    color, px, py, dx, dy, gain = area_average(
+        src, out_w, out_h, 1.0, p["lp_gamma"], aperture=aperture)
+
+    stripe = stripe_factor(p, px, dx, out_w, out_h, st=0.05)
+
+    m = np.sqrt(np.maximum(stripe * (gain * p["lp_brightness"])[..., None], 0.0))
+    out = np.clip(color * m, 0.0, 1.0)
     return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
