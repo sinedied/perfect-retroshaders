@@ -287,3 +287,114 @@ def render_lcd_v2a(src_u8, out_w, out_h, p=None, quantise=True):
     m = np.sqrt(np.maximum(stripe * (gain * p["lp_brightness"])[..., None], 0.0))
     out = np.clip(color * m, 0.0, 1.0)
     return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
+
+
+DEFAULTS_V3 = dict(
+    lp_grid=0.37,
+    lp_balance=0.79,
+    lp_min_pitch=3.00,
+    lp_subpixels=0.20,
+    lp_layout=0.0,
+    lp_brightness=1.00,
+    lp_gamma=1.00,
+)
+
+
+def box_sinc(f):
+    """Mean of a unit sinusoid of f cycles per output pixel over one pixel."""
+    x = np.pi * np.maximum(f, 1e-4)
+    return np.sin(x) / x
+
+
+def nyquist_fade(f):
+    return 1.0 - smoothstep(0.34, 0.5, f)
+
+
+def render_lcd_v3(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors lcd-perfect-v3.glsl.
+
+    Written out rather than routed through area_average(): v3 puts the mesh on a
+    whole number of cells per period, which that helper has no place for, and a
+    model meant to be read against the GLSL is worth more than a shared path.
+    """
+    p = dict(DEFAULTS_V3, **(p or {}))
+    src = src_u8.astype(np.float64) / 255.0
+    in_h, in_w = src.shape[:2]
+    tex_w, tex_h = in_w, in_h
+
+    px = (np.arange(out_w) + 0.5) / out_w * tex_w
+    py = (np.arange(out_h) + 0.5) / out_h * tex_h
+    d = np.array([max(in_w / out_w, 1e-6), max(in_h / out_h, 1e-6)])
+    h = 0.4995 * d
+    Bx, By = np.floor(px + 0.5), np.floor(py + 0.5)
+
+    # cells per pattern period: one while a cell can carry a line, otherwise a
+    # whole number of them, so the pattern stays exactly periodic on the source
+    # grid and cannot beat against it
+    N = np.maximum(np.ceil(p["lp_min_pitch"] * d - 1e-4), 1.0)
+    f = d / N
+
+    amp = np.clip(p["lp_grid"] * 2.0
+                  * np.array([p["lp_balance"], 1.0 - p["lp_balance"]]), 0.0, 1.0)
+    # eased back as the period spans more cells; see the shader header
+    amp = amp * nyquist_fade(f) * (2.0 / (N + 1.0))
+    phase = 0.5 * f
+    hh = 0.4995 * f
+
+    def axis(t, B, i):
+        alo = aperture_sine(t - hh[i], amp[i], phase[i])
+        ahi = aperture_sine(t + hh[i], amp[i], phase[i])
+        I = np.maximum(ahi - alo, 1e-6)
+        g = I / (2.0 * hh[i] * (1.0 + amp[i]))
+        Bt = B / N[i]
+        AB = Bt - amp[i] * np.sin(TAU * (Bt - phase[i])) / TAU
+        return g, np.clip((AB - alo) / I, 0.0, 1.0)
+
+    gx, wx = axis(px / N[0], Bx, 0)
+    gy, wy = axis(py / N[1], By, 1)
+    gain = gy[:, None] * gx[None, :]
+
+    ix_lo = np.clip(Bx.astype(int) - 1, 0, tex_w - 1)
+    ix_hi = np.clip(Bx.astype(int), 0, tex_w - 1)
+    iy_lo = np.clip(By.astype(int) - 1, 0, tex_h - 1)
+    iy_hi = np.clip(By.astype(int), 0, tex_h - 1)
+
+    a = src[np.ix_(iy_lo, ix_lo)]
+    b = src[np.ix_(iy_lo, ix_hi)]
+    c = src[np.ix_(iy_hi, ix_lo)]
+    e = src[np.ix_(iy_hi, ix_hi)]
+    if abs(p["lp_gamma"] - 1.0) > 0.001:
+        g = p["lp_gamma"]
+        a, b, c, e = (np.power(np.maximum(x, 1e-8), g) for x in (a, b, c, e))
+
+    WX, WY = wx[None, :, None], wy[:, None, None]
+    inner_hi = e + (c - e) * WX
+    inner_lo = b + (a - b) * WX
+    color = inner_hi + (inner_lo - inner_hi) * WY
+
+    stripe = np.ones((out_h, out_w, 3))
+    if p["lp_subpixels"] > 0.0:
+        sinc = box_sinc(f[0])
+        ac = p["lp_subpixels"] * sinc * nyquist_fade(f[0])
+        tx = px / N[0]
+        arg = TAU * (tx[:, None] - phase[0] - 1.0 / 6.0
+                     - np.array([0.0, 1.0 / 3.0])[None, :])
+        rg = 1.0 + ac * np.cos(arg)
+        s = np.concatenate([rg, 3.0 - rg[:, :1] - rg[:, 1:2]], axis=1)
+
+        M = amp[0] * sinc
+        # phase cancels: the stripe argument already carries it and the mesh
+        # trough sits at it
+        corr = 1.0 - 0.5 * M * ac * np.cos(
+            TAU * (np.array([0.0, 1.0 / 3.0, 2.0 / 3.0]) + 1.0 / 6.0))
+        # square-rooted: sqrt() below halves the deviation, so the
+        # correction has to be halved with it
+        s = s / np.sqrt(np.maximum(corr, 1e-3))[None, :]
+
+        if p["lp_layout"] >= 0.5:
+            s = s[:, ::-1]
+        stripe = np.repeat(s[None, :, :], out_h, axis=0)
+
+    m = np.sqrt(np.maximum(stripe * (gain * p["lp_brightness"])[..., None], 0.0))
+    out = np.clip(color * m, 0.0, 1.0)
+    return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out

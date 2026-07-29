@@ -13,6 +13,10 @@ from crt_preview import (
     render_crt, render_crt_v3, render_crt_v4, render_crt_v5,
 )
 from lcd_preview import (
+    # aliased: crt_preview exports a DEFAULTS_V3 of its own, and a bare
+    # import here silently shadowed it, handing crt-perfect-v3 the LCD
+    # defaults and a 255/255 mismatch that looked like a shader bug
+    DEFAULTS_V3 as DEFAULTS_LCD_V3, render_lcd_v3,
     DEFAULTS_LCD, DEFAULTS_PP, DEFAULTS_V2A, DEFAULTS_V2B,
     render_lcd, render_lcd_v2a, render_pixel_perfect,
 )
@@ -132,6 +136,23 @@ REGISTRY = {
             ("BGR", dict(lp_layout=1.0, lp_subpixels=1.0)),
             ("gamma 0.7", dict(lp_gamma=0.7)),
             ("gamma 1.6", dict(lp_gamma=1.6)),
+            ("bright", dict(lp_brightness=1.6)),
+        ],
+    ),
+    "lcd-perfect-v3.glsl": Model(
+        render=render_lcd_v3,
+        defaults=DEFAULTS_LCD_V3,
+        variants=[
+            ("effects off", dict(lp_grid=0.0, lp_subpixels=0.0)),
+            ("mesh only", dict(lp_subpixels=0.0)),
+            ("rows only", dict(lp_balance=0.0)),
+            ("columns only", dict(lp_balance=1.0)),
+            ("stripes full", dict(lp_subpixels=1.0)),
+            ("BGR", dict(lp_layout=1.0, lp_subpixels=1.0)),
+            # both sides of the regime boundary, which is the whole point of v3
+            ("min pitch 2", dict(lp_min_pitch=2.0)),
+            ("min pitch 6", dict(lp_min_pitch=6.0)),
+            ("gamma 0.7", dict(lp_gamma=0.7)),
             ("bright", dict(lp_brightness=1.6)),
         ],
     ),

@@ -37,6 +37,7 @@ self-test below measures rather than assumes.
 Run:  cd tools && PYTHONPATH=. ../.venv/bin/python beat.py
 """
 
+import math
 import sys
 
 import numpy as np
@@ -46,13 +47,18 @@ from lcd_preview import DEFAULTS_LCD, render_lcd
 
 VISIBLE = 0.4
 
+# The smallest pitch any shader here puts a pattern at, in output pixels. Both
+# crt-perfect and lcd-perfect v3 lock to this when the source cells get too
+# small to carry the pattern, so it is the floor of what counts as signal.
+MIN_PITCH = 3.0
+
 
 def checkerboard(w, h):
     yy, xx = np.mgrid[0:h, 0:w]
     return (((yy + xx) % 2) * 255).astype(np.uint8)[..., None].repeat(3, axis=2)
 
 
-def beat(img, src_w, src_h):
+def beat(img, src_w, src_h, pattern=None):
     """RMS of everything slower than the content and the pattern, in 8-bit levels."""
     lum = img.astype(np.float64)
     if lum.ndim == 3:
@@ -66,19 +72,56 @@ def beat(img, src_w, src_h):
     fx = np.abs(np.fft.fftfreq(out_w))
     fy = np.abs(np.fft.fftfreq(out_h))
 
-    # half a cycle per source pixel, in cycles per output pixel, less a hair so
-    # the content's own bin is never included
-    cx = 0.5 * src_w / out_w * 0.999
-    cy = 0.5 * src_h / out_h * 0.999
-
+    # The band has to sit below BOTH legitimate patterns in the image.
+    #
+    #   content   a 1px checkerboard is impulses at half a cycle per source
+    #             pixel, and nothing below
+    #   shader    wherever the caller says its pattern is, defaulting to one
+    #             cycle per source cell
+    #
+    # The second is the one that bites, and it is why the caller has to say.
+    # A pattern that grows its period to keep clear of the pixel grid ends up
+    # *below* the content on a dense source - at 480x272 into 640x480 the mesh
+    # sits at 0.28 and the content at 0.375 - and a band that only ducks under
+    # the content then scores the shader's own grid as moire. Measured that way
+    # a correct mesh read 15.4, with every dominant component sitting at exactly
+    # its own pitch and no structure in the other axis at all.
+    #
+    # The 0.85 is a guard, not a fudge. The pattern is not commensurate with the
+    # frame, so a rectangular window smears it into neighbouring bins with only
+    # 1/offset decay, and an edge sitting on the pattern swallows half its
+    # skirt. Windowing the frame was tried and wrecked the self-test; cropping
+    # to a whole number of periods just moves the leakage onto the content.
+    px_f, py_f = pattern if pattern else (src_w / out_w, src_h / out_h)
+    cx = min(0.5 * src_w / out_w, 0.85 * px_f) * 0.999
+    cy = min(0.5 * src_h / out_h, 0.85 * py_f) * 0.999
     band = (fy[:, None] < cy) & (fx[None, :] < cx)
     band[0, 0] = False  # DC is the image's mean level, not a beat
     return float(np.sqrt((np.abs(F[band]) ** 2).sum()))
 
 
-def measure(render, src_w=320, src_h=240, out_w=1024, out_h=768):
+def measure(render, src_w=320, src_h=240, out_w=1024, out_h=768, pattern=None):
     src = checkerboard(src_w, src_h)
-    return beat(render(src, out_w, out_h), src_w, src_h)
+    return beat(render(src, out_w, out_h), src_w, src_h, pattern)
+
+
+def pattern_freq(name, src_w, src_h, out_w, out_h, min_pitch=MIN_PITCH):
+    """Where a shader puts its pattern, in cycles per output pixel.
+
+    The band has to duck under this, so it has to be stated per shader rather
+    than assumed. Three rules are in play across the family and they do not
+    agree, which is exactly why guessing one does not work.
+    """
+    d = (src_w / out_w, src_h / out_h)
+    if name.startswith("lcd-perfect-v3"):
+        # a whole number of cells per period, never finer than min_pitch
+        n = [max(math.ceil(min_pitch * x - 1e-4), 1) for x in d]
+        return (d[0] / n[0], d[1] / n[1])
+    if name.startswith("crt-perfect"):
+        # locks to a fixed output-space pitch instead of growing the period
+        return (min(d[0], 1.0 / min_pitch), min(d[1], 1.0 / min_pitch))
+    # everything else tracks the source at one cycle per cell, always
+    return d
 
 
 # ---------------------------------------------------------------- self-test
@@ -183,7 +226,8 @@ def report():
         for _, name in cols:
             model = REGISTRY[name]
             r = measure(lambda s, w, h, m=model: m.render(
-                s, w, h, dict(m.defaults)) / 255.0, sw, sh, ow, oh)
+                s, w, h, dict(m.defaults)) / 255.0, sw, sh, ow, oh,
+                pattern_freq(name, sw, sh, ow, oh))
             if r > worst:
                 worst, worst_at = r, f"{name} at {sw}x{sh} -> {ow}x{oh}"
             row.append(f"{r:14.3f}")
