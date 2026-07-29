@@ -1,6 +1,6 @@
 /*
-    crt-perfect - pixel-perfect scaling with CRT scanlines and an RGB subpixel mask.
-
+    crt-perfect - scanlines and an RGB mask over a pixel-perfect scale.
+    -------------------------------------------------------------------------------
     Author:  sinedied
     Licence: MIT - Copyright (c) 2026 sinedied
 
@@ -12,58 +12,43 @@
     so, subject to the following conditions: the above copyright notice and this
     permission notice shall be included in all copies or substantial portions of
     the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-
-    Does the whole CRT chain in a single pass: area-averaged upscale straight to
-    the final on-screen size, horizontal scanlines whose count follows the source
-    vertical resolution, and a luma-neutral RGB triad mask locked to the source
-    pixel grid.
-
-    REQUIRED PASS SETTINGS  (Shader > Shader 1 in the in-game menu)
-
-        minarch_nrofshaders       = 1
-        minarch_shader1           = crt-perfect.glsl
-        minarch_shader1_filter    = NEAREST
-        minarch_shader1_srctype   = source
-        minarch_shader1_scaletype = source
-        minarch_shader1_upscale   = screen      <-- important
-        minarch_scale_filter      = NEAREST
-
-    "upscale = screen" makes this pass render at exactly the final on-screen size,
-    so one output pixel is one device pixel and the mask lands on real pixels.
-    Any other upscale value resamples the result a second time and both the mask
-    and the scanlines will alias.
-
+    -------------------------------------------------------------------------------
     PARAMETERS
 
-        Scanlines         visibility of the scanlines, 0 turns them off
-        Beam_Width        0.2 = fat dark gap / thin beam, 1.0 = thin dark line
-        RGB_Mask          visibility of the RGB mask, 0 turns it off
-        Mask_Type         0 = off, 1 = aperture grille, 2 = slot mask
-        Mask_Size         triads per source pixel (1.0 = one RGB triad per pixel)
-        Brightness        gain applied at the end, compensates the darkening
-        Fade_Below_Scale  scanlines fade out below this vertical scale factor
+      cp_scanlines   0.00 - 1.00  Scanline visibility. 0 disables them.
+      cp_rgb_mask    0.00 - 1.00  RGB mask visibility. 0 disables it.
+      cp_mask_type   0 / 1 / 2    Mask style: off, aperture grille, slot grille.
+      cp_mask_size   0.25 - 2.00  Mask triads per source pixel.
+      cp_brightness  0.25 - 4.00  Output gain, compensates the pattern darkening.
+      cp_min_pitch   2.00 - 6.00  Smallest pattern pitch, in output pixels.
+      cp_gamma       0.50 - 2.00  Gamma applied after scaling. 1.00 disables it.
+    -------------------------------------------------------------------------------
+    Scales the source into uniform pixel blocks, then modulates it with two pure
+    sinusoids: one across the source lines, one across the source columns in three
+    colour phases. Both are band-limited by construction, so neither beats against
+    the pixel grid at any scale factor. The scanline count follows the source -
+    224-line content gets 224 scanlines with no configuration - until the output no
+    longer has room for one line each, at which point both patterns fall back to a
+    fixed pitch of cp_min_pitch output pixels.
 
-    The scanline count is always the source vertical resolution: 224p content
-    gets 224 scanlines, no configuration needed. Both the scanlines and the mask
-    fade themselves out when the screen has too few pixels to draw them cleanly
-    (below Fade_Below_Scale output pixels per source line, and below 3 output
-    pixels per triad respectively), which keeps high-resolution content and small
-    windows free of moire instead of turning them into noise.
-
-    Scanlines and mask darken the image, exactly like a real CRT and like the
-    overlay images this was matched against. Brightness compensates for that;
-    at the default 1.25 the peaks of the beam clip to white, which reads as
-    highlight bloom. Lower it to 1.0 for a strictly non-clipping image.
-
+    Render this at the final output resolution, one output pixel per display pixel:
+    anything that rescales its result afterwards will alias the mask. Two settings
+    trade range for quality and are best left near their defaults - cp_brightness
+    above ~1.2 clips beam peaks to white, and cp_gamma away from 1.00 reintroduces
+    moire, because it is applied after the scaler's blend and any non-linearity
+    there beats with the pixel grid. At cp_min_pitch 2.00 a triad has too few pixels
+    to carry three primaries and the mask degenerates into two-colour columns; 2.50
+    and up keep it intact, and every 0.25 step repeats over a whole number of output
+    pixels.
 */
 
-#pragma parameter Scanlines        "Scanline visibility"          0.55 0.00 1.00 0.05
-#pragma parameter Beam_Width       "Scanline beam width"          0.65 0.20 1.00 0.05
-#pragma parameter RGB_Mask         "RGB mask visibility"          0.35 0.00 1.00 0.05
-#pragma parameter Mask_Type        "Mask 0off 1grille 2slot"      1.00 0.00 2.00 1.00
-#pragma parameter Mask_Size        "Mask triads per pixel"        1.00 0.25 2.00 0.25
-#pragma parameter Brightness       "Brightness"                   1.25 0.50 2.00 0.05
-#pragma parameter Fade_Below_Scale "Fade scanlines below scale"   2.00 1.00 4.00 0.50
+#pragma parameter cp_scanlines  "Scanline visibility"        0.55 0.00 1.00 0.05
+#pragma parameter cp_rgb_mask   "RGB mask visibility"        0.40 0.00 1.00 0.05
+#pragma parameter cp_mask_type  "Mask 0=off 1=grille 2=slot" 1.00 0.00 2.00 1.00
+#pragma parameter cp_mask_size  "Mask triads per pixel"      1.00 0.25 2.00 0.25
+#pragma parameter cp_brightness "Brightness"                 1.25 0.25 4.00 0.05
+#pragma parameter cp_min_pitch  "Min. pitch in px"           3.00 2.00 6.00 0.25
+#pragma parameter cp_gamma      "Gamma"                      1.00 0.50 2.00 0.05
 
 #if defined(VERTEX)
 
@@ -139,25 +124,41 @@ COMPAT_VARYING vec4 TEX0;
 #define SourceSize vec4(TextureSize, 1.0 / TextureSize)
 #define outsize vec4(OutputSize, 1.0 / OutputSize)
 
+#define PI  3.141592654
 #define TAU 6.283185307
 
 #ifdef PARAMETER_UNIFORM
-uniform COMPAT_PRECISION float Scanlines;
-uniform COMPAT_PRECISION float Beam_Width;
-uniform COMPAT_PRECISION float RGB_Mask;
-uniform COMPAT_PRECISION float Mask_Type;
-uniform COMPAT_PRECISION float Mask_Size;
-uniform COMPAT_PRECISION float Brightness;
-uniform COMPAT_PRECISION float Fade_Below_Scale;
+uniform COMPAT_PRECISION float cp_scanlines;
+uniform COMPAT_PRECISION float cp_rgb_mask;
+uniform COMPAT_PRECISION float cp_mask_type;
+uniform COMPAT_PRECISION float cp_mask_size;
+uniform COMPAT_PRECISION float cp_brightness;
+uniform COMPAT_PRECISION float cp_min_pitch;
+uniform COMPAT_PRECISION float cp_gamma;
 #else
-#define Scanlines 0.55
-#define Beam_Width 0.65
-#define RGB_Mask 0.35
-#define Mask_Type 1.0
-#define Mask_Size 1.0
-#define Brightness 1.25
-#define Fade_Below_Scale 2.0
+#define cp_scanlines 0.55
+#define cp_rgb_mask 0.40
+#define cp_mask_type 1.0
+#define cp_mask_size 1.0
+#define cp_brightness 1.25
+#define cp_min_pitch 3.0
+#define cp_gamma 1.0
 #endif
+
+// Exact average of a unit-amplitude sinusoid of frequency f, in cycles per output
+// pixel, over one pixel-wide box. Reaches zero at one cycle per pixel.
+float boxSinc(float f)
+{
+    float x = PI * max(f, 1e-4);
+    return sin(x) / x;
+}
+
+// Nothing above Nyquist can be represented, so fade the pattern out entirely there,
+// amplitude and darkening together, leaving no uniform dimming behind.
+float nyquistFade(float f)
+{
+    return 1.0 - smoothstep(0.34, 0.5, f);
+}
 
 void main()
 {
@@ -165,12 +166,15 @@ void main()
 
     // ------------------------------------------------------------------
     // Area-averaged upscale, straight to the output size. Each output pixel
-    // integrates the source over its own footprint, so source pixels come out
-    // as uniform blocks with a single soft pixel wherever a block boundary
-    // falls between two output pixels. Integer scale factors stay exact.
-    // Blending happens in linear light (x*x here, sqrt at the end); it is a
-    // gamma of 2.0 rather than 2.2 to keep this off the pow() path, which
-    // matters at 1024x768 on a Mali G31.
+    // integrates the source over its own footprint, so source pixels come out as
+    // uniform blocks with a single soft pixel wherever a block boundary falls
+    // between two output pixels; integer scale factors stay exact.
+    //
+    // The average is taken on the encoded values, not on linear light. That is
+    // what keeps the result free of moire: a source pixel covers three or four
+    // output pixels at a non-integer scale, so the number of partial-coverage
+    // pixels varies from block to block, and any non-linearity applied across the
+    // blend gives those pixels a coverage-dependent shift that beats.
     // ------------------------------------------------------------------
     vec2 range = vec2(abs(InputSize.x / (outsize.x * SourceSize.x)),
                       abs(InputSize.y / (outsize.y * SourceSize.y)));
@@ -186,67 +190,105 @@ void main()
     vec3 bottomLeft  = COMPAT_TEXTURE(Source, (floor(vec2(left,  bottom) / texelSize) + 0.5) * texelSize).rgb;
     vec3 topRight    = COMPAT_TEXTURE(Source, (floor(vec2(right, top)    / texelSize) + 0.5) * texelSize).rgb;
 
-    topLeft     *= topLeft;
-    bottomRight *= bottomRight;
-    bottomLeft  *= bottomLeft;
-    topRight    *= topRight;
-
     vec2 border = clamp(floor((vTexCoord / texelSize) + vec2(0.5)) * texelSize,
                         vec2(left, bottom), vec2(right, top));
 
-    float totalArea = 4.0 * range.x * range.y;
+    // The footprint is a rectangle, so the four corner areas factor into one
+    // horizontal and one vertical weight.
+    float wLeft = (border.x - left) / (2.0 * range.x);
+    float wTop  = (top - border.y)  / (2.0 * range.y);
 
-    vec3 color;
-    color  = ((border.x - left)  * (top - border.y)    / totalArea) * topLeft;
-    color += ((right - border.x) * (border.y - bottom) / totalArea) * bottomRight;
-    color += ((border.x - left)  * (border.y - bottom) / totalArea) * bottomLeft;
-    color += ((right - border.x) * (top - border.y)    / totalArea) * topRight;
+    vec3 color = mix(mix(bottomRight, bottomLeft, wLeft),
+                     mix(topRight,    topLeft,    wLeft), wTop);
 
-    // ------------------------------------------------------------------
-    // Scanlines. The phase comes from the source row, so the line count is the
-    // source vertical resolution automatically. The profile is a raised cosine
-    // raised to a power: a single frequency, so it cannot alias no matter how
-    // few output pixels a source line covers. exp2() maps Beam_Width onto that
-    // exponent, 0.5 -> 1.0 (plain cosine), 1.0 -> 0.25 (thin dark line).
-    // ------------------------------------------------------------------
-    float vscale = OutputSize.y / max(InputSize.y, 1.0);
-    float scanAmount = Scanlines * smoothstep(1.0, max(Fade_Below_Scale, 1.001), vscale);
-
-    if (scanAmount > 0.0) {
-        float k = exp2((0.5 - Beam_Width) * 4.0);
-        float p = fract(vTexCoord.y * InputSize.y);
-        // pow() is undefined for a base of exactly 0, which fract() hits on
-        // every source line boundary that lands on an output pixel centre;
-        // drivers return NaN there and the line renders black. Keep it positive.
-        float base = max(0.5 - 0.5 * cos(TAU * p), 1e-5);
-        float beam = pow(base, k);
-        color *= mix(1.0, beam, scanAmount);
+    // Gamma on the scaled image, before the patterns are applied. The branch is
+    // uniform across the draw, so a gamma of 1 costs nothing. The base is clamped
+    // because pow(0, g) is undefined and returns NaN on some drivers, and the
+    // floor is small enough that pure black still encodes to 0 at any gamma.
+    if (abs(cp_gamma - 1.0) > 0.001) {
+        color = pow(max(color, 1e-8), vec3(cp_gamma));
     }
 
     // ------------------------------------------------------------------
-    // RGB mask, locked to the source pixel grid. Three cosines 120 degrees
-    // apart sum to a constant, so the mask costs no brightness balance and
-    // introduces no colour cast. The -1/6 offset centres the triad on the
-    // source pixel: red at 1/6, green at 1/2, blue at 5/6 across it.
+    // Scanlines. One cycle per source line while there is room for it, so the
+    // count is the source vertical resolution; below cp_min_pitch output pixels
+    // per line the pattern moves to output space at exactly cp_min_pitch and is
+    // phase-aligned to the pixel grid.
+    //
+    // A grid-locked pattern repeats over a whole number of pixels and therefore
+    // cannot alias, so neither the box filter nor the Nyquist fade applies to it.
+    // The half-pixel shift puts one sample per cycle on the trough, which is what
+    // lets a two-pixel pitch resolve at full contrast: sampling at pixel centres
+    // instead would place both samples symmetrically about the peak, and they
+    // would return the same value.
+    //
+    // The regime blend is a narrow smoothstep rather than a comparison. GPUs
+    // evaluate a/b as a*rcp(b), so a source pitch mathematically equal to
+    // cp_min_pitch can land a few ULP either side of it, and the two regimes
+    // differ in contrast by about 30%. The window is biased so equality is fully
+    // grid-locked, and is far wider than the error.
     // ------------------------------------------------------------------
-    float triadPixels = OutputSize.x / max(InputSize.x * Mask_Size, 1.0);
-    float maskAmount = RGB_Mask * smoothstep(1.5, 3.0, triadPixels);
+    float scanSrcPitch = OutputSize.y / max(InputSize.y, 1.0);
+    float scanPitch    = max(scanSrcPitch, cp_min_pitch);
+    float scanLocked   = 1.0 - smoothstep(cp_min_pitch * 1.001, cp_min_pitch * 1.02, scanSrcPitch);
+    float scanFreq     = 1.0 / scanPitch;
 
-    if (maskAmount > 0.0 && Mask_Type >= 0.5) {
-        float phase = vTexCoord.x * InputSize.x * Mask_Size - (1.0 / 6.0);
+    float scanAmp = cp_scanlines * mix(nyquistFade(scanFreq), 1.0, scanLocked);
+    float scanAC  = 0.5 * scanAmp * mix(boxSinc(scanFreq), 1.0, scanLocked);
 
-        // slot mask: stagger the triads by half a cell on alternate source rows
-        if (Mask_Type >= 1.5) {
-            phase += 0.5 * mod(floor(vTexCoord.y * InputSize.y), 2.0);
+    float scan = 1.0;
+    if (scanAmp > 0.0) {
+        float y = vTexCoord.y * OutputSize.y - 0.5 * scanLocked;
+        // fract() keeps the cosine argument small; the phase reaches several
+        // hundred cycles before it, which costs precision otherwise
+        scan = (1.0 - 0.5 * scanAmp) - scanAC * cos(TAU * fract(y * scanFreq));
+    }
+
+    // ------------------------------------------------------------------
+    // RGB mask, on the same two regimes. Three primaries 120 degrees apart sum to
+    // a constant, so the mask is luminance neutral and casts no colour - which
+    // also lets blue be derived from red and green rather than costing a third
+    // cosine. The -1/6 offset centres the triad on its cell, putting red at 1/6,
+    // green at 1/2 and blue at 5/6 across it.
+    // ------------------------------------------------------------------
+    float maskSrcPitch = OutputSize.x / max(InputSize.x * cp_mask_size, 1.0);
+    float maskPitch    = max(maskSrcPitch, cp_min_pitch);
+    float maskLocked   = 1.0 - smoothstep(cp_min_pitch * 1.001, cp_min_pitch * 1.02, maskSrcPitch);
+    float maskFreq     = 1.0 / maskPitch;
+
+    float maskAmp = cp_rgb_mask * mix(nyquistFade(maskFreq), 1.0, maskLocked);
+
+    vec3 mask = vec3(1.0);
+    if (maskAmp > 0.0 && cp_mask_type >= 0.5) {
+        float x = vTexCoord.x * OutputSize.x - 0.5 * maskLocked;
+        float phase = x * maskFreq - (1.0 / 6.0);
+
+        // Offset grille: stagger the triads by half a cell on alternate lines of
+        // the scanline grid. The epsilon keeps floor() off its exact boundary,
+        // which its argument crosses once per line; without it a few ULP flip a
+        // whole row's stagger. Note the vertical separation that makes this read
+        // as slots comes from the scanlines, so it needs cp_scanlines above 0.
+        if (cp_mask_type >= 1.5) {
+            float row = floor((vTexCoord.y * OutputSize.y - 0.5 * scanLocked) * scanFreq + 1e-3);
+            phase += 0.5 * mod(row, 2.0);
         }
 
-        vec3 mask = 0.5 + 0.5 * cos(TAU * (fract(phase) - vec3(0.0, 1.0 / 3.0, 2.0 / 3.0)));
-        color *= mix(vec3(1.0), mask, maskAmount);
+        float dc = 1.0 - 0.5 * maskAmp;
+        float ac = 0.5 * maskAmp * mix(boxSinc(maskFreq), 1.0, maskLocked);
+        mask.rg = dc + ac * cos(TAU * (fract(phase) - vec2(0.0, 1.0 / 3.0)));
+        // analytically non-negative, but keep it off sqrt()'s undefined domain
+        mask.b  = max(3.0 * dc - mask.r - mask.g, 0.0);
     }
 
-    color = clamp(color * Brightness, 0.0, 1.0);
+    // ------------------------------------------------------------------
+    // The colour is still encoded, and the encoding is treated as a gamma of 2,
+    // so sqrt(linear * m) == encoded * sqrt(m). One square root therefore
+    // replaces the whole decode, modulate and re-encode round trip while leaving
+    // the modulation itself in linear light, where it belongs.
+    // ------------------------------------------------------------------
+    vec3 gain = sqrt(max(mask * (scan * cp_brightness), 0.0));
 
-    FragColor = vec4(sqrt(color), 1.0);
+    FragColor = vec4(clamp(color * gain, 0.0, 1.0), 1.0);
 }
 
 #endif

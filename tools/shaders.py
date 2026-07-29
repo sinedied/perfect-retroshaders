@@ -71,7 +71,39 @@ PARITY = ("pre-v4 slot mask: row parity from a bare floor(), flips a whole row "
 
 
 REGISTRY = {
+    # --- shipped ---------------------------------------------------------------
     "crt-perfect.glsl": Model(
+        render=lambda s, w, h, p: render_crt_v5(s, w, h, p, after=True),
+        defaults=DEFAULTS_V5,
+        variants=[
+            ("effects off", dict(cp_scanlines=0.0, cp_rgb_mask=0.0,
+                                 cp_brightness=1.0)),
+            ("slot mask", dict(cp_mask_type=2.0)),
+            ("gamma 0.7", dict(cp_gamma=0.7)),
+            ("gamma 1.6", dict(cp_gamma=1.6)),
+        ],
+    ),
+    "lcd-perfect.glsl": Model(
+        render=render_lcd,
+        defaults=DEFAULTS_LCD,
+        variants=[
+            ("effects off", dict(lp_grid=0.0, lp_subpixels=0.0)),
+            ("grid only", dict(lp_subpixels=0.0)),
+            ("stripes only", dict(lp_grid=0.0, lp_subpixels=1.0)),
+            ("BGR", dict(lp_layout=1.0, lp_subpixels=1.0)),
+            ("fat matrix", dict(lp_gap=0.35, lp_grid=1.0)),
+            ("gamma 0.7", dict(lp_gamma=0.7)),
+            ("gamma 1.6", dict(lp_gamma=1.6)),
+            ("bright", dict(lp_brightness=1.6)),
+        ],
+    ),
+    "pixel-perfect.glsl": Model(
+        render=render_pixel_perfect,
+        defaults=DEFAULTS_PP,
+        variants=[("crisp", dict(pp_sharpness=0.3))],
+    ),
+    # --- iterations, kept verified so the archive cannot rot -------------------
+    "crt-perfect-v1.glsl": Model(
         render=render_crt,
         defaults=DEFAULTS,
         variants=[
@@ -97,6 +129,10 @@ REGISTRY = {
         defaults=DEFAULTS_V4,
         variants=[("slot mask", dict(Mask_Type=2.0))],
     ),
+    # Applies cp_gamma to the four taps instead of to the scaled image, so it
+    # holds the moire fix at every gamma where the shipped shader does not
+    # (0.13 flat, against 1.68 at gamma 1.4). Costs 32 SFU slots against 14.
+    # Superseded on cost, not on quality - keep it reachable.
     "crt-perfect-v5.glsl": Model(
         render=render_crt_v5,
         defaults=DEFAULTS_V5,
@@ -105,29 +141,5 @@ REGISTRY = {
             ("gamma 0.7", dict(cp_gamma=0.7)),
             ("gamma 1.6", dict(cp_gamma=1.6)),
         ],
-    ),
-    "crt-perfect-v5b.glsl": Model(
-        render=lambda s, w, h, p: render_crt_v5(s, w, h, p, after=True),
-        defaults=DEFAULTS_V5,
-        variants=[("gamma 1.6", dict(cp_gamma=1.6))],
-    ),
-    "lcd-perfect.glsl": Model(
-        render=render_lcd,
-        defaults=DEFAULTS_LCD,
-        variants=[
-            ("effects off", dict(lp_grid=0.0, lp_subpixels=0.0)),
-            ("grid only", dict(lp_subpixels=0.0)),
-            ("stripes only", dict(lp_grid=0.0, lp_subpixels=1.0)),
-            ("BGR", dict(lp_layout=1.0, lp_subpixels=1.0)),
-            ("fat matrix", dict(lp_gap=0.35, lp_grid=1.0)),
-            ("gamma 0.7", dict(lp_gamma=0.7)),
-            ("gamma 1.6", dict(lp_gamma=1.6)),
-            ("bright", dict(lp_brightness=1.6)),
-        ],
-    ),
-    "pixel-perfect.glsl": Model(
-        render=render_pixel_perfect,
-        defaults=DEFAULTS_PP,
-        variants=[("crisp", dict(pp_sharpness=0.3))],
     ),
 }

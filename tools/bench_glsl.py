@@ -24,18 +24,29 @@ IW, IH = 320, 240
 DRAWS = 200
 
 CASES = [
-    ("pixellate.glsl (shipped)", "pixellate.glsl", {"INTERPOLATE_IN_LINEAR_GAMMA": 1.0}),
-    ("crt-perfect v1 default", "crt-perfect.glsl", {}),
+    # The baseline every cost figure in AGENTS.md is quoted against: it ships on
+    # the target device and holds 60fps there.
+    ("pixellate.glsl (vendor)", "pixellate.glsl", {"INTERPOLATE_IN_LINEAR_GAMMA": 1.0}),
+    # Shipped shaders.
+    ("crt-perfect default", "crt-perfect.glsl", {}),
+    ("crt-perfect slot mask", "crt-perfect.glsl", {"cp_mask_type": 2.0}),
+    ("crt-perfect scanlines only", "crt-perfect.glsl", {"cp_rgb_mask": 0.0}),
+    ("crt-perfect effects off", "crt-perfect.glsl",
+     {"cp_scanlines": 0.0, "cp_rgb_mask": 0.0}),
+    ("crt-perfect gamma 1.4", "crt-perfect.glsl", {"cp_gamma": 1.4}),
+    ("lcd-perfect default", "lcd-perfect.glsl", {}),
+    ("pixel-perfect default", "pixel-perfect.glsl", {}),
+    # Iterations, for the cost history. Note these use the pre-v5 parameter
+    # names: v1 to v4 predate the cp_ prefix, so setting cp_* on them would
+    # silently do nothing.
+    ("crt-perfect v1 default", "crt-perfect-v1.glsl", {}),
     ("crt-perfect v2 default", "crt-perfect-v2.glsl", {}),
     ("crt-perfect v3 default", "crt-perfect-v3.glsl", {}),
     ("crt-perfect v3 slot", "crt-perfect-v3.glsl", {"Mask_Type": 2.0}),
     ("crt-perfect v4 default", "crt-perfect-v4.glsl", {}),
     ("crt-perfect v4 slot", "crt-perfect-v4.glsl", {"Mask_Type": 2.0}),
-    ("crt-perfect v5 default", "crt-perfect-v5.glsl", {}),
-    ("crt-perfect v5b default", "crt-perfect-v5b.glsl", {}),
-    ("crt-perfect slot mask", "crt-perfect.glsl", {"Mask_Type": 2.0}),
-    ("crt-perfect scanlines only", "crt-perfect.glsl", {"RGB_Mask": 0.0}),
-    ("crt-perfect effects off", "crt-perfect.glsl", {"Scanlines": 0.0, "RGB_Mask": 0.0}),
+    ("crt-perfect v5 (per-tap gamma)", "crt-perfect-v5.glsl", {}),
+    ("crt-perfect v5 gamma 1.4", "crt-perfect-v5.glsl", {"cp_gamma": 1.4}),
 ]
 
 

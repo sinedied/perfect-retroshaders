@@ -102,7 +102,7 @@ def analyse(fn):
 
 if __name__ == '__main__':
     print(f"{'shader':<28s} {'ops':>4s} {'tex':>4s} {'SFU slots':>10s}   breakdown (scalar lanes)")
-    for fn in list_shaders(include_vendor=True):
+    for fn in list_shaders(include_vendor=True, include_iterations=True):
         a = analyse(fn)
         if not a:
             print(f"{fn:<28s} skip")

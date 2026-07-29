@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Offline preview of crt-perfect.glsl.
+"""Offline preview of the crt-perfect family.
 
-Faithful numpy reimplementation of the fragment shader so the look can be
+Faithful numpy reimplementation of the fragment shaders so the look can be
 iterated on without a device. Mirrors the GLSL step for step; see
 render_crt() for the correspondence.
+
+render_crt_v5(after=True) is the shipped crt-perfect.glsl. The lower-numbered
+renderers mirror the archived iterations under tools/iterations/.
 
 Run:  /tmp/crtvenv/bin/python crt_preview.py
 """
@@ -225,8 +228,10 @@ def render_crt_v4(src_u8, out_w, out_h, p=None):
 
 
 def render_crt_v5(src_u8, out_w, out_h, p=None, after=False, quantise=True):
-    """Mirrors crt-perfect-v5.glsl (after=False) or crt-perfect-v5b.glsl
-    (after=True, gamma applied to the scaled image instead of the taps)."""
+    """Mirrors crt-perfect.glsl (after=True, gamma applied to the scaled image)
+    or the archived crt-perfect-v5.glsl (after=False, gamma applied per tap).
+
+    The two are bit-identical at cp_gamma 1.00 and only diverge away from it."""
     p = dict(DEFAULTS_V5, **(p or {}))
     src = src_u8.astype(np.float64) / 255.0
     in_h, in_w = src.shape[:2]

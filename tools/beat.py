@@ -109,7 +109,7 @@ def _reinhard(k):
 
 
 EXPECTED = [
-    ("v5, nothing non-linear after the blend",
+    ("nothing non-linear after the blend",
      _v5(dict(cp_brightness=1.0)), 0.02),
     ("linearise taps, blend, re-encode (v1)",
      lambda s, w, h: render_crt(s, w, h) / 255.0, 3.35),
@@ -170,7 +170,7 @@ def report():
         ("grid only", dict(lp_subpixels=0.0), True),
         ("gamma 0.7", dict(lp_gamma=0.7), True),
         ("full strength", dict(lp_grid=1.0, lp_subpixels=1.0, lp_gap=0.35), False),
-        ("crt-perfect v5", None, True),
+        ("crt-perfect", None, True),
     ]
     print("  " + " " * 22 + "".join(f"{n[:13]:>15s}" for n, _, _ in variants))
     print("  " + " " * 22 + "".join(f"{'(gated)' if g else '(info)':>15s}"
@@ -180,7 +180,7 @@ def report():
         row = []
         for _, p, gated in variants:
             if p is None:
-                r = measure(_v5(), sw, sh, ow, oh)
+                r = measure(_v5(after=True), sw, sh, ow, oh)
             else:
                 r = measure(lambda s, w, h, p=p: render_lcd(
                     s, w, h, dict(DEFAULTS_LCD, **p), quantise=False), sw, sh, ow, oh)
