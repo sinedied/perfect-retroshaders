@@ -24,9 +24,9 @@ DEFAULTS_LCD = dict(
 )
 
 DEFAULTS_V2B = dict(
-    lp_grid=0.30,
-    lp_balance=0.80,
-    lp_gap=0.16,
+    lp_grid=0.35,
+    lp_balance=0.84,
+    lp_gap=0.12,
     lp_subpixels=0.20,
     lp_layout=0.0,
     lp_brightness=1.00,
@@ -34,8 +34,8 @@ DEFAULTS_V2B = dict(
 )
 
 DEFAULTS_V2A = dict(
-    lp_grid=0.35,
-    lp_balance=0.80,
+    lp_grid=0.37,
+    lp_balance=0.79,
     lp_subpixels=0.20,
     lp_layout=0.0,
     lp_brightness=1.00,
@@ -51,7 +51,7 @@ GAP_ASPECT = 0.4
 TAU = 2.0 * np.pi
 
 # Stripe fade window, in output pixels per cell. Must match both shaders.
-STRIPE_FADE = (3.0, 6.0)
+STRIPE_FADE = (2.5, 5.0)
 
 
 def smoothstep(e0, e1, x):

@@ -37,8 +37,8 @@
 // - The stripes need a few output pixels per cell and fade out below that, so
 //   they only show on small sources or high output resolutions.
 
-#pragma parameter lp_grid       "Grid visibility"          0.35 0.00 1.00 0.05
-#pragma parameter lp_balance    "Row/column balance"       0.80 0.00 1.00 0.05
+#pragma parameter lp_grid       "Grid visibility"          0.37 0.00 1.00 0.01
+#pragma parameter lp_balance    "Row/column balance"       0.79 0.00 1.00 0.01
 #pragma parameter lp_subpixels  "RGB stripe visibility"    0.20 0.00 1.00 0.05
 #pragma parameter lp_layout     "Stripe order 0=RGB 1=BGR" 0.00 0.00 1.00 1.00
 #pragma parameter lp_brightness "Brightness"               1.00 0.25 4.00 0.05
@@ -121,8 +121,8 @@ uniform COMPAT_PRECISION float lp_layout;
 uniform COMPAT_PRECISION float lp_brightness;
 uniform COMPAT_PRECISION float lp_gamma;
 #else
-#define lp_grid 0.35
-#define lp_balance 0.80
+#define lp_grid 0.37
+#define lp_balance 0.79
 #define lp_subpixels 0.20
 #define lp_layout 0.0
 #define lp_brightness 1.00
@@ -274,13 +274,21 @@ void main()
     // boundary, so they barely correlate with the scaler's transition pixel.
     //
     // They do need a fade. The stripe pattern repeats once per cell however thin
-    // the stripes are, so unlike the grid it never flattens; below roughly three
-    // output pixels per cell there is no room for three of them and what survives
-    // is colour speckle at full strength rather than a fading tint.
+    // the stripes are, so unlike the grid it never flattens; below a few output
+    // pixels per cell there is no room for three of them and what survives is
+    // colour speckle at full strength rather than a fading tint.
+    //
+    // The window is measured, not assumed. A fade of 3 to 6 leaves the stripes
+    // at 1.3% of their strength at 3.2 output pixels per cell - which is
+    // 320x240 into 1024x768, the most common scale there is - so they did
+    // nothing at all exactly where they were most wanted. 2.5 to 5.0 takes the
+    // colour they deliver there from 0.6 to 9 levels while holding the beat
+    // under threshold; opening it further to 2.5 to 4.0 gives 21 levels but
+    // costs a beat of 0.57 on the hard-edged aperture, which is over budget.
     // ------------------------------------------------------------------
     vec3 stripe = vec3(1.0);
     if (lp_subpixels > 0.0) {
-        float amount = lp_subpixels * smoothstep(3.0, 6.0, 1.0 / d.x);
+        float amount = lp_subpixels * smoothstep(2.5, 5.0, 1.0 / d.x);
         if (amount > 0.0) {
             vec3 third = vec3(1.0 / 3.0);
             // A narrow ramp on the stripe edges. Widening it only narrows the
