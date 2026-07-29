@@ -1,0 +1,9 @@
+# Python side of the verification harness.
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#
+# The GLSL side needs glslang (glslangValidator + spirv-dis), which is not a
+# Python package:
+#   brew install glslang
+numpy>=2.0
+moderngl>=5.10
+Pillow>=10.0
