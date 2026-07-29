@@ -183,22 +183,13 @@ uniform COMPAT_PRECISION float lp_gamma;
 // Color panel: 3.7% of the cell across against 9% down.
 #define GAP_ASPECT 0.4
 
-// Antiderivative of a unit-height pulse train of period 1 and lit width w, with
-// the aperture at the leading edge of the cell, differenced over a footprint of d
-// to give the exact mean of the train over that footprint.
-//
-// Edge, not centre, and that is load-bearing. Centring the aperture splits the
-// matrix line across a cell boundary, so at any integer scale factor it lands
-// half in one output pixel and half in the next and the contrast halves - at
-// exactly 2.0 output pixels per cell the two halves are symmetric and the grid
-// disappears completely. Putting the whole line inside one cell fixes every
-// integer scale at once, and costs one term less than the half-pixel phase shift
-// that would otherwise be needed. It also places the line on the cell boundary,
-// which is where the scaler's block boundary is and where a real black matrix is.
-//
 // Antiderivative of the aperture profile, normalised so its mean over a cell is
 // exactly 1 whatever the parameters are. The aperture is a trapezoid: lit across
 // a width of w, dark across the rest, with a linear ramp of width t joining them.
+//
+// Differencing it over an output pixel's footprint gives the true mean of the
+// aperture over that pixel - the box filter itself, not an approximation of it -
+// for the price of a floor and two clamps, with no transcendental anywhere.
 //
 // Edge, not centre, and that is load-bearing. Centring the aperture splits the
 // matrix line across a cell boundary, so at any integer scale factor it lands
