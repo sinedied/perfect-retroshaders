@@ -14,6 +14,8 @@ Output goes to tools/preview/, which is gitignored.
 
 Run:  cd tools && PYTHONPATH=. ../.venv/bin/python preview.py
       ... preview.py --crop 240      crop to a 240px square instead of scaling
+      ... preview.py --only snes,psp  restrict the screenshots by name
+      ... preview.py --samples DIR    where the screenshots live
       ... preview.py lcd1x.glsl lcd-perfect-v2a.glsl
 """
 
@@ -37,10 +39,22 @@ CASES = [
     ("GB    160x144", (160, 144), (1024, 768)),
     ("GBA   240x160", (240, 160), (1024, 768)),
     ("NDS   256x192", (256, 192), (1024, 768)),
+    ("SNES  256x224", (256, 224), (1024, 768)),
     ("240p  320x240", (320, 240), (1024, 768)),
+    ("PSP   480x272", (480, 272), (1024, 768)),
     ("240p  320x240", (320, 240), (640, 480)),
+    ("PSP   480x272", (480, 272), (640, 480)),
     ("GB    160x144", (160, 144), (640, 480)),
 ]
+
+# Real screenshots beat synthetic patterns for judging a look: a white field
+# shows what the grid does, a game frame shows whether you would want to play
+# through it. These live in RetroShader Lab and are NOT copied here - they are
+# third-party game captures under their own notice, and this repo is MIT.
+SAMPLES_DEFAULT = os.path.expanduser(
+    "~/projects/retroshader-lab/public/samples")
+
+OUTPUTS = [(1024, 768), (640, 480)]
 
 # Vendored references have no entry in the registry, so their parameters live
 # here. Anything not listed renders at whatever its #pragma defaults are.
@@ -70,13 +84,50 @@ def label(text, width):
     return np.asarray(img)
 
 
+def load_samples(folder, only=None):
+    """Real screenshots, each at its console's native resolution, so the image
+    itself decides the source size. Returns [] if the folder is not there."""
+    if not os.path.isdir(folder):
+        return []
+    out = []
+    for fn in sorted(os.listdir(folder)):
+        if not fn.endswith(".png"):
+            continue
+        stem = fn[:-4]
+        if only and not any(k in stem for k in only):
+            continue
+        img = Image.open(os.path.join(folder, fn)).convert("RGB")
+        out.append((stem, np.asarray(img)))
+    return out
+
+
 def render_one(ctx, name, src, out_w, out_h):
     txt = open(shader_path(name)).read()
     prog = ctx.program(vertex_shader=stage_source(txt, "vert"),
                        fragment_shader=stage_source(txt, "frag"))
-    img = gl_render(ctx, prog, src, out_w, out_h, params_for(name))
-    # the FBO readback is bottom-up, as GL always is
+    # Source arrays are top-down, GL textures are bottom-up, so the source goes
+    # in flipped and the readback comes back flipped. gl_check.py can ignore
+    # this because its model works in the same GL order the readback is in; here
+    # it matters, because a screenshot rendered upside down is hard to judge.
+    img = gl_render(ctx, prog, np.ascontiguousarray(src[::-1]), out_w, out_h,
+                    params_for(name))
     return img[::-1]
+
+
+def sheet_for(ctx, names, src, ow, oh, crop):
+    tiles = []
+    for name in names:
+        try:
+            img = render_one(ctx, name, src, ow, oh)
+        except Exception as exc:
+            print(f"  {name}: skipped ({str(exc)[:60]})")
+            continue
+        if crop:
+            y0, x0 = (oh - crop) // 2, (ow - crop) // 2
+            img = img[max(y0, 0):y0 + crop, max(x0, 0):x0 + crop]
+        tiles.append(np.vstack([label(name.replace(".glsl", ""),
+                                      img.shape[1]), img]))
+    return np.hstack(tiles) if tiles else None
 
 
 def main(argv):
@@ -84,6 +135,18 @@ def main(argv):
     if "--crop" in argv:
         i = argv.index("--crop")
         crop = int(argv[i + 1])
+        del argv[i:i + 2]
+
+    samples_dir = SAMPLES_DEFAULT
+    if "--samples" in argv:
+        i = argv.index("--samples")
+        samples_dir = os.path.expanduser(argv[i + 1])
+        del argv[i:i + 2]
+
+    only = None
+    if "--only" in argv:
+        i = argv.index("--only")
+        only = argv[i + 1].split(",")
         del argv[i:i + 2]
 
     names = argv[1:] or [n for n in list_shaders() if n.startswith("lcd-")] + \
@@ -98,27 +161,28 @@ def main(argv):
 
     for sname in ("white", "scene", "bars"):
         for case, (sw, sh), (ow, oh) in CASES:
-            src = SOURCES[sname](sw, sh)
-            tiles = []
-            for name in names:
-                try:
-                    img = render_one(ctx, name, src, ow, oh)
-                except Exception as exc:
-                    print(f"  {name}: skipped ({str(exc)[:60]})")
-                    continue
-                if crop:
-                    y0 = (oh - crop) // 2
-                    x0 = (ow - crop) // 2
-                    img = img[y0:y0 + crop, x0:x0 + crop]
-                tiles.append(np.vstack([label(name.replace(".glsl", ""),
-                                              img.shape[1]), img]))
-            if not tiles:
+            sheet = sheet_for(ctx, names, SOURCES[sname](sw, sh), ow, oh, crop)
+            if sheet is None:
                 continue
-            sheet = np.hstack(tiles)
             tag = f"{sname}_{sw}x{sh}_to_{ow}x{oh}" + (f"_crop{crop}" if crop else "")
             path = os.path.join(OUT, f"{tag}.png")
             Image.fromarray(sheet).save(path)
-            print(f"wrote {path}   ({case} -> {ow}x{oh}, {len(tiles)} shaders)")
+            print(f"wrote {path}   ({case} -> {ow}x{oh})")
+
+    samples = load_samples(samples_dir, only)
+    if not samples:
+        print(f"\nno screenshots at {samples_dir} - synthetic sources only."
+              f"\npass --samples DIR to point at them.")
+    for stem, src in samples:
+        sh, sw = src.shape[:2]
+        for ow, oh in OUTPUTS:
+            sheet = sheet_for(ctx, names, src, ow, oh, crop)
+            if sheet is None:
+                continue
+            tag = f"{stem}_to_{ow}x{oh}" + (f"_crop{crop}" if crop else "")
+            path = os.path.join(OUT, f"{tag}.png")
+            Image.fromarray(sheet).save(path)
+            print(f"wrote {path}   ({sw}x{sh} -> {ow}x{oh})")
 
     print(f"\n{OUT}")
     return 0
