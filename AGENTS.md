@@ -11,7 +11,8 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 
 | Path | What |
 |---|---|
-| `shaders/crt-perfect-v5.glsl` | current version. Host-neutral header, `cp_`-prefixed params |
+| `shaders/crt-perfect-v5.glsl` | current CRT. Host-neutral header, `cp_`-prefixed params |
+| `shaders/lcd-perfect.glsl` | current LCD. Analytic aperture coverage, `lp_`-prefixed params |
 | `shaders/crt-perfect-v5b.glsl` | v5 with gamma applied after scaling instead of per-tap |
 | `shaders/crt-perfect{,-v2,-v3,-v4}.glsl` | historical iterations, kept for comparison |
 | `shaders/pixel-perfect.glsl` | scaling only, no CRT effect. `pp_`-prefixed params |
@@ -48,12 +49,18 @@ Run the tools from `tools/` with `PYTHONPATH=.` (they import each other):
 cd tools && PYTHONPATH=. ../.venv/bin/python spirv_cost.py  # 2. what does it cost?
 cd tools && PYTHONPATH=. ../.venv/bin/python gl_check.py    # 3. does it do what you think?
 cd tools && PYTHONPATH=. ../.venv/bin/python equivalence.py # 4. pixel-perfect vs pixellate
+cd tools && PYTHONPATH=. ../.venv/bin/python beat.py        # 5. does it paint moire?
 ```
+
+`gl_check.py` walks the registry in `tools/shaders.py`; add a shader there and it is
+checked with no further wiring. A `Model` may raise its `tolerance` above 1 only with
+a `reason` naming a mechanism that has been measured — the reason is printed next to
+the result, so a tolerated divergence stays visible rather than silently accepted.
 
 To iterate on a shader:
 
 1. Edit the `.glsl`.
-2. **Mirror the change in `tools/crt_preview.py`.** It is an independent numpy
+2. **Mirror the change in `tools/crt_preview.py` or `tools/lcd_preview.py`.** It is an independent numpy
    implementation of the same maths. `gl_check.py` runs the real shipped `.glsl` on a
    GPU and diffs it against that model; a mismatch means one of the two is wrong.
    Target is worst ≤ 1/255 (pure float32-vs-float64 rounding).
@@ -98,6 +105,64 @@ the blend; and treat `cp_brightness` above ~1.5 as a look, not a correction —
 A soft shoulder does **not** rescue a post-blend curve. Reinhard measured 2.48 where
 the hard clamp measured 0.26, because it curves the whole range instead of just the
 top. Do not re-try this.
+
+**The rule has a second half, found while building `lcd-perfect`:** multiplying a
+scaled image by a pattern is *itself* a violation whenever the pattern's dark part
+lands where the scaler's soft transition pixel lands. That construction computes
+`mean(source) * mean(pattern)` where it owes `mean(source * pattern)`; the two differ
+by their covariance inside the pixel, and if pattern and transition are locked to the
+same cell boundary that covariance is large and varies cell to cell. It measured 2.5,
+twelve times the visible threshold, with no non-linearity anywhere. The fix is to
+weight the blend by how much *aperture* falls each side of the boundary rather than
+how much area — exact, and free when the aperture's integral is exactly `x` at an
+integer boundary. crt-perfect gets away with the naive form only because its pattern
+peaks at the cell *centre*.
+
+**Normalise a modulation on its peak, not its mean.** Mean-normalising is tempting —
+the pattern then costs no brightness at all — but it puts the pattern's top above 1,
+so every bright pixel meets the output clamp, which is the post-blend non-linearity
+the table above already convicts. Measured on `lcd-perfect`: mean-normalised, beat
+0.60 and grid contrast 37; peak-normalised, beat **0.22** and contrast **58**. Better
+on both axes at once. Give the level back with gamma below 1, never with gain.
+
+## LCD apertures, and why they are not sinusoids
+
+An LCD cell is a rectangle in a black matrix, and the mean of a rectangular pulse
+train over an output pixel has a closed form. So `lcd-perfect` differences an
+antiderivative instead of band-limiting a sinusoid: `floor`, `clamp`, one divide,
+**zero transcendentals**, and it is the true box filter rather than an approximation
+of one. libretro's `coverage.inc` (`intersect_rect_area`, used by `authentic_gbc`) is
+the same idea in 2D; the separable 1D form is cheaper.
+
+Three things that took measuring:
+
+- **Put the aperture at the leading edge of the cell, not centred.** Centring splits
+  the matrix line across a cell boundary, so at *every* integer scale factor it lands
+  half in one output pixel and half in the next and contrast halves — at exactly 2.0
+  output pixels per cell the halves are symmetric and the grid vanishes entirely.
+  Edge-alignment fixes all of them and needs no phase-shift term. Dense sweep 2.0–8.0:
+  centred min 0.000 / median 1.21, edge min 0.500 / median 1.25.
+- **A hard-edged aperture aliases.** A rectangle carries every harmonic of the cell
+  frequency; those above Nyquist fold back, and at 3.2 output pixels per cell the
+  third harmonic lands on a 16-pixel period, squarely visible. A one-pixel box
+  prefilter only attenuates it ~15×, nowhere near enough. Widening the edge into a
+  ramp of **twice the matrix width** took the worst measured beat from 2.52 to 0.23.
+  Note this is invisible unless you compare **at matched contrast** — softening also
+  raises contrast, so at fixed visibility it looks useless or worse. It was nearly
+  discarded for exactly that reason.
+- **Subpixel stripes do not band-limit themselves.** Their pattern repeats once per
+  cell however thin the stripes are, so unlike the cell grid they never flatten; below
+  ~3 output pixels per cell they become colour speckle at full strength. They need an
+  explicit fade. They also cost beat far faster than the grid (0.24 at 0.20, 0.56 at
+  0.35, 1.18 at 0.50) and, unlike the grid, want **mean** normalisation — a stripe
+  concentrates one channel's light into a third of the cell, so its mean is what must
+  stay at 1 for white to stay white, which inherently puts its peak near 3. Faking
+  subpixels either darkens or clips; there is no third option.
+
+`simpletex_lcd`'s luma-biased grid (`lineWeight *= luma + (1-luma)*(1-BIAS)`, "hide
+the grid on dark pixels") is **not** safe here: it computes the gain from the blended
+colour and multiplies it back, which is a non-linearity after the blend. Measure
+before adopting.
 
 ## GLSL traps that actually bit
 
@@ -165,6 +230,23 @@ numbers scale sensibly.
 - **Beat metric**: a fixed "periods 6–64px = moire" band counts the *pattern itself* as
   moire once its pitch or repeat length enters that band. Measure above each pattern's
   own repeat length (a pitch of k/4 repeats every k pixels).
+- **Beat metric, second attempt**: low-passing with a box exactly one pattern repeat
+  wide removes the beat *along with* the pattern — at a rational scale factor the whole
+  image is periodic at that length, so nothing survives and everything reads 0.00,
+  known-bad constructions included. `tools/beat.py` now bands explicitly: keep only
+  what is slower than **half a cycle per source pixel**, which is below both the 1px
+  checkerboard's own impulse and the pattern's fundamental, so whatever is left was
+  manufactured by the shader.
+- **Beat metric, colour space**: measuring in linear light instead of code values
+  *inverts* the ranking — 4.74 for the known-good baseline against 1.07 for the known-
+  bad one. Measure encoded. This was checked rather than assumed, and the assumption
+  would have been wrong.
+
+`beat.py` self-tests against the table in *The one design rule* on every run. It
+reproduces the ordering exactly at a consistent ~1.9× scale (spread 1.33×), so its
+threshold is 0.4 rather than 0.2; the original tool was not in the repo and had to be
+rebuilt from its description. A metric whose ratio to the record *drifts* per
+construction is measuring something else and must not be trusted.
 
 Also: the desktop GL context is 4.1 Core, so ESSL-1.00 shaders do not run there. The
 harness compiles them as `#version 410 core` via the compat macros; the device is the
@@ -180,6 +262,19 @@ Do not re-derive these.
 - *"A 2.0px pitch is unusable."* Only because of sample phase: centres land at 0.25 and
   0.75, symmetric about the beam peak, returning identical values. A half-pixel shift
   gives full contrast, and fixes every even-integer pitch.
+- *"Only even-integer pitches lose contrast to sample phase."* False, and it cost a
+  detour. **Every** integer pitch does, for a pattern whose dark part straddles the
+  cell boundary — 3.0 measured 0.375 against a possible 0.75, 4.0 measured 0.500
+  against 1.000. Moving the dark part wholly inside the cell fixes all of them and is
+  cheaper than the shift.
+- *"An exact box filter means nothing can alias."* False. A box filter is exact for the
+  pixel it covers, but it is a weak *prefilter*: its response only falls as 1/f, so a
+  hard-edged pattern's harmonics survive it and fold back. Exactness per pixel and
+  band-limiting are different properties.
+- *"The float32-vs-float64 gap between GPU and model can be engineered away."*
+  Reducing coordinates to their cell before differencing, so rounding cancels, changed
+  **not one pixel** — the error arrives in the interpolated texcoord, it is not created
+  by the arithmetic. Two `floor`s for nothing; measure before optimising.
 - *"`pow(cos, k)` is a single frequency."* Only when `k == 1`. Other exponents add
   harmonics, and harmonics alias before the fundamental does.
 - *"Fading a pattern out near Nyquist is enough."* The fade must reach zero **at** 2
@@ -200,6 +295,46 @@ measured properties, on a white field:
 | crt-perfect v5 defaults | — | — | 83.9% | 63.8 | 40.9 |
 
 Both masks are luminance-neutral, which three primaries 120° apart reproduce exactly.
+
+### LCD panels
+
+Measured off a Game Boy Color, by `authentic_gbc/shared.inc` (pixel-counted from a
+macro photograph) and independently by [gbcc.dev](https://gbcc.dev/technology/) under a
+microscope. This is the only handheld panel either libretro repo has real numbers for
+— GBA, DS and PSP geometry is assumed, not measured.
+
+| | |
+|---|---|
+| subpixel width | 0.296 of the cell → **~3.7% column matrix** |
+| subpixel height | 0.910 of the cell → **~9% row matrix** |
+| net fill factor | ~75% |
+| stripe order | RGB, left → right |
+| pixel aspect | square — GBC, GBA, DS and PSP all are |
+
+So the row matrix is ~2.4× the column matrix, which is why `lp_gap` drives the row gap
+and scales the column gap by 0.4 rather than exposing two knobs. Cross-shader consensus
+for defaults is 8–12% row matrix, 0–5% column, 25–35% edge darkening.
+
+Note the GBC's primaries are nowhere near pure — pure red reads about `#FF7145` on
+sRGB. A white-subpixel shader stacked on already colour-corrected output will look
+wrong; that belongs in a colour pass, not here.
+
+### What the LCD shaders being replaced measure
+
+On a 1px checkerboard, 320x240 → 1024x768, white field for the swings:
+
+| Shader | Beat | Mean level | Row swing | Col swing |
+|---|---|---|---|---|
+| `lcd1x` defaults | 1.87 | 75.3% | 24.0 | 96.0 |
+| `lcd3x` | 2.93 | 82.3% | 68.6 | 5.8 |
+| `sharp-shimmerless-grid` | 3.14 | 82.8% | 66.6 | 66.6 |
+| `lcd-perfect` defaults | **0.24** | 82.5% | 57.6 | 36.2 |
+| `crt-perfect-v5` defaults | 0.26 | 83.9% | 63.8 | 40.9 |
+| `pixel-perfect` | 0.03 | 100% | 0 | 0 |
+
+`lcd-perfect` sits below crt-perfect's own beat. `lcd-grid-v2` was researched and not
+vendored: ~48 SFU slots against `pixellate`'s 30, so it is out of budget before any
+discussion of how it looks.
 
 ## Deployment gotchas (NextUI / minarch targets)
 
