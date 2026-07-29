@@ -18,6 +18,10 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "preview")
 
 GAMMA = 2.0  # matches the shader: x*x on input, sqrt on output (13 fewer pow per fragment)
 
+DEFAULTS_PP = dict(
+    pp_sharpness=1.0,
+)
+
 DEFAULTS_V5 = dict(
     cp_scanlines=0.55,
     cp_rgb_mask=0.40,
@@ -297,6 +301,40 @@ def render_crt_v5(src_u8, out_w, out_h, p=None, after=False):
 
     gain = np.sqrt(np.maximum(mask * (scan[:, None, None] * p["cp_brightness"]), 0.0))
     return (np.clip(col * gain, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
+
+
+def render_pixel_perfect(src_u8, out_w, out_h, p=None):
+    """Mirrors pixel-perfect.glsl: four nearest taps, separable weights, no gamma."""
+    p = dict(DEFAULTS_PP, **(p or {}))
+    src = src_u8.astype(np.float64) / 255.0
+    in_h, in_w = src.shape[:2]
+
+    px = (np.arange(out_w) + 0.5) / out_w * in_w
+    py = (np.arange(out_h) + 0.5) / out_h * in_h
+    hx = max(0.4995 * p["pp_sharpness"] * in_w / out_w, 1e-6)
+    hy = max(0.4995 * p["pp_sharpness"] * in_h / out_h, 1e-6)
+
+    Bx = np.floor(px + 0.5)
+    By = np.floor(py + 0.5)
+    wx = np.clip((Bx - px + hx) / (2.0 * hx), 0.0, 1.0)
+    wy = np.clip((By - py + hy) / (2.0 * hy), 0.0, 1.0)
+
+    lox = np.clip((Bx - 1).astype(int), 0, in_w - 1)
+    hix = np.clip(Bx.astype(int), 0, in_w - 1)
+    loy = np.clip((By - 1).astype(int), 0, in_h - 1)
+    hiy = np.clip(By.astype(int), 0, in_h - 1)
+
+    a = src[np.ix_(loy, lox)]
+    b = src[np.ix_(loy, hix)]
+    c = src[np.ix_(hiy, lox)]
+    d = src[np.ix_(hiy, hix)]
+
+    WX = wx[None, :, None]
+    WY = wy[:, None, None]
+    top = d * (1.0 - WX) + c * WX
+    bot = b * (1.0 - WX) + a * WX
+    out = top * (1.0 - WY) + bot * WY
+    return (np.clip(out, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
 
 def beam_exponent(beam_width):

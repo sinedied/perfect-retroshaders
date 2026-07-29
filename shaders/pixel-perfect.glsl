@@ -1,0 +1,148 @@
+/*
+    pixel-perfect - uniform pixel blocks with no shimmer, at minimal cost.
+
+    Author:  sinedied
+    Licence: MIT - Copyright (c) 2026 sinedied
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of
+    this software and associated documentation files (the "Software"), to deal in
+    the Software without restriction, including without limitation the rights to
+    use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+    of the Software, and to permit persons to whom the Software is furnished to do
+    so, subject to the following conditions: the above copyright notice and this
+    permission notice shall be included in all copies or substantial portions of
+    the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+    Scales an image so every source pixel becomes an even block, with a single soft
+    pixel wherever a block boundary falls between two output pixels. Integer scale
+    factors come out exact. Nearest-neighbour would instead give blocks of uneven
+    width that crawl and shimmer as the image scrolls; a plain bilinear filter would
+    avoid that but blur everything.
+
+    Each output pixel is the average of the source over its own footprint. Since
+    that footprint spans at most two source texels per axis when upscaling, the
+    average is a weighted sum of four texels, and the weights separate into one
+    horizontal and one vertical term.
+
+    PARAMETERS
+
+      pp_sharpness  0.20 - 1.00   width of the transition between blocks, as a
+                                  fraction of an output pixel. 1.00 is a full
+                                  pixel-wide transition; lower is crisper and
+                                  closer to nearest-neighbour.
+
+    The shader must render at the final output resolution, one output pixel per
+    display pixel, and the sampler must be NEAREST. If its result is rescaled
+    afterwards the block structure is destroyed.
+
+    Upscaling only: if the output is smaller than the input, a footprint can span
+    more than two texels per axis and four taps can no longer average it correctly.
+*/
+
+#pragma parameter pp_sharpness "pp_sharpness" 1.00 0.20 1.00 0.05
+
+#if defined(VERTEX)
+
+#if __VERSION__ >= 130
+#define COMPAT_VARYING out
+#define COMPAT_ATTRIBUTE in
+#define COMPAT_TEXTURE texture
+#else
+#define COMPAT_VARYING varying
+#define COMPAT_ATTRIBUTE attribute
+#define COMPAT_TEXTURE texture2D
+#endif
+
+#ifdef GL_ES
+#define COMPAT_PRECISION mediump
+#else
+#define COMPAT_PRECISION
+#endif
+
+COMPAT_ATTRIBUTE vec4 VertexCoord;
+COMPAT_ATTRIBUTE vec4 COLOR;
+COMPAT_ATTRIBUTE vec4 TexCoord;
+COMPAT_VARYING vec4 COL0;
+COMPAT_VARYING vec4 TEX0;
+
+uniform mat4 MVPMatrix;
+uniform COMPAT_PRECISION int FrameDirection;
+uniform COMPAT_PRECISION int FrameCount;
+uniform COMPAT_PRECISION vec2 OutputSize;
+uniform COMPAT_PRECISION vec2 TextureSize;
+uniform COMPAT_PRECISION vec2 InputSize;
+
+void main()
+{
+    gl_Position = MVPMatrix * VertexCoord;
+    COL0 = COLOR;
+    TEX0.xy = TexCoord.xy;
+}
+
+#elif defined(FRAGMENT)
+
+#if __VERSION__ >= 130
+#define COMPAT_VARYING in
+#define COMPAT_TEXTURE texture
+out vec4 FragColor;
+#else
+#define COMPAT_VARYING varying
+#define FragColor gl_FragColor
+#define COMPAT_TEXTURE texture2D
+#endif
+
+#ifdef GL_ES
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+#define COMPAT_PRECISION highp
+#else
+#define COMPAT_PRECISION
+#endif
+
+uniform COMPAT_PRECISION int FrameDirection;
+uniform COMPAT_PRECISION int FrameCount;
+uniform COMPAT_PRECISION vec2 OutputSize;
+uniform COMPAT_PRECISION vec2 TextureSize;
+uniform COMPAT_PRECISION vec2 InputSize;
+uniform sampler2D Texture;
+COMPAT_VARYING vec4 TEX0;
+
+#ifdef PARAMETER_UNIFORM
+uniform COMPAT_PRECISION float pp_sharpness;
+#else
+#define pp_sharpness 1.0
+#endif
+
+void main()
+{
+    // Work in source texels: p is this output pixel's centre, h its half-footprint.
+    // The max() matters: a host that does not set the uniform leaves it at 0, and h
+    // is a divisor below, so without it every pixel would come out NaN.
+    vec2 p = TEX0.xy * TextureSize;
+    vec2 h = max(0.4995 * pp_sharpness * InputSize / OutputSize, 1e-6);
+
+    // B is the texel boundary nearest the footprint. w is the share of the
+    // footprint lying on B's low side, and clamps to exactly 0 or 1 whenever the
+    // footprint sits wholly inside one texel - which is most output pixels, and is
+    // what keeps the blocks flat instead of gradients.
+    vec2 B = floor(p + 0.5);
+    vec2 w = clamp((B - p + h) / (2.0 * h), 0.0, 1.0);
+
+    // The two texel centres straddling B, on each axis.
+    vec2 lo = (B - 0.5) / TextureSize;
+    vec2 hi = (B + 0.5) / TextureSize;
+
+    vec3 a = COMPAT_TEXTURE(Texture, vec2(lo.x, lo.y)).rgb;
+    vec3 b = COMPAT_TEXTURE(Texture, vec2(hi.x, lo.y)).rgb;
+    vec3 c = COMPAT_TEXTURE(Texture, vec2(lo.x, hi.y)).rgb;
+    vec3 d = COMPAT_TEXTURE(Texture, vec2(hi.x, hi.y)).rgb;
+
+    // Separable weights. Note mix(x, y, w) returns y at w == 1, so the low-side
+    // value has to be the second argument on both axes.
+    FragColor = vec4(mix(mix(d, c, w.x), mix(b, a, w.x), w.y), 1.0);
+}
+
+#endif

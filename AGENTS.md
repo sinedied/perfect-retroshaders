@@ -14,6 +14,7 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | `shaders/crt-perfect-v5.glsl` | current version. Host-neutral header, `cp_`-prefixed params |
 | `shaders/crt-perfect-v5b.glsl` | v5 with gamma applied after scaling instead of per-tap |
 | `shaders/crt-perfect{,-v2,-v3,-v4}.glsl` | historical iterations, kept for comparison |
+| `shaders/pixel-perfect.glsl` | scaling only, no CRT effect. `pp_`-prefixed params |
 | `tools/` | the verification harness |
 | `tools/vendor/` | **third-party shaders**, benchmark and comparison references only |
 
@@ -46,6 +47,7 @@ Run the tools from `tools/` with `PYTHONPATH=.` (they import each other):
 .venv/bin/python tools/validate_glsl.py shaders/*.glsl      # 1. does it compile?
 cd tools && PYTHONPATH=. ../.venv/bin/python spirv_cost.py  # 2. what does it cost?
 cd tools && PYTHONPATH=. ../.venv/bin/python gl_check.py    # 3. does it do what you think?
+cd tools && PYTHONPATH=. ../.venv/bin/python equivalence.py # 4. pixel-perfect vs pixellate
 ```
 
 To iterate on a shader:
@@ -113,6 +115,40 @@ top. Do not re-try this.
   float. Clamp with `max(..., 0.0)`.
 - `#pragma parameter` menus display the **identifier**, not the quoted label. Name
   parameters so they read correctly on their own.
+- **A uniform the host never sets is 0.** If a parameter appears in a divisor, an
+  unset uniform makes every pixel NaN — a black screen, not a subtle error. Guard it:
+  `max(0.4995 * pp_sharpness * InputSize / OutputSize, 1e-6)`. This matters whenever a
+  host does not parse `#pragma parameter`.
+- **`mix(x, y, w)` returns `y` at `w == 1`.** When `w` means "weight on the low side",
+  the low-side value must be the *second* argument. Getting it wrong on one axis only
+  is invisible by eye and obvious against a reference model.
+
+## pixel-perfect vs pixellate
+
+`pixel-perfect.glsl` reproduces the widely used `pixellate.glsl` exactly, at a
+fraction of the cost. Two things in the original are redundant:
+
+- The four corner-area products and the divide by `totalArea` factor into one
+  horizontal and one vertical weight. Verified over 200k random configurations: max
+  difference **2.5e-15**.
+- The 15 `pow()` calls implement `INTERPOLATE_IN_LINEAR_GAMMA`, which linearises each
+  tap, blends, then re-encodes — the same gamma round-trip that breaks the design rule
+  above. It is `pixellate`'s **default**, and it measures 3.5–5.7 beat where the
+  encoded-domain path measures 0.000.
+
+| | ops | tex | SFU |
+|---|---|---|---|
+| `pixellate.glsl` | 292 | 4 | 30 |
+| `pixel-perfect.glsl` | 112 | 4 | **0** |
+
+Four taps stay: an output footprint spans up to two texels per axis, so four is the
+minimum without delegating the blend to the texture unit. A one-tap LINEAR variant was
+prototyped and is exactly equivalent (1/255, identical block widths and shimmer), but
+was rejected — it makes correctness depend on the GPU's subtexel bilinear precision and
+needs the opposite sampler setting to everything else here.
+
+`tools/equivalence.py` proves the match: output diff, block-width distribution,
+transition-pixel counts, moire, and the `pp_sharpness` response.
 
 ## Measurement traps
 

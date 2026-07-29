@@ -1,8 +1,8 @@
 <div align="center">
 
-# perfect-retroshaders
+# 📺<br>perfect-retroshaders
 
-**My take on the "perfect" retro shaders: a convincing CRT look that doesn't cost you
+**My take on the "perfect" retro shaders: a convincing retro look that doesn't cost you
 performance, brightness, or your sanity.**
 
 ![GLSL](https://img.shields.io/badge/GLSL-ES%201.00-5586A4?style=flat-square)
@@ -10,36 +10,55 @@ performance, brightness, or your sanity.**
 
 </div>
 
-## What this is
+## Perfect retroshaders, really?
 
-Retro shaders are usually tuned on a desktop GPU and then wilt on a handheld: they eat
-the frame budget, wash the picture out, or paint moiré across every scrolling
-background. These are built the other way round — the constraint comes first.
+I'm sure everyone has their own idea of what a "perfect" retro shader is, but for me, it has to meet a few criteria:
 
-- **A nice retro look without compromising performance.** The current version costs
-  less than `pixellate.glsl`, a scaler that already ships on the target device and
-  holds 60fps there.
-- **No brightness loss, no moiré, no artifacts.** Not "reduced" — measured. Every
-  version is checked against a numerical model and a real GPU, and the moiré figure is
-  a number in a table, not an opinion.
-- **Good defaults, tweakable, easy for non-technical users.** Sensible out of the box,
-  seven parameters if you want them, and the scanline count follows the content
-  automatically — 224-line content gets 224 scanlines with nothing to configure.
-- **Built for cheap hardware.** Target is a Mali G31 MP2 at 1024x768/60, and it works
-  down to a 640x480 output.
+- Good enough to give a **nice retro look without compromising performance**. It runs fast on cheap handheld devices (Trimui Brick, H700, etc.)
+- **Avoid brightness loss, moire patterns, and other artifacts** that can be annoying at non-integer scaling factors.
+- **Good defaults, tweakable** yet easy to use even for non-technical users.
+
+All shaders provided here follow these principles, and were tested on a real device to ensure they meet the performance and visual quality goals.
 
 ## Shaders
 
+TODO
+
 | File | |
 |---|---|
-| `shaders/crt-perfect-v5.glsl` | **current.** Scanlines, RGB mask, pixel-perfect scaling, gamma |
+| `shaders/pixel-perfect.glsl` | **scaling only.** Uniform pixel blocks, no shimmer, no blur |
+| `shaders/crt-perfect-v5.glsl` | **current CRT.** Scanlines, RGB mask, pixel-perfect scaling, gamma |
 | `shaders/crt-perfect-v5b.glsl` | same, with gamma applied after scaling — cheaper, slightly less moiré-immune |
 | `shaders/crt-perfect-v4.glsl` … `crt-perfect.glsl` | earlier iterations, kept so the trade-offs stay visible |
 
 Third-party shaders used only as benchmark references live in
 [`tools/vendor/`](tools/vendor) and are not part of this project's licence.
 
+Include screenshots here and links to RetroShader Lab for each shader, so users can see the differences and tweak the parameters to their liking.
+
 ### Parameters
+
+TODO
+
+#### pixel-perfect
+
+Scaling only, no CRT effect. Each output pixel is the average of the source over its
+own footprint, so source pixels become even blocks with a single soft pixel at each
+boundary — no crawling or uneven blocks as the image scrolls, and no blurring of the
+whole image either.
+
+| Name | Default | Range | |
+|---|---|---|---|
+| `pp_sharpness` | 1.00 | 0.20–1.00 | transition width between blocks; lower is crisper |
+
+Output is identical to the well-known `pixellate` shader (verified to 1/255 across 12
+scale combinations and 4 source types) at **112 instructions instead of 294, and zero
+transcendentals instead of 15 `pow` calls**. It also avoids `pixellate`'s default
+linear-gamma blending, which is itself a moiré source: measured 3.5–5.7 against 0.000.
+
+Needs a NEAREST sampler. Upscaling only.
+
+#### crt-perfect
 
 | Name | Default | Range | |
 |---|---|---|---|
@@ -59,26 +78,9 @@ than a correction.
 The shader must render at final output resolution, one output pixel per display pixel.
 Each file's header documents the pass settings a host needs to provide.
 
-## Screenshots
+## Performance
 
-_To add: side-by-side captures from the device._
-
-## Development
-
-Verification harness in `tools/` — an independent numpy model of each shader, diffed
-against the real `.glsl` running on a GPU, plus static cost analysis from SPIR-V.
-
-```sh
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-brew install glslang
-
-.venv/bin/python tools/validate_glsl.py shaders/*.glsl
-cd tools && PYTHONPATH=. ../.venv/bin/python spirv_cost.py
-cd tools && PYTHONPATH=. ../.venv/bin/python gl_check.py
-```
-
-See [AGENTS.md](AGENTS.md) for the design rules, the traps, and the things that turned
-out to be wrong.
+TODO: performance tests 
 
 ## Related
 
@@ -90,5 +92,5 @@ out to be wrong.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). Shaders under `tools/vendor/` are third-party, kept only
+MIT, see [LICENSE](LICENSE). Shaders under `tools/vendor/` are third-party, kept only
 as benchmark references, each under its own licence as stated in its file header.
