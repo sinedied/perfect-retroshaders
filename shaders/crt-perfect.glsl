@@ -32,8 +32,8 @@
 // Notes:
 // - Render at the output resolution, 1:1 with the display. Rescaling its result
 //   aliases the mask.
-// - At cp_min_pitch 2.00 the mask degenerates to two-colour columns; use 2.50
-//   or more.
+// - At cp_min_pitch 2.00 the mask degenerates to two-colour columns: use 2.50
+//   or more to keep the triads visible.
 
 #pragma parameter cp_scanlines  "Scanline visibility"        0.55 0.00 1.00 0.05
 #pragma parameter cp_rgb_mask   "RGB mask visibility"        0.40 0.00 1.00 0.05

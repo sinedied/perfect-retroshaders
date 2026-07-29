@@ -1,45 +1,38 @@
-/*
-    pixel-perfect - uniform pixel blocks with no shimmer, at minimal cost.
-    -------------------------------------------------------------------------------
-    Author:  sinedied
-    Licence: MIT - Copyright (c) 2026 sinedied
+// pixel-perfect - uniform pixel blocks with no shimmer, at minimal cost.
+// -----------------------------------------------------------------------------
+// Author:  sinedied
+// Licence: MIT - Copyright (c) 2026 sinedied
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions: the above copyright
+// notice and this permission notice shall be included in all copies or
+// substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS",
+// WITHOUT WARRANTY OF ANY KIND.
+// -----------------------------------------------------------------------------
+// PARAMETERS
+//
+//   pp_sharpness  0.20 - 1.00  Transition width between blocks, in output
+//                              pixels. Lower is crisper.
+// -----------------------------------------------------------------------------
+// Scales an image so every source pixel becomes an even block, with a single
+// soft pixel wherever a block boundary falls between two output pixels. Integer
+// scale factors come out exact. Nearest-neighbour would instead give blocks of
+// uneven width that crawl as the image scrolls, and a plain bilinear filter
+// would avoid that but blur everything. Each output pixel is the average of the
+// source over its own footprint, which spans at most two texels per axis, so
+// four taps with separable weights evaluate it exactly.
+//
+// Notes:
+// - Render at the output resolution, 1:1 with the display, sampler NEAREST.
+//   Rescaling its result destroys the block structure.
+// - Upscaling only: below 1:1 a footprint spans more than two texels per axis
+//   and four taps stop averaging correctly.
 
-    Permission is hereby granted, free of charge, to any person obtaining a copy of
-    this software and associated documentation files (the "Software"), to deal in
-    the Software without restriction, including without limitation the rights to
-    use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
-    of the Software, and to permit persons to whom the Software is furnished to do
-    so, subject to the following conditions: the above copyright notice and this
-    permission notice shall be included in all copies or substantial portions of
-    the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-    -------------------------------------------------------------------------------
-    Scales an image so every source pixel becomes an even block, with a single soft
-    pixel wherever a block boundary falls between two output pixels. Integer scale
-    factors come out exact. Nearest-neighbour would instead give blocks of uneven
-    width that crawl and shimmer as the image scrolls; a plain bilinear filter would
-    avoid that but blur everything.
-
-    Each output pixel is the average of the source over its own footprint. Since
-    that footprint spans at most two source texels per axis when upscaling, the
-    average is a weighted sum of four texels, and the weights separate into one
-    horizontal and one vertical term.
-
-    PARAMETERS
-
-      pp_sharpness  0.20 - 1.00   width of the transition between blocks, as a
-                                  fraction of an output pixel. 1.00 is a full
-                                  pixel-wide transition; lower is crisper and
-                                  closer to nearest-neighbour.
-
-    The shader must render at the final output resolution, one output pixel per
-    display pixel, and the sampler must be NEAREST. If its result is rescaled
-    afterwards the block structure is destroyed.
-
-    Upscaling only: if the output is smaller than the input, a footprint can span
-    more than two texels per axis and four taps can no longer average it correctly.
-*/
-
-#pragma parameter pp_sharpness "pp_sharpness" 1.00 0.20 1.00 0.05
+#pragma parameter pp_sharpness "Transition width in px" 1.00 0.20 1.00 0.05
 
 #if defined(VERTEX)
 

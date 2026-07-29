@@ -1,98 +1,48 @@
-/*
-    lcd-perfect
+// lcd-perfect - an LCD matrix and RGB stripes over a pixel-perfect scale.
+// -----------------------------------------------------------------------------
+// Author:  sinedied
+// Licence: MIT - Copyright (c) 2026 sinedied
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions: the above copyright
+// notice and this permission notice shall be included in all copies or
+// substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS",
+// WITHOUT WARRANTY OF ANY KIND.
+// -----------------------------------------------------------------------------
+// PARAMETERS
+//
+//   lp_grid        0.00 - 1.00  Grid visibility. 0 disables it.
+//   lp_gap         0.00 - 0.50  Matrix thickness, as a fraction of a cell.
+//   lp_subpixels   0.00 - 1.00  RGB stripe visibility. 0 disables them.
+//   lp_layout      0 / 1        Stripe order: RGB or BGR.
+//   lp_brightness  0.25 - 4.00  Output gain.
+//   lp_gamma       0.50 - 2.00  Source gamma. 1.00 disables it.
+// -----------------------------------------------------------------------------
+// Simulates a handheld LCD panel: a grid of rectangular apertures separated by
+// an opaque matrix, each split into three coloured stripes. A cell is a
+// rectangle, so the average of the pattern over an output pixel has a closed
+// form and is evaluated exactly instead of being band-limited. The grid
+// therefore costs no brightness at any scale, and its contrast fades out on its
+// own as the cells approach the pixel grid.
+//
+// Notes:
+// - Render at the output resolution, 1:1 with the display, sampler NEAREST.
+//   Upscaling only.
+// - To brighten, prefer lp_gamma below 1.00: lp_brightness is a gain into a
+//   hard clamp, which brings back moire.
+// - The stripes need about three output pixels per cell and fade out below
+//   that, so they only show on small sources.
 
-    Author:  sinedied
-    Licence: MIT - Copyright (c) 2026 sinedied
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy of
-    this software and associated documentation files (the "Software"), to deal in
-    the Software without restriction, including without limitation the rights to
-    use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
-    of the Software, and to permit persons to whom the Software is furnished to do
-    so, subject to the following conditions: the above copyright notice and this
-    permission notice shall be included in all copies or substantial portions of
-    the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-
-    An LCD shader: pixel-perfect scaling, a black-matrix grid and optional RGB
-    subpixel stripes, in a single pass and without moire.
-
-    Simulates the panels of handhelds like the Game Boy Color, Game Boy Advance,
-    DS and PSP: a grid of rectangular apertures separated by an opaque matrix,
-    each aperture split into three coloured stripes.
-
-    An LCD cell is a rectangle, and the average of a rectangular pulse train over
-    an output pixel has a closed form. So rather than band-limiting a sinusoid the
-    way a CRT beam profile has to be, this shader evaluates that average exactly.
-    Three things follow, and they are the reason this approach was chosen:
-
-      - The mean is exactly the aperture width at every scale factor, so the grid
-        costs no brightness and needs no compensation term.
-      - Contrast falls to zero on its own as cells approach the pixel grid, so
-        there is no fade to tune and nothing to alias.
-      - It is floor, fract and clamp. No transcendentals at all.
-
-    This shader must render at the final output resolution, one output pixel per
-    display pixel, and the sampler must be NEAREST. If its result is rescaled
-    afterwards, the grid and the stripes will alias.
-
-    Upscaling only, like pixel-perfect: below 1:1 an output pixel spans more than
-    two source texels per axis and four taps stop being an average.
-
-    PARAMETERS
-
-      lp_grid       0.00 - 1.00   grid visibility, 0 disables it
-      lp_gap        0.00 - 0.50   matrix thickness, as a fraction of a cell
-      lp_subpixels  0.00 - 1.00   RGB stripe visibility, 0 disables them
-      lp_layout     0 / 1         stripe order, RGB or BGR
-      lp_brightness 0.25 - 4.00   output gain
-      lp_gamma      0.50 - 2.00   gamma applied to the source, 1.00 disables it
-
-    lp_gap sets the gap between rows. The gap between columns is 0.4 of it, which
-    is the ratio measured off a Game Boy Color panel - its subpixels are 0.910 of
-    the cell tall but 0.296 of 0.333 wide, so the row matrix is about 9% of the
-    cell and the column matrix about 3.7%.
-
-    The defaults were chosen by measuring, not by eye. At 320x240 into 1024x768
-    they give a mean level of 82.5%, a row swing of 58 and a column swing of 36,
-    which is within a few percent of crt-perfect's own figures, at a moire beat
-    of 0.24 - lower than crt-perfect's 0.26, and seven times lower than lcd1x's
-    1.87 at a grid more than twice as strong. Raising lp_grid or lp_gap past the
-    defaults trades beat for contrast: lp_grid 0.55 at lp_gap 0.20 doubles the
-    row swing and quadruples the beat, past the point where it is visible.
-
-    Both the grid and the stripes darken the image, as a real panel does.
-    lp_brightness compensates, but it is a linear gain into a hard clamp, and a
-    clamp is a non-linearity applied after the blend - which is exactly what this
-    shader is built to avoid, and it measurably brings the beat back. To brighten,
-    prefer lp_gamma below 1: it lifts more, crushes no highlights and adds no
-    beat.
-
-    Unlike the grid, the stripes do not band-limit themselves: their pattern
-    repeats once per cell whatever their width, so below about three output pixels
-    per cell they turn into colour speckle rather than fading. They are faded out
-    over that range explicitly. At 1024x768 only Game Boy-sized content has real
-    room for them; at 640x480 they are off almost everywhere. They also cost beat
-    far faster than the grid does - 0.24 at the default 0.20, but 0.56 at 0.35 and
-    1.18 at 0.50 - and they leave a tint of about one 8-bit level on a white
-    field, because the sqrt below is applied per channel and the three stripes do
-    not sample the same phases.
-
-    NOT SIMULATED, deliberately:
-
-      - Response-time ghosting. It needs the previous frame, so it needs a
-        feedback pass, and the intended hosts run single-pass GLSL only.
-      - Backlit versus reflective response, and panel colour casts. Those belong
-        to a colour pass, not to a geometry one.
-      - Non-square pixels. Every panel in scope is square-pixel.
-
-*/
-
-#pragma parameter lp_grid       "lp_grid"       0.30 0.00 1.00 0.05
-#pragma parameter lp_gap        "lp_gap"        0.16 0.00 0.50 0.01
-#pragma parameter lp_subpixels  "lp_subpixels"  0.20 0.00 1.00 0.05
-#pragma parameter lp_layout     "lp_layout"     0.00 0.00 1.00 1.00
-#pragma parameter lp_brightness "lp_brightness" 1.00 0.25 4.00 0.05
-#pragma parameter lp_gamma      "lp_gamma"      1.00 0.50 2.00 0.05
+#pragma parameter lp_grid       "Grid visibility"          0.30 0.00 1.00 0.05
+#pragma parameter lp_gap        "Matrix thickness"         0.16 0.00 0.50 0.01
+#pragma parameter lp_subpixels  "RGB stripe visibility"    0.20 0.00 1.00 0.05
+#pragma parameter lp_layout     "Stripe order 0=RGB 1=BGR" 0.00 0.00 1.00 1.00
+#pragma parameter lp_brightness "Brightness"               1.00 0.25 4.00 0.05
+#pragma parameter lp_gamma      "Gamma"                    1.00 0.50 2.00 0.05
 
 #if defined(VERTEX)
 

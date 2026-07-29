@@ -57,11 +57,12 @@ brew install glslang          # glslangValidator + spirv-dis, not a Python packa
 Run the tools from `tools/` with `PYTHONPATH=.` (they import each other):
 
 ```sh
-.venv/bin/python tools/validate_glsl.py shaders/*.glsl      # 1. does it compile?
-cd tools && PYTHONPATH=. ../.venv/bin/python spirv_cost.py  # 2. what does it cost?
-cd tools && PYTHONPATH=. ../.venv/bin/python gl_check.py    # 3. does it do what you think?
-cd tools && PYTHONPATH=. ../.venv/bin/python equivalence.py # 4. pixel-perfect vs pixellate
-cd tools && PYTHONPATH=. ../.venv/bin/python beat.py        # 5. does it paint moire?
+.venv/bin/python tools/validate_glsl.py shaders/*.glsl        # 1. does it compile?
+cd tools && PYTHONPATH=. ../.venv/bin/python spirv_cost.py    # 2. what does it cost?
+cd tools && PYTHONPATH=. ../.venv/bin/python gl_check.py      # 3. does it do what you think?
+cd tools && PYTHONPATH=. ../.venv/bin/python equivalence.py   # 4. pixel-perfect vs pixellate
+cd tools && PYTHONPATH=. ../.venv/bin/python beat.py          # 5. does it paint moire?
+cd tools && PYTHONPATH=. ../.venv/bin/python check_headers.py # 6. does the header still match?
 ```
 
 `gl_check.py` walks the registry in `tools/shaders.py`; add a shader there and it is
@@ -92,11 +93,11 @@ be made identically in GLSL and in numpy to slip through. It has happened once (
 ## Shader header format
 
 Every shipped shader opens with this block. **Line comments, hard 80-column limit**
-(the separator is `// ` + 77 dashes). Order is fixed: name, licence, parameters,
-description, notes.
+(the separator is `// ` + 77 dashes, exactly 80). Order is fixed: name, licence,
+parameters, description, notes.
 
 ```glsl
-// <name> - <one-line description, lowercase, ends with a period.>
+// <name> - <one-line description, lowercase, ending in a period.>
 // -----------------------------------------------------------------------------
 // Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied
@@ -105,38 +106,42 @@ description, notes.
 // -----------------------------------------------------------------------------
 // PARAMETERS
 //
-//   <xx_name>   <range>   <Sentence. What 0 or 1.00 does.>
+//   <xx_name>  <range>  <Sentence. What 0 or 1.00 does.>
 // -----------------------------------------------------------------------------
-// <What it does, in one short paragraph. Five lines is plenty.>
+// <What it does, in one short paragraph. Five or six lines is plenty.>
 //
 // Notes:
-// - <One or two phrases. Omit the section if there is nothing to warn about.>
+// - <One or two phrases. Two or three notes. Omit the section if there is
+//   nothing worth warning about.>
 ```
 
-Rules that matter:
+Then one blank line, then the `#pragma parameter` lines, column-aligned.
 
-- **One short paragraph of prose, then `Notes:`.** Each note is one or two phrases,
-  not a paragraph. The header is a user-facing reference; rationale, measurements and
-  rejected approaches belong in this file or in a commit message.
+- **One paragraph, then `Notes:`.** Each note is one or two phrases, not a paragraph.
+  The header is a user-facing reference; rationale, measurements and rejected
+  approaches belong in this file or in a commit message. Both earlier drafts erred
+  long and had to be cut twice.
+- Ranges are written `0.00 - 1.00`, or `0 / 1 / 2` for enum-like parameters.
+  Descriptions that do not fit wrap aligned under the description column.
 - **Write the block out whole; never patch it incrementally.** Regex-editing these
   headers during the repo extraction produced stray `..` fragments and a duplicated
-  copyright block, and took three attempts to get right. Regenerate, then diff. The
-  generator in the `docs(crt-perfect)` commit is the pattern: build the lines, assert
-  none exceeds 80, splice on the first delimiter.
+  copyright block, and took three attempts. Build the lines, assert none exceeds 80,
+  splice on the first delimiter, then diff.
 - Parameter identifiers are prefixed per shader (`cp_`, `lp_`, `pp_`) and lowercase.
 - **The `#pragma parameter` label and the identifier are both user-visible, on
   different hosts.** RetroArch and RetroShader Lab render the quoted label; **minarch
   renders the identifier** (`ma_config.c` uses `params[j].name`). So the identifier
   has to read acceptably on its own *and* the label has to be worth reading. Do not
-  flatten the label into a copy of the identifier — that happened between v4 and v5
-  and lost the descriptions on every host that shows them.
-- Keep the `#pragma` lines column-aligned and inside 80 too. The PARAMETERS block and
-  the pragmas must agree on ranges, and nothing checks that for you.
-- The 80-column rule covers the header and the pragmas. The shader bodies predate it
-  and are not being reflowed.
+  flatten the label into a copy of the identifier — that happened between v4 and v5,
+  and again in `pixel-perfect`, losing the descriptions on every host that shows them.
+- The 80-column rule covers the header and the `#pragma` lines. The shader bodies
+  predate it and are **not** being reflowed — that would churn the diff against
+  upstream for no gain.
 
-Only `crt-perfect.glsl` follows this format so far. `lcd-perfect.glsl` and
-`pixel-perfect.glsl` predate it and are to be converted once the format settles.
+`tools/check_headers.py` enforces all of the above, including that the PARAMETERS
+block and the `#pragma` lines agree on identifiers, order and ranges, and that every
+default sits inside its own range. Run it after editing a header; it exits non-zero,
+so it can gate a commit.
 
 ## The one design rule
 
