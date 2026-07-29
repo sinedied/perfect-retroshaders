@@ -183,6 +183,62 @@ harmonics and they fold back into the visible band. That is the same lesson v1's
 ramp taught, arriving structurally: if you want a strong vertical grid, you want a
 smooth profile.
 
+#### lcd-perfect v3
+
+v2a shipped with three defects that only real content and a missing test case
+exposed. v3 is v2a with all three fixed, and adds **`lp_min_pitch`**.
+
+**The PSP pattern.** PSP 480×272 was a stated target present in *neither* test
+matrix, which is how a visible pattern reached a device with every measurement here
+green. It is the hardest case in the set: 2.13 output pixels per cell at 1024×768 and
+**1.33 at 640×480**, below the two per cycle any pattern needs. v2a inherited no
+Nyquist fade and no minimum pitch, because the trapezoid it grew out of band-limits
+itself and a sinusoid does not — nobody re-checked that when the aperture changed.
+
+v3 does *not* pin the mesh to output space the way crt-perfect does; that was tried
+and is worse, because a two-dimensional pattern that has stopped tracking the source
+interferes with the pixel blocks. Instead the period grows to a **whole number of
+cells**, which keeps it exactly periodic on the source grid so it cannot beat against
+it at all.
+
+**The colour cast.** A column mesh and a stripe mask both sit at one cycle per cell,
+so whichever stripe lands on the dark line is dimmed — and swapping the stripe order
+swaps which one, which is why RGB and BGR cast in opposite directions. The stripes
+are now three sinusoids 120° apart and the residual is divided out in closed form.
+
+**The SNES difference.** `lcd1x` drops ~20% of its contrast at integer scales,
+because it point-samples and its samples reach only 0.707 of the sinusoid there. v3
+stays consistent — copying that would be copying a sampling artefact — and the
+default comes down instead.
+
+| at 320×240 → 1024×768 | mean | row | col | col/row | moiré | ops |
+|---|---|---|---|---|---|---|
+| **`lcd1x`** (the target) | 75.3% | 24.0 | 96.0 | 4.00 | 1.865 | 54 |
+| `lcd-perfect-v2a` | 72.6% | 24.4 | 96.2 | 3.94 | 0.131 | 515 |
+| **`lcd-perfect-v3`** | **75.1%** | 22.5 | **90.2** | **4.00** | **0.098** | **434** |
+
+Averaged across GB, GBA, SNES, NDS, 240p and PSP sources, v3 matches `lcd1x` on
+every figure that describes the look — column swing 90.2 against 90.0, ratio 4.00
+against 3.89, mean level 75.1% against 75.3% — at **one sixth the moiré**, and it is
+the cheapest shader of the family.
+
+| moiré, worst across all ten test scales | |
+|---|---|
+| `lcd-perfect-v2a` | 5.909 |
+| `lcd-perfect-v2b` | 4.511 |
+| `lcd-perfect` (v1) | 1.403 |
+| `crt-perfect` | 0.575 |
+| **`lcd-perfect-v3`** | **0.323** |
+
+Colour cast on a white field falls from v2a's 3.5–4.2 levels to **0.01–0.76**, and
+the RGB-versus-BGR difference from 3.5–5.3 to **exactly 0**.
+
+One caveat worth knowing: `lp_balance` 0.79 is what matches `lcd1x` on the aggregate
+figures, but around **0.65** looks closer to its weave on a real frame, because
+`lcd1x` point-samples and its horizontal lines are sharper than a box-filtered one of
+the same measured swing. The numbers and the eye disagree here; the parameter is
+there to settle it.
+
 `lp_grid` and `lp_balance` are shared; v2b keeps `lp_gap`, v2a has no use for one
 because a sinusoid has no thickness.
 

@@ -386,6 +386,19 @@ numbers scale sensibly.
   what is slower than **half a cycle per source pixel**, which is below both the 1px
   checkerboard's own impulse and the pattern's fundamental, so whatever is left was
   manufactured by the shader.
+- **Beat metric, band edge, twice**: the band has to duck under the *shader's*
+  pattern, not just the content's, and the shader has to say where that is.
+  v3 grows its period to a whole number of cells, which on a dense source puts
+  it *below* the content - 0.28 against 0.375 at 480x272 into 640x480 - so a
+  band that only cleared the content scored a correct mesh at 15.4, every
+  dominant component sitting at exactly its own pitch with no structure in the
+  other axis. `beat.py` now takes a `pattern` argument and `pattern_freq()`
+  states the rule per shader, because the three rules in this repo disagree.
+  A guard of 0.85 below it is needed on top: the pattern is not commensurate
+  with the frame, so a rectangular window smears it with only 1/offset decay.
+  A Hann window was tried and **wrecked the self-test** (ordering failed, ratio
+  spread 172x); cropping to a whole number of periods just moves the leakage
+  onto the content and lifts the clean floor sevenfold.
 - **Beat metric, colour space**: measuring in linear light instead of code values
   *inverts* the ranking — 4.74 for the known-good baseline against 1.07 for the known-
   bad one. Measure encoded. This was checked rather than assumed, and the assumption
@@ -405,6 +418,42 @@ rather than the ones just edited. Per-variant constants, or run the whole gate.
 Also: the desktop GL context is 4.1 Core, so ESSL-1.00 shaders do not run there. The
 harness compiles them as `#version 410 core` via the compat macros; the device is the
 only true target.
+
+## LCD meshes: what v3 had to fix
+
+- **A sinusoid does not band-limit itself.** The trapezoid aperture v1 used did -
+  its coverage flattens on its own as cells shrink - so v2a dropped the Nyquist
+  fade and the minimum pitch along with the trapezoid and nobody re-checked. A
+  480x272 source then folded: 1.33 output pixels per cell at 640x480, below the
+  two per cycle a pattern needs, measuring 5.9 against a threshold of 0.4. When
+  the shape of a pattern changes, re-derive what band-limits it.
+- **Grow the period, do not pin it.** crt-perfect pins its pattern to a fixed
+  output-space pitch below `cp_min_pitch`. Copying that into a mesh made things
+  worse, not better: a pattern that has stopped tracking the source interferes
+  with the pixel blocks in *both* axes, and a 3px mesh over 2px blocks measured a
+  real 12px beat. crt-perfect gets away with it because its horizontal pattern is
+  a colour mask carrying no luminance, so its luminance pattern is
+  one-dimensional and has nothing to interfere with in the other axis. Growing
+  the period to a whole number of *cells* keeps the pattern exactly periodic on
+  the source grid, so it cannot beat against it at all, and it kept the
+  aperture-weighted blend working unchanged.
+- **A column mesh and a stripe mask at the same pitch make a colour cast.**
+  Whichever stripe lands on the mesh's dark line is dimmed, and swapping the
+  stripe order swaps which one, so RGB and BGR cast in opposite directions -
+  measured at 3.5 to 4.2 levels with a 3.5 to 5.3 flip between the two. It is
+  divisible out in closed form, and two things have to be right or it overshoots
+  to the opposite sign: the phase **cancels** between mesh and stripe and must
+  not be subtracted a second time, and the correction must be **square-rooted**,
+  because the `sqrt` that encodes the output halves any relative deviation on the
+  way there. Applying it whole took green from 3 levels bright to 3.4 dark.
+  crt-perfect never had this because a CRT mask has no column mesh to correlate
+  with.
+- **Aggregate swing figures and the look can disagree.** `lp_balance` 0.79 matches
+  lcd1x on every white-field figure - column swing 90.2 against 90.0, ratio 4.00
+  against 3.89 - while about 0.65 looks closer to its weave on a real frame,
+  because lcd1x point-samples and its horizontal lines are sharper than a
+  box-filtered one of the same measured swing. Render the frame before calling a
+  look matched.
 
 ## Assumptions this session got wrong
 
@@ -436,6 +485,16 @@ Do not re-derive these.
   coarser pitch at near-full amplitude.
 - *"The reference CRT overlays lock their pattern to the source pixels."* They do not.
   They use a fixed output-space pitch regardless of content resolution.
+- *"A column of a comparison table reading 0.000 means that shader is clean."* It
+  can equally mean the render was black. `PARAMETER_UNIFORM` uniforms default to
+  0 when nothing sets them, so a shader fed no parameters renders at brightness
+  0, and a black frame has no beat and no colour cast. Three columns of a
+  comparison were flattering nonsense before that was noticed. Pass
+  `REGISTRY[name].defaults`, and distrust an exactly-zero column.
+- *"A test matrix covering the target resolutions covers the targets."* PSP
+  480x272 was a stated target and was in neither `beat.py` nor `shaders.py`,
+  which is why a visible pattern reached a device with every measurement here
+  green. It is the hardest case in the set and it was the missing one.
 
 ## Reference measurements
 
