@@ -48,7 +48,7 @@
 // - A column mesh and the stripes share a pitch, so they multiply into a
 //   per-channel cast. It is divided out in closed form.
 
-#pragma parameter lp_grid       "Grid visibility"          0.37 0.00 1.00 0.01
+#pragma parameter lp_grid       "Grid visibility"          0.34 0.00 1.00 0.01
 #pragma parameter lp_balance    "Row/column balance"       0.79 0.00 1.00 0.01
 #pragma parameter lp_min_pitch  "Minimum pitch in px"      3.00 2.00 6.00 0.25
 #pragma parameter lp_subpixels  "RGB stripe visibility"    0.20 0.00 1.00 0.05
@@ -134,7 +134,7 @@ uniform COMPAT_PRECISION float lp_layout;
 uniform COMPAT_PRECISION float lp_brightness;
 uniform COMPAT_PRECISION float lp_gamma;
 #else
-#define lp_grid 0.37
+#define lp_grid 0.34
 #define lp_balance 0.79
 #define lp_min_pitch 3.00
 #define lp_subpixels 0.20

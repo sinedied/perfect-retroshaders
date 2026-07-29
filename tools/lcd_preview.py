@@ -290,7 +290,7 @@ def render_lcd_v2a(src_u8, out_w, out_h, p=None, quantise=True):
 
 
 DEFAULTS_V3 = dict(
-    lp_grid=0.37,
+    lp_grid=0.34,
     lp_balance=0.79,
     lp_min_pitch=3.00,
     lp_subpixels=0.20,
