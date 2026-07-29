@@ -35,10 +35,11 @@ budget: 8 params max per shader
 | File | |
 |---|---|
 | `shaders/pixel-perfect.glsl` | **scaling only.** Uniform pixel blocks, no shimmer, no blur |
-| `shaders/crt-perfect-v5.glsl` | **current CRT.** Scanlines, RGB mask, pixel-perfect scaling, gamma |
-| `shaders/lcd-perfect.glsl` | **current LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling, gamma |
-| `shaders/crt-perfect-v5b.glsl` | same, with gamma applied after scaling — cheaper, slightly less moiré-immune |
-| `shaders/crt-perfect-v4.glsl` … `crt-perfect.glsl` | earlier iterations, kept so the trade-offs stay visible |
+| `shaders/crt-perfect.glsl` | **CRT.** Scanlines, RGB mask, pixel-perfect scaling, gamma |
+| `shaders/lcd-perfect.glsl` | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling, gamma |
+
+Earlier iterations live in [`tools/iterations/`](tools/iterations), kept so the
+trade-offs stay visible. They are still verified on every harness run.
 
 Third-party shaders used only as benchmark references live in
 [`tools/vendor/`](tools/vendor) and are not part of this project's licence.
@@ -116,7 +117,7 @@ Measured against the shader it replaces, at 320×240 → 1024×768:
 | `lcd3x` | 2.93 | 82.3% | 68.6 | 5.8 |
 | `sharp-shimmerless-grid` | 3.14 | 82.8% | 66.6 | 66.6 |
 | **`lcd-perfect` (defaults)** | **0.24** | **82.5%** | **57.6** | **36.2** |
-| `crt-perfect-v5` (for scale) | 0.26 | 83.9% | 63.8 | 40.9 |
+| `crt-perfect` (for scale) | 0.26 | 83.9% | 63.8 | 40.9 |
 
 So: a grid more than twice `lcd1x`'s strength, at **one seventh the moiré**, losing 3%
 of the light where `lcd1x` loses 25% with nothing to claw it back. `lp_gap` drives the

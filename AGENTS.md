@@ -11,27 +11,39 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 
 | Path | What |
 |---|---|
-| `shaders/crt-perfect-v5.glsl` | current CRT. Host-neutral header, `cp_`-prefixed params |
-| `shaders/lcd-perfect.glsl` | current LCD. Analytic aperture coverage, `lp_`-prefixed params |
-| `shaders/crt-perfect-v5b.glsl` | v5 with gamma applied after scaling instead of per-tap |
-| `shaders/crt-perfect{,-v2,-v3,-v4}.glsl` | historical iterations, kept for comparison |
-| `shaders/pixel-perfect.glsl` | scaling only, no CRT effect. `pp_`-prefixed params |
+| `shaders/crt-perfect.glsl` | CRT: scanlines + RGB mask + pixel-perfect scaling. `cp_` params |
+| `shaders/lcd-perfect.glsl` | LCD: analytic aperture coverage. `lp_` params |
+| `shaders/pixel-perfect.glsl` | scaling only, no effect. `pp_` params |
 | `tools/` | the verification harness |
 | `tools/vendor/` | **third-party shaders**, benchmark and comparison references only |
+| `tools/iterations/` | superseded versions of our own shaders, kept for the record |
 
-`shaders/` holds only shaders this repo owns and licenses. Anything third-party lives
-in `tools/vendor/`: not part of the MIT grant, not edited, present purely to measure
+`shaders/` holds only the shaders this repo ships. Anything third-party lives in
+`tools/vendor/`: not part of the MIT grant, not edited, present purely to measure
 against. Currently `pixellate.glsl` (Fes) — **30 SFU slots**, ships on the target
 device and holds 60fps there, so it is the budget yardstick every cost figure here is
 quoted against.
 
-Tools resolve a bare shader filename against `shaders/` then `tools/vendor/` via
-`tools/paths.py`, so a new benchmark shader only needs dropping into `vendor/`.
-`spirv_cost.py` discovers both automatically.
+Tools resolve a bare shader filename against `shaders/`, then `tools/vendor/`, then
+`tools/iterations/` via `tools/paths.py`, so a new benchmark shader only needs dropping
+into `vendor/`. `list_shaders()` returns only `shaders/` unless asked for more, so the
+archive does not pollute a compile report; `spirv_cost.py` asks for all three.
 
-v1–v4 headers still document frontend-specific pass settings and their own version
-history; that is deliberate, they are the record of how each step was reached. v5 and
-v5b are the host-neutral ones.
+### The archive
+
+`tools/iterations/crt-perfect-v{1..5}.glsl`. They stay **registered in
+`tools/shaders.py` and verified on every `gl_check.py` run** — an archive that is not
+executed rots, and their tolerances encode real findings.
+
+- **v1–v4 predate the `cp_` prefix.** Their params are `Scanlines`, `Mask_Type` and so
+  on. Setting `cp_*` on them silently does nothing.
+- v1–v4 headers still document frontend-specific pass settings and their own version
+  history. That is deliberate: they record how each step was reached.
+- **v5 is not strictly superseded.** It applies `cp_gamma` to the four taps instead of
+  to the scaled image, so it holds the moire fix at every gamma (0.13 flat) where the
+  shipped shader does not (1.68 at gamma 1.4). It costs 32 SFU slots against 14. The
+  shipped shader took the cheaper placement because the two are **bit-identical at the
+  default `cp_gamma = 1.00`**, which is the only place the difference is free.
 
 ## Setup
 
@@ -76,6 +88,52 @@ static SFU count and compare against `pixellate.glsl`'s 30.
 The two independent implementations are the whole point of this setup: an error has to
 be made identically in GLSL and in numpy to slip through. It has happened once (see
 `pow(0,k)` below), so also sanity-check on a real GPU rather than the model alone.
+
+## Shader header format
+
+Every shipped shader opens with this block. Order is fixed: **name, licence,
+parameters, prose**. Separator is 4 spaces + 79 dashes (column 83).
+
+```glsl
+/*
+    <name> - <one-line description, lowercase, ends with a period.>
+    -------------------------------------------------------------------------------
+    Author:  sinedied
+    Licence: MIT - Copyright (c) 2026 sinedied
+
+    <the 8-line MIT paragraph, identical in every file>
+    -------------------------------------------------------------------------------
+    PARAMETERS
+
+      <xx_name>   <range>   <Sentence describing it. What 0 or 1.00 does.>
+    -------------------------------------------------------------------------------
+    <What it does and its characteristics — one short paragraph.>
+
+    <Caveats and advice: what not to change, where it degrades, what a setting
+     costs. One short paragraph. Omit if there is genuinely nothing to warn about.>
+*/
+```
+
+Rules that matter:
+
+- **Two short paragraphs of prose, maximum.** The header is a user-facing reference,
+  not the design record. Rationale, measurements and rejected approaches belong in
+  this file or in a commit message.
+- **Write the block out whole; never patch it incrementally.** Regex-editing these
+  headers during the repo extraction produced stray `..` fragments and a duplicated
+  copyright block, and took three attempts to get right. Regenerate, then diff.
+- Parameter identifiers are prefixed per shader (`cp_`, `lp_`, `pp_`) and lowercase.
+- **The `#pragma parameter` label and the identifier are both user-visible, on
+  different hosts.** RetroArch and RetroShader Lab render the quoted label; **minarch
+  renders the identifier** (`ma_config.c` uses `params[j].name`). So the identifier
+  has to read acceptably on its own *and* the label has to be worth reading. Do not
+  flatten the label into a copy of the identifier — that happened between v4 and v5
+  and lost the descriptions on every host that shows them.
+- Keep the `#pragma` lines column-aligned; the PARAMETERS block and the pragmas must
+  agree on defaults and ranges, and nothing checks that for you.
+
+Only `crt-perfect.glsl` follows this format so far. `lcd-perfect.glsl` and
+`pixel-perfect.glsl` predate it and are to be converted once the format settles.
 
 ## The one design rule
 
@@ -292,7 +350,7 @@ measured properties, on a white field:
 |---|---|---|---|---|---|
 | "crt" | 640x480 | 3.00px → 160 lines, 213 triads | 88.8% | 66.5 | 13.3 |
 | "240p" | 640x480 | 2.67px → 180 lines, 240 triads | 80.4% | 65.0 | 38.8 |
-| crt-perfect v5 defaults | — | — | 83.9% | 63.8 | 40.9 |
+| crt-perfect defaults | — | — | 83.9% | 63.8 | 40.9 |
 
 Both masks are luminance-neutral, which three primaries 120° apart reproduce exactly.
 
@@ -329,7 +387,7 @@ On a 1px checkerboard, 320x240 → 1024x768, white field for the swings:
 | `lcd3x` | 2.93 | 82.3% | 68.6 | 5.8 |
 | `sharp-shimmerless-grid` | 3.14 | 82.8% | 66.6 | 66.6 |
 | `lcd-perfect` defaults | **0.24** | 82.5% | 57.6 | 36.2 |
-| `crt-perfect-v5` defaults | 0.26 | 83.9% | 63.8 | 40.9 |
+| `crt-perfect` defaults | 0.26 | 83.9% | 63.8 | 40.9 |
 | `pixel-perfect` | 0.03 | 100% | 0 | 0 |
 
 `lcd-perfect` sits below crt-perfect's own beat. `lcd-grid-v2` was researched and not
