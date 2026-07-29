@@ -49,13 +49,17 @@ def gl_render(ctx, prog, src_u8, out_w, out_h, params):
     for k, v in params.items():
         if k in prog:
             prog[k].value = float(v)
-    prog["Texture"].value = 0
-    prog["OutputSize"].value = (float(out_w), float(out_h))
-    prog["TextureSize"].value = (float(in_w), float(in_h))
-    prog["InputSize"].value = (float(in_w), float(in_h))
-    if "OrigInputSize" in prog:
-        prog["OrigInputSize"].value = (float(in_w), float(in_h))
-    prog["MVPMatrix"].write(np.identity(4, "f4").tobytes())
+    # a shader that does not use one of these has it optimised out of the
+    # program entirely, so every one has to be guarded, not just the optional
+    for k, v in (("Texture", 0),
+                 ("OutputSize", (float(out_w), float(out_h))),
+                 ("TextureSize", (float(in_w), float(in_h))),
+                 ("InputSize", (float(in_w), float(in_h))),
+                 ("OrigInputSize", (float(in_w), float(in_h)))):
+        if k in prog:
+            prog[k].value = v
+    if "MVPMatrix" in prog:
+        prog["MVPMatrix"].write(np.identity(4, "f4").tobytes())
 
     # same quad runShaderPass() uploads: x,y,z,w, u,v,s,t
     verts = np.array([

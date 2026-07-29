@@ -62,13 +62,12 @@ class Model:
 PARITY = ("pre-v4 slot mask: row parity from a bare floor(), flips a whole row "
           "on a few ULP at some scales; fixed in v4 by floor(x + 1e-3)")
 
-# lp_subpixels or lp_grid at full strength drives the modulation to exactly 0,
-# and sqrt() has unbounded slope there, so the ~1e-5 float32 error already
-# present in the interpolated texcoord lands in the output magnified. Confirmed
-# by re-running the model itself in float32: it reproduces the same 3/255 on the
-# same 6 columns of 1024. Defaults and every other variant sit at 1.
-SQRT0 = ("full-strength modulation reaches 0, where sqrt() amplifies the float32 "
-         "texcoord error; ~0.09% of pixels, reproduced by the model in float32")
+# Note for the next person who drives a modulation to exactly 0: sqrt() has
+# unbounded slope there, so the ~1e-5 float32 error already in the interpolated
+# texcoord lands in the output magnified, and this check reads 3/255 rather than
+# 1 with no logic error anywhere. It is confirmable by re-running the model in
+# float32. lcd-perfect used to trip it; peak-normalising its modulation, which it
+# does for unrelated reasons, keeps it off zero and the check back at 1.
 
 
 REGISTRY = {
@@ -125,7 +124,6 @@ REGISTRY = {
             ("gamma 1.6", dict(lp_gamma=1.6)),
             ("bright", dict(lp_brightness=1.6)),
         ],
-        tolerance=3, reason=SQRT0,
     ),
     "pixel-perfect.glsl": Model(
         render=render_pixel_perfect,

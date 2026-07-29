@@ -224,7 +224,7 @@ def render_crt_v4(src_u8, out_w, out_h, p=None):
     return (np.clip(col * gain, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
 
-def render_crt_v5(src_u8, out_w, out_h, p=None, after=False):
+def render_crt_v5(src_u8, out_w, out_h, p=None, after=False, quantise=True):
     """Mirrors crt-perfect-v5.glsl (after=False) or crt-perfect-v5b.glsl
     (after=True, gamma applied to the scaled image instead of the taps)."""
     p = dict(DEFAULTS_V5, **(p or {}))
@@ -300,7 +300,11 @@ def render_crt_v5(src_u8, out_w, out_h, p=None, after=False):
         mask = np.concatenate([rg, b], axis=2)
 
     gain = np.sqrt(np.maximum(mask * (scan[:, None, None] * p["cp_brightness"]), 0.0))
-    return (np.clip(col * gain, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
+    out = np.clip(col * gain, 0.0, 1.0)
+    # quantise=False returns 0..1 floats. Only the output format changes; beat.py
+    # needs them unquantised because the figures it reports are smaller than one
+    # 8-bit level.
+    return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
 
 
 def render_pixel_perfect(src_u8, out_w, out_h, p=None):
