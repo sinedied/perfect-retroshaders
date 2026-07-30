@@ -451,3 +451,121 @@ def render_dmg_v4(src_u8, out_w, out_h, p=None, quantise=True):
         col = np.power(np.maximum(col, 1e-8), p["dp_gamma"])
     out = np.clip(col, 0.0, 1.0)
     return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
+
+
+# v5 fixes the shadow's placement and softens it, and adds a colour trim.
+#
+#   - the offset is no longer a control. 0.60 right and 0.85 down, in source
+#     pixels, is the placement that reads as a panel lit from above.
+#   - the shadow is box-blurred, for nothing. Its coverage is already the exact
+#     mean of the aperture over the output pixel's footprint, so widening that
+#     footprint convolves it with a wider box. Verified against an explicit
+#     convolution of the hard pulse train, not assumed.
+#   - dp_red / dp_green / dp_blue trim the balance. A gain is affine, so putting
+#     it after the blend is identical to putting it on the taps and a quarter of
+#     the cost; it goes on the finished colour so the substrate is tinted too.
+#     Behind a uniform branch, so neutral is free - measured, the everything-off
+#     path is 291 ops, the same as v4's.
+SHADOW_OFFSET = (0.60, 0.85)
+SHADOW_BLUR = 0.20
+
+DEFAULTS_DMG_V5 = dict(
+    dp_grid=0.30,
+    dp_gap=1.00,
+    dp_shadow=0.00,
+    dp_red=1.00,
+    dp_green=1.00,
+    dp_blue=1.00,
+    dp_brightness=1.00,
+    dp_gamma=1.00,
+)
+
+
+def render_dmg_v5(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors dmg-perfect-v5.glsl."""
+    p = dict(DEFAULTS_DMG_V5, **(p or {}))
+    s = src_u8.astype(np.float64) / 255.0
+    in_h, in_w = s.shape[:2]
+
+    px = ((np.arange(out_w) + 0.5) / out_w) * in_w
+    py = ((np.arange(out_h) + 0.5) / out_h) * in_h
+    hx = max(0.4995 * in_w / out_w, 1e-6)
+    hy = max(0.4995 * in_h / out_h, 1e-6)
+    Bx = np.floor(px + 0.5)
+    By = np.floor(py + 0.5)
+
+    scx, scy = out_w / max(in_w, 1.0), out_h / max(in_h, 1.0)
+    N = fit_scale(in_w, in_h, out_w, out_h)
+    lit = np.clip(1.0 - p["dp_gap"] / N, 1e-3, 1.0)
+
+    Alox, Ahix = dot_integral(px - hx, lit), dot_integral(px + hx, lit)
+    Aloy, Ahiy = dot_integral(py - hy, lit), dot_integral(py + hy, lit)
+    Ix = np.maximum(Ahix - Alox, 1e-6)
+    Iy = np.maximum(Ahiy - Aloy, 1e-6)
+    covx_raw, covy_raw = Ix / (2 * hx), Iy / (2 * hy)
+
+    wxA = np.clip((Bx - px + hx) / (2 * hx), 0.0, 1.0)
+    wyA = np.clip((By - py + hy) / (2 * hy), 0.0, 1.0)
+    kx, ky = smoothstep(0.0, 0.01, covx_raw), smoothstep(0.0, 0.01, covy_raw)
+    wxL = wxA + (np.clip((Bx * lit - Alox) / Ix, 0.0, 1.0) - wxA) * kx
+    wyL = wyA + (np.clip((By * lit - Aloy) / Iy, 0.0, 1.0) - wyA) * ky
+
+    fx, fy = smoothstep(2.0, 2.9, scx), smoothstep(2.0, 2.9, scy)
+    covx = 1.0 + (covx_raw - 1.0) * fx
+    covy = 1.0 + (covy_raw - 1.0) * fy
+    dot2d = covy[:, None] * covx[None, :]
+
+    ixl = np.clip(Bx.astype(int) - 1, 0, in_w - 1)
+    ixh = np.clip(Bx.astype(int), 0, in_w - 1)
+    iyl = np.clip(By.astype(int) - 1, 0, in_h - 1)
+    iyh = np.clip(By.astype(int), 0, in_h - 1)
+    t00 = s[np.ix_(iyl, ixl)]; t10 = s[np.ix_(iyl, ixh)]
+    t01 = s[np.ix_(iyh, ixl)]; t11 = s[np.ix_(iyh, ixh)]
+
+    def blend(wx, wy):
+        WX = wx[None, :, None]; WY = wy[:, None, None]
+        hi = t11 + (t01 - t11) * WX
+        lo = t10 + (t00 - t10) * WX
+        return hi + (lo - hi) * WY
+
+    area = blend(wxA, wyA) * p["dp_brightness"]
+    dotm = blend(wxL, wyL) * p["dp_brightness"]
+
+    D = dot2d[..., None]
+    col = area + (DMG_SUBSTRATE + (dotm - DMG_SUBSTRATE) * D - area) * p["dp_grid"]
+
+    if p["dp_shadow"] > 0.0:
+        qx = px - SHADOW_OFFSET[0]
+        qy = py - SHADOW_OFFSET[1]
+        hsx, hsy = hx + SHADOW_BLUR, hy + SHADOW_BLUR
+        Sx = np.maximum(dot_integral(qx + hsx, lit)
+                        - dot_integral(qx - hsx, lit), 0.0) / (2 * hsx)
+        Sy = np.maximum(dot_integral(qy + hsy, lit)
+                        - dot_integral(qy - hsy, lit), 0.0) / (2 * hsy)
+        Sx = 1.0 + (Sx - 1.0) * fx
+        Sy = 1.0 + (Sy - 1.0) * fy
+
+        cx = np.clip(np.floor(qx + 1e-3).astype(int), 0, in_w - 1)
+        cy = np.clip(np.floor(qy + 1e-3).astype(int), 0, in_h - 1)
+        caster = s[np.ix_(cy, cx)]
+
+        L = np.array([0.299, 0.587, 0.114])
+        WX = wxA[None, :]; WY = wyA[:, None]
+        ks = [WX * WY, (1 - WX) * WY, WX * (1 - WY), (1 - WX) * (1 - WY)]
+        paper = np.maximum.reduce(
+            [(t @ L) * smoothstep(0.0, 0.02, k)
+             for t, k in zip((t00, t10, t01, t11), ks)]
+            + [np.full((out_h, out_w), PAPER_FLOOR)])
+        opacity = np.clip(1.0 - (caster @ L) / paper, 0.0, 1.0)
+        shade = p["dp_shadow"] * opacity * (Sy[:, None] * Sx[None, :])
+        col = col * (1.0 - shade)[..., None]
+
+    trim = (abs(p["dp_red"] - 1.0) + abs(p["dp_green"] - 1.0)
+            + abs(p["dp_blue"] - 1.0))
+    if trim > 0.001:
+        col = col * np.array([p["dp_red"], p["dp_green"], p["dp_blue"]])
+
+    if abs(p["dp_gamma"] - 1.0) > 0.001:
+        col = np.power(np.maximum(col, 1e-8), p["dp_gamma"])
+    out = np.clip(col, 0.0, 1.0)
+    return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out

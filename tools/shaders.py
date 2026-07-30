@@ -16,7 +16,8 @@ from crt_preview import (
 )
 from dmg_preview import (
     DEFAULTS_DMG, DEFAULTS_DMG_V2, DEFAULTS_DMG_V3, DEFAULTS_DMG_V4,
-    render_dmg, render_dmg_v2, render_dmg_v3, render_dmg_v4,
+    DEFAULTS_DMG_V5,
+    render_dmg, render_dmg_v2, render_dmg_v3, render_dmg_v4, render_dmg_v5,
 )
 from lcd_preview import (
     # aliased: crt_preview exports a DEFAULTS_V3 of its own, and a bare
@@ -326,6 +327,39 @@ REGISTRY = {
         render=render_pixel_perfect,
         defaults=DEFAULTS_PP,
         variants=[("crisp", dict(pp_sharpness=0.3))],
+    ),
+    "dmg-perfect-v5.glsl": Model(
+        render=render_dmg_v5,
+        defaults=DEFAULTS_DMG_V5,
+        variants=[
+            ("grid off", dict(dp_grid=0.0)),
+            ("full grid", dict(dp_grid=1.0)),
+            ("thin line", dict(dp_gap=0.25)),
+            ("fat line", dict(dp_gap=2.0)),
+            ("shadow", dict(dp_shadow=0.45)),
+            ("shadow strong", dict(dp_shadow=1.0)),
+            ("shadow + fat", dict(dp_shadow=0.5, dp_gap=1.75)),
+            ("shadow + bright", dict(dp_shadow=0.5, dp_brightness=1.6)),
+            # the trim is a uniform branch, so both sides of it get exercised
+            ("warm", dict(dp_green=0.94, dp_blue=0.85)),
+            ("cool", dict(dp_red=0.88, dp_green=0.96)),
+            ("red only", dict(dp_green=0.0, dp_blue=0.0)),
+            ("trim past 1", dict(dp_red=1.4, dp_blue=1.2)),
+            ("trim + shadow", dict(dp_shadow=0.5, dp_red=0.9, dp_blue=1.1)),
+            ("trim + gamma", dict(dp_red=0.9, dp_gamma=1.4)),
+            ("reference tone", dict(dp_brightness=1.2, dp_gamma=1.4)),
+            ("gamma 0.7", dict(dp_gamma=0.7)),
+        ],
+        cases=[
+            ("GB 5x integer", (160, 144), (800, 720)),
+            ("GB 4x integer", (160, 144), (640, 576)),
+            ("GB 3x integer", (160, 144), (480, 432)),
+            ("GB aspect 1024x768", (160, 144), (853, 768)),
+            ("GB fill   1024x768", (160, 144), (1024, 768)),
+            ("GB aspect  640x480", (160, 144), (533, 480)),
+            ("GB fill    640x480", (160, 144), (640, 480)),
+            ("GBA fill  1024x768", (240, 160), (1024, 768)),
+        ],
     ),
     "dmg-perfect-v4.glsl": Model(
         render=render_dmg_v4,

@@ -85,6 +85,17 @@ MATCHED = {
               dp_gamma=0.80), _ref(alpha=0.80, bright=1.00, gamma=0.80,
                                    light=0.00)),
     ],
+    "dmg-perfect-v5.glsl": [
+        ("reference defaults",
+         dict(dp_grid=0.30, dp_gap=1.00, dp_brightness=1.20, dp_gamma=1.40),
+         _ref()),
+        ("gamma off",
+         dict(dp_grid=0.30, dp_gap=1.00, dp_brightness=1.20, dp_gamma=1.00),
+         _ref(gamma=1.00)),
+        ("strong grid",
+         dict(dp_grid=0.80, dp_gap=1.00, dp_brightness=1.00, dp_gamma=0.80),
+         _ref(alpha=0.80, bright=1.00, gamma=0.80)),
+    ],
     "dmg-perfect-v4.glsl": [
         ("reference defaults",
          dict(dp_grid=0.30, dp_gap=1.00, dp_brightness=1.20, dp_gamma=1.40),
@@ -435,8 +446,16 @@ def main(argv):
             print(f"    no matched pairing recorded for {name}")
             continue
         for label, ours, theirs in pairings:
+            # Layered over the registry defaults, never passed bare. A uniform
+            # the host does not set is 0, so a pairing written before a shader
+            # gained a parameter would silently hand it zero - which for a gain
+            # means a black frame, and for a divisor means NaN. This is the trap
+            # AGENTS.md records under "a column reading 0.000 means clean"; it
+            # cost a 255/255 here the moment v5 added its colour trim.
+            full = dict(REGISTRY[name].defaults, **ours) if name in REGISTRY \
+                else ours
             worst = max(d for _, d in
-                        identity(ctx, name, ours, ref_params=theirs))
+                        identity(ctx, name, full, ref_params=theirs))
             verdict = ("bit-identical" if worst == 0 else
                        "identical to rounding" if worst <= 1 else "DIFFERS")
             print(f"    {label:22s} max diff {worst:3d}/255   {verdict}")
