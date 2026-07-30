@@ -139,13 +139,19 @@ def render_one(ctx, name, src, out_w, out_h):
     txt = open(shader_path(name)).read()
     prog = ctx.program(vertex_shader=stage_source(txt, "vert"),
                        fragment_shader=stage_source(txt, "frag"))
-    # Source arrays are top-down, GL textures are bottom-up, so the source goes
-    # in flipped and the readback comes back flipped. gl_check.py can ignore
-    # this because its model works in the same GL order the readback is in; here
-    # it matters, because a screenshot rendered upside down is hard to judge.
-    img = gl_render(ctx, prog, np.ascontiguousarray(src[::-1]), out_w, out_h,
-                    params_for(name))
-    return img[::-1]
+    # No flip. gl_render() already returns rows in the same order as the source
+    # array - the texture upload and the framebuffer readback are both bottom-up,
+    # so they cancel, which is exactly why gl_check.py can index the model
+    # directly against it.
+    #
+    # This used to flip the source in and flip the result back. That pair is an
+    # identity for *content*, so every screenshot came out the right way up and
+    # nothing looked wrong for a year - but the shader ran on a flipped image, so
+    # anything with a direction came out mirrored in y. A grid, a scanline and a
+    # mask are all symmetric and cannot show it; dmg-perfect's cast shadow can,
+    # and it rendered up-and-right here while gl_check.py had it down-and-right
+    # from the same shader. Judge a handed effect only in this convention.
+    return gl_render(ctx, prog, src, out_w, out_h, params_for(name))
 
 
 def sheet_for(ctx, names, src, ow, oh, crop):
