@@ -15,8 +15,8 @@ from crt_preview import (
     render_crt_v7, render_crt_v8, render_crt_v9,
 )
 from dmg_preview import (
-    DEFAULTS_DMG, DEFAULTS_DMG_V2, DEFAULTS_DMG_V3,
-    render_dmg, render_dmg_v2, render_dmg_v3,
+    DEFAULTS_DMG, DEFAULTS_DMG_V2, DEFAULTS_DMG_V3, DEFAULTS_DMG_V4,
+    render_dmg, render_dmg_v2, render_dmg_v3, render_dmg_v4,
 )
 from lcd_preview import (
     # aliased: crt_preview exports a DEFAULTS_V3 of its own, and a bare
@@ -310,6 +310,41 @@ REGISTRY = {
         render=render_pixel_perfect,
         defaults=DEFAULTS_PP,
         variants=[("crisp", dict(pp_sharpness=0.3))],
+    ),
+    "dmg-perfect-v4.glsl": Model(
+        render=render_dmg_v4,
+        defaults=DEFAULTS_DMG_V4,
+        variants=[
+            ("grid off", dict(dp_grid=0.0)),
+            ("full grid", dict(dp_grid=1.0)),
+            ("thin line", dict(dp_gap=0.25)),
+            ("fat line", dict(dp_gap=2.0)),
+            ("shadow", dict(dp_shadow=0.35)),
+            ("shadow strong", dict(dp_shadow=0.8)),
+            # both offsets to zero puts the shadow exactly under its own dot,
+            # which is where the displaced aperture and the real one coincide
+            ("shadow no offset", dict(dp_shadow=0.5, dp_shadow_x=0.0,
+                                      dp_shadow_y=0.0)),
+            ("shadow far", dict(dp_shadow=0.5, dp_shadow_x=3.0,
+                                dp_shadow_y=3.0)),
+            ("shadow sideways", dict(dp_shadow=0.5, dp_shadow_x=2.0,
+                                     dp_shadow_y=0.0)),
+            ("shadow + fat", dict(dp_shadow=0.5, dp_gap=1.75)),
+            ("shadow + bright", dict(dp_shadow=0.5, dp_brightness=1.6)),
+            ("shadow + gamma", dict(dp_shadow=0.5, dp_gamma=1.4)),
+            ("reference tone", dict(dp_brightness=1.2, dp_gamma=1.4)),
+            ("gamma 0.7", dict(dp_gamma=0.7)),
+        ],
+        cases=[
+            ("GB 5x integer", (160, 144), (800, 720)),
+            ("GB 4x integer", (160, 144), (640, 576)),
+            ("GB 3x integer", (160, 144), (480, 432)),
+            ("GB aspect 1024x768", (160, 144), (853, 768)),
+            ("GB fill   1024x768", (160, 144), (1024, 768)),
+            ("GB aspect  640x480", (160, 144), (533, 480)),
+            ("GB fill    640x480", (160, 144), (640, 480)),
+            ("GBA fill  1024x768", (240, 160), (1024, 768)),
+        ],
     ),
     "dmg-perfect-v3.glsl": Model(
         render=render_dmg_v3,
