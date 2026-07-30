@@ -133,14 +133,14 @@ uniform COMPAT_PRECISION float cp_min_pitch;
 uniform COMPAT_PRECISION float cp_gamma;
 uniform COMPAT_PRECISION float cp_curvature;
 #else
-#define cp_scanlines 0.55
-#define cp_rgb_mask 0.40
-#define cp_mask_type 1.0
-#define cp_mask_size 1.0
+#define cp_scanlines 0.60
+#define cp_rgb_mask 0.20
+#define cp_mask_type 1.00
+#define cp_mask_size 1.00
 #define cp_brightness 1.25
-#define cp_min_pitch 3.0
-#define cp_gamma 1.0
-#define cp_curvature 0.0
+#define cp_min_pitch 3.00
+#define cp_gamma 1.00
+#define cp_curvature 0.00
 #endif
 
 // Exact average of a unit-amplitude sinusoid of frequency f, in cycles per output
