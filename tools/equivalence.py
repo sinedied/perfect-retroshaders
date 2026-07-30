@@ -8,15 +8,18 @@ former, because the latter is itself a moire source - this script measures both.
 Run:  cd tools && PYTHONPATH=. ../.venv/bin/python equivalence.py
 """
 import collections
+import sys
 
 import numpy as np
 
 import moderngl
 from gl_check import stage_source, gl_render
+from lcd_preview import DEFAULTS_PP_V3
 from paths import shader_path
 
 PIXELLATE = shader_path("pixellate.glsl")
 PIXEL_PERFECT = shader_path("pixel-perfect.glsl")
+PIXEL_PERFECT_V3 = shader_path("pixel-perfect-v3.glsl")
 
 CASES = [(320, 240, 1024, 768), (256, 224, 1024, 768), (352, 240, 1024, 768),
          (368, 240, 1280, 720), (320, 240, 1280, 720), (160, 144, 1024, 768),
@@ -64,7 +67,8 @@ def block_widths(img, row=None):
 def main():
     ctx = moderngl.create_standalone_context()
     prog = {}
-    for name, path in (("pixellate", PIXELLATE), ("pixel-perfect", PIXEL_PERFECT)):
+    for name, path in (("pixellate", PIXELLATE), ("pixel-perfect", PIXEL_PERFECT),
+                       ("pixel-perfect-v3", PIXEL_PERFECT_V3)):
         s = open(path).read()
         prog[name] = ctx.program(vertex_shader=stage_source(s, "vert"),
                                  fragment_shader=stage_source(s, "frag"))
@@ -115,7 +119,32 @@ def main():
         _, blended = block_widths(
             gl_render(ctx, prog["pixel-perfect"], src, 1024, 768, {"pp_sharpness": sh}), 400)
         print(f"   {sh:6.2f} {blended:18d}")
+    print("\n   Which is why v3 drops it: below 1.00 the footprint stops covering"
+          "\n   the output pixel, so the area average degrades toward nearest-"
+          "\n   neighbour - the uneven, crawling blocks this shader exists to"
+          "\n   remove. The knob's only effect is to undo the shader.")
+
+    print("\n5. pixel-perfect-v3 at its defaults vs pixel-perfect\n")
+    print("   Its grade is affine, and an affine map is exactly neutral at unity"
+          "\n   gain - so 'off' has to mean bit-identical, not nearly. Anything"
+          "\n   but 0 here means the fold rounds and must be branch-guarded.\n")
+    print(f"   {'source':>10s} {'output':>10s} {'scale':>12s} {'max':>4s}")
+    worst_v3 = 0
+    for iw, ih, ow, oh in CASES:
+        mx = 0
+        for _, s in sources(iw, ih, rng):
+            a = gl_render(ctx, prog["pixel-perfect"], s, ow, oh,
+                          {"pp_sharpness": 1.0}).astype(int)
+            b = gl_render(ctx, prog["pixel-perfect-v3"], s, ow, oh,
+                          DEFAULTS_PP_V3).astype(int)
+            mx = max(mx, int(np.abs(a - b).max()))
+        worst_v3 = max(worst_v3, mx)
+        print(f"   {iw}x{ih:<6d} {ow}x{oh:<5d} {ow/iw:5.2f}x{oh/ih:<5.2f} {mx:4d}")
+    verdict = "bit-identical" if worst_v3 == 0 else "NOT NEUTRAL AT DEFAULTS"
+    print(f"\n   worst: {worst_v3}/255   {verdict}")
+
+    return 0 if worst == 0 and worst_v3 == 0 else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

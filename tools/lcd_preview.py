@@ -21,6 +21,20 @@ DEFAULTS_PP_V2 = dict(
     pp_gamma=1.00,
 )
 
+# v3 drops pp_sharpness - below 1.00 it narrows the footprint past the output
+# pixel, which turns the area average back into nearest-neighbour and restores
+# the crawling, uneven blocks the shader exists to remove - and spends the space
+# on a grade instead.
+DEFAULTS_PP_V3 = dict(
+    pp_saturation=1.00,
+    pp_contrast=1.00,
+    pp_brightness=1.00,
+    pp_gamma=1.00,
+)
+
+# Rec.709, matching LUMA in pixel-perfect-v3.glsl.
+LUMA_709 = np.array([0.2126, 0.7152, 0.0722])
+
 DEFAULTS_LCD = dict(
     lp_grid=0.30,
     lp_gap=0.16,
@@ -232,6 +246,35 @@ def render_pixel_perfect_v2(src_u8, out_w, out_h, p=None, quantise=True):
         col = np.power(np.maximum(col, 1e-8), p["pp_gamma"])
     out = np.clip(col, 0.0, 1.0)
     return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
+
+
+def render_pixel_perfect_v3(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors pixel-perfect-v3.glsl: the scaler plus a four-control grade.
+
+    There is no sharpness parameter, so the footprint is always the full output
+    pixel.     Brightness, contrast and saturation fold into a single affine map rather
+    than three steps, for the same reason the shader folds them: at the defaults
+    it is col*1 + 0 exactly, where the literal chain would round.
+
+    Being affine is also why the grade may sit after the blend at all. The
+    scaler's weights sum to 1, so A*sum(w_i * x_i) + B == sum(w_i * (A*x_i + B))
+    - post-blend and per-tap are the same result. Only the clamp and the gamma
+    are non-linear, and only they can manufacture a pattern.
+    """
+    p = dict(DEFAULTS_PP_V3, **(p or {}))
+    src = src_u8.astype(np.float64) / 255.0
+    col = area_average(src, out_w, out_h)[0]
+
+    A = p["pp_brightness"] * p["pp_contrast"]
+    B = 0.5 - 0.5 * p["pp_contrast"]
+    s = p["pp_saturation"]
+    luma = (col * LUMA_709).sum(axis=-1, keepdims=True)
+    col = col * (A * s) + (luma * (A * (1.0 - s)) + B)
+
+    col = np.clip(col, 0.0, 1.0)
+    if abs(p["pp_gamma"] - 1.0) > 0.001:
+        col = np.power(np.maximum(col, 1e-8), p["pp_gamma"])
+    return (col * 255.0 + 0.5).astype(np.uint8) if quantise else col
 
 
 def render_lcd(src_u8, out_w, out_h, p=None, mode="edge", quantise=True,

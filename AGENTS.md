@@ -16,6 +16,8 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | `shaders/crt-perfect-v7.glsl` | in flight: curvature, patterns curve too, zoomed to fill |
 | `shaders/lcd-perfect.glsl` | LCD: sinusoidal mesh on whole-cell periods, 120-degree stripes. `lp_` params |
 | `shaders/pixel-perfect.glsl` | scaling only, no effect. `pp_` params |
+| `shaders/pixel-perfect-v2.glsl` | in flight: adds a post-blend `pp_gamma` |
+| `shaders/pixel-perfect-v3.glsl` | in flight: no `pp_sharpness`, adds a four-control grade |
 | `shaders/dmg-perfect-v1.glsl` | Game Boy DMG: rectangular dots, light gaps, adaptive gap floor. `dp_` params |
 | `tools/` | the verification harness |
 | `tools/vendor/` | **third-party shaders**, benchmark and comparison references only |
@@ -611,6 +613,8 @@ fraction of the cost. Two things in the original are redundant:
 |---|---|---|---|
 | `pixellate.glsl` | 292 | 4 | 30 |
 | `pixel-perfect.glsl` | 112 | 4 | **0** |
+| `pixel-perfect-v2.glsl` | 131 | 4 | 6 |
+| `pixel-perfect-v3.glsl` | 161 | 4 | 6 |
 
 Four taps stay: an output footprint spans up to two texels per axis, so four is the
 minimum without delegating the blend to the texture unit. A one-tap LINEAR variant was
@@ -619,7 +623,86 @@ was rejected — it makes correctness depend on the GPU's subtexel bilinear prec
 needs the opposite sampler setting to everything else here.
 
 `tools/equivalence.py` proves the match: output diff, block-width distribution,
-transition-pixel counts, moire, and the `pp_sharpness` response.
+transition-pixel counts, moire, the `pp_sharpness` response, and v3's bit-identity
+against the canonical shader at its defaults.
+
+## An affine grade is free after the blend; only the clamp and the gamma cost
+
+`pixel-perfect-v3` drops `pp_sharpness` and spends the space on a colour grade. Both
+halves of that took measuring.
+
+**`pp_sharpness` only ever undoes the shader.** It scales the half-footprint, so below
+1.00 the footprint stops covering the output pixel and the area average degrades toward
+nearest-neighbour — which is the uneven, crawling blocks the shader exists to remove.
+`equivalence.py` shows it directly: transition pixels per row at 320x240 → 1024x768 go
+256, 256, 128, 128, 0 as it drops 1.00 → 0.20. A knob whose entire range is a slide back
+into the fault is not a tuning control, so v3 pins it at 1.00 and removes it.
+
+**Brightness, contrast and saturation may sit after the blend, and this is not an
+exception to the design rule — it is the rule's converse.** What the rule forbids is a
+*non-linearity* after the blend, because that gives partial-coverage pixels a
+coverage-dependent shift. An affine map has no such shift: the scaler's weights sum to
+1, so
+
+    A·(Σ wᵢ xᵢ) + B  ==  Σ wᵢ (A·xᵢ + B)
+
+and post-blend is *identical* to per-tap, at a quarter of the cost. Gain is affine,
+contrast about mid grey is affine, and saturation is a linear operator (`mix` toward a
+luma dot product). Measured on 1px checkerboards, worst over five scales, with the share
+of the frame that meets the clamp alongside:
+
+| | mono | chroma | clips |
+|---|---|---|---|
+| neutral (the defaults) | 0.349 | 0.116 | 0.0% |
+| `pp_saturation` 0.00 | 0.349 | 0.244 | 0.0% |
+| `pp_contrast` 0.40 | 0.178 | 0.134 | 0.0% |
+| `pp_brightness` 0.60 | 0.209 | 0.070 | 0.0% |
+| `pp_saturation` 1.80 | 0.349 | 1.042 | 100% |
+| `pp_contrast` 1.60 | 3.916 | 1.305 | 100% |
+| `pp_brightness` 2.00 | 32.67 | 32.67 | 50% |
+| `pp_gamma` 0.70 | 8.031 | 8.009 | 0.0% |
+| `pp_gamma` 1.40 | 8.705 | 8.681 | 0.0% |
+
+**Beat tracks the clip column and nothing else.** Every 0% row sits at or *below* the
+neutral floor however far from 1 the control is pushed — which is the falsifiable form
+of the claim, and the reason `report_grade()` prints the clip share next to the beat
+rather than the beat alone. The 0.349 floor is the scaler's own at its worst scale
+(480x272 → 640x480); at 320x240 → 1024x768 it is 0.031, the figure recorded for
+`pixel-perfect` elsewhere in this file.
+
+Two traps in measuring it:
+
+- **A black-and-white checkerboard cannot exercise a saturation control.** On grey,
+  luma equals every channel and the mix is a no-op, so a completely broken saturation
+  measures perfect. The chroma row is a red/cyan 1px checker — the same worst case one
+  axis over — and it is the only column in which the saturation rows say anything.
+- **`pp_gamma` is not a v3 regression.** Its figures are *bit-identical* to
+  `pixel-perfect-v2`'s at every scale, because it is the same post-blend placement.
+  What is new is measuring it on the same yardstick as everything else, where it turns
+  out to be far the most expensive control in the shader — around 20× the visible
+  threshold on dense content, against 0.03 with it off. The cheap placement was kept
+  deliberately (one `pow`, 6 SFU, against 24 for the four taps); putting it on the taps
+  the way `crt-perfect-v5` does would fit the budget and is the obvious next iteration
+  if the cost is judged too high.
+
+**Fold the three affine controls into one map; do not write them as three steps.**
+The composition is `col*(ga*s) + dot(col, LUMA)*(ga*(1-s)) + gb`, where `ga =
+brightness*contrast` and `gb = 0.5*(1-contrast)`, using the fact that the luma weights
+sum to 1. It is one dot and one fma — but the reason it matters is exactness, not cost:
+at the defaults it is `col*1.0 + 0.0`, which is bit-exact, where the literal chain is
+not. `(x - 0.5)` rounds for small x so the contrast round trip does not return x, and
+`mix(l, col, 1.0)` is only exactly `col` if the driver spells `mix` as `x*(1-a) + y*a`
+rather than as `x + a*(y-x)`. GLSL guarantees the former; drivers ship the latter.
+
+That exactness is worth having because it makes "off" checkable: **v3 at its defaults is
+bit-identical (0/255) to `pixel-perfect.glsl` at every scale in `equivalence.py`'s
+matrix**, on noise, checkerboard, grid and ramp sources. A grade that claims to be
+neutral at unity should be provably neutral, not nearly.
+
+Note the declaration order (`pp_saturation`, `pp_contrast`, `pp_brightness`, `pp_gamma`,
+per the "brightness then gamma last" rule) deliberately differs from the evaluation
+order (brightness → contrast → saturation → gamma). The fold makes the evaluation order
+invisible in the code, so it is stated in the comment there.
 
 ## Measurement traps
 

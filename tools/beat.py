@@ -485,9 +485,100 @@ def report_curvature_uniformity():
     return worst if worst_ok >= MIN_PITCH - 1e-6 else 99.0
 
 
+def report_grade():
+    """What each of pixel-perfect-v3's grade controls costs in beat.
+
+    The claim is that brightness, contrast and saturation are affine, so they
+    commute with the scaler's blend - post-blend and per-tap are the same result
+    - and therefore cannot give partial-coverage pixels a coverage-dependent
+    shift. Only the clamp and the gamma are non-linear. That is an argument, and
+    an argument gets measured here rather than asserted.
+
+    The clip column is what makes it falsifiable: if the affine reasoning holds,
+    beat should track how much of the frame meets the clamp and nothing else, so
+    a control at 0% clip must read at the neutral floor no matter how far from 1
+    it is set.
+
+    Two sources, because a black-and-white checkerboard cannot exercise a
+    saturation control at all - on grey, luma equals every channel and the mix is
+    a no-op, so a broken saturation would measure perfect. The chroma case is a
+    red/cyan 1px checker, the same worst case one axis over.
+    """
+    from lcd_preview import (DEFAULTS_PP_V3, LUMA_709, area_average,
+                             render_pixel_perfect_v3)
+
+    def chroma(w, h):
+        yy, xx = np.mgrid[0:h, 0:w]
+        odd = ((yy + xx) % 2).astype(np.uint8)
+        return np.stack([odd * 255, (1 - odd) * 255, (1 - odd) * 255], axis=2)
+
+    def clip_pct(src, ow, oh, p):
+        """Share of the frame the grade pushes outside 0 to 1, before the clamp."""
+        col = area_average(src.astype(np.float64) / 255.0, ow, oh)[0]
+        ga = p["pp_brightness"] * p["pp_contrast"]
+        gb = 0.5 - 0.5 * p["pp_contrast"]
+        s = p["pp_saturation"]
+        luma = (col * LUMA_709).sum(axis=-1, keepdims=True)
+        g = col * (ga * s) + (luma * (ga * (1.0 - s)) + gb)
+        return float(((g < 0.0) | (g > 1.0)).mean()) * 100.0
+
+    configs = [
+        ("neutral (the defaults)", {}),
+        ("saturation 0.00", dict(pp_saturation=0.0)),
+        ("saturation 1.80", dict(pp_saturation=1.8)),
+        ("contrast 0.40", dict(pp_contrast=0.4)),
+        ("contrast 1.60", dict(pp_contrast=1.6)),
+        ("brightness 0.60", dict(pp_brightness=0.6)),
+        ("brightness 2.00", dict(pp_brightness=2.0)),
+        ("gamma 0.70", dict(pp_gamma=0.7)),
+        ("gamma 1.40", dict(pp_gamma=1.4)),
+        ("full grade", dict(pp_saturation=1.3, pp_contrast=1.2,
+                            pp_brightness=1.1, pp_gamma=0.9)),
+    ]
+    scales = [((320, 240), (1024, 768)), ((480, 272), (1024, 768)),
+              ((480, 272), (640, 480)), ((320, 240), (640, 480)),
+              ((160, 144), (1024, 768))]
+
+    print("\npixel-perfect-v3: what a post-blend grade costs, worst over "
+          f"{len(scales)} scales")
+    print(f"(1px checkerboards, visible above ~{VISIBLE}; clip is the share of "
+          "the frame\n the grade pushes outside 0 to 1 before the clamp)\n")
+    print(f"  {'configuration':<24s} {'mono':>8s} {'chroma':>8s} {'clip':>8s}")
+
+    worst_clean, worst_at = 0.0, ""
+    for label, over in configs:
+        p = dict(DEFAULTS_PP_V3, **over)
+        mono_b = chroma_b = clip = 0.0
+        for (sw, sh), (ow, oh) in scales:
+            for name, make in (("mono", checkerboard), ("chroma", chroma)):
+                src = make(sw, sh)
+                r = beat(render_pixel_perfect_v3(src, ow, oh, p), sw, sh)
+                if name == "mono":
+                    mono_b = max(mono_b, r)
+                else:
+                    chroma_b = max(chroma_b, r)
+                clip = max(clip, clip_pct(src, ow, oh, p))
+        # Only the rows that are meant to be clean are gated. A row that clips,
+        # or that takes the gamma, is a documented cost the header states - the
+        # same way crt-perfect's gamma 1.4 is not a failure.
+        linear = clip < 1e-9 and abs(p["pp_gamma"] - 1.0) <= 0.001
+        r = max(mono_b, chroma_b)
+        if linear and r > worst_clean:
+            worst_clean, worst_at = r, label
+        print(f"  {label:<24s} {mono_b:8.3f} {chroma_b:8.3f} {clip:7.1f}%"
+              f"{'' if linear else '   <- clamp/gamma, a documented cost'}")
+
+    print(f"\n  worst where nothing clips and the gamma is off: {worst_clean:.3f}"
+          f" ({worst_at})   {'OK' if worst_clean <= VISIBLE else 'VISIBLE MOIRE'}")
+    print("  An affine grade commutes with the blend, so these must sit at the"
+          "\n  scaler's own floor however far from 1 the control is pushed.")
+    return worst_clean
+
+
 if __name__ == "__main__":
     ok = self_test()
     w = report()
+    wg = report_grade()
     wc = report_curvature()
     wu = report_curvature_uniformity()
-    sys.exit(0 if ok and max(w, wc) <= VISIBLE and wu <= UNIFORM else 1)
+    sys.exit(0 if ok and max(w, wg, wc) <= VISIBLE and wu <= UNIFORM else 1)
