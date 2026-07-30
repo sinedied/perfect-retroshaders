@@ -141,9 +141,9 @@ samples, which likely dominates:
 | | ops | SFU | vs `pixellate` |
 |---|---|---|---|
 | `pixellate` | 292 | **30** | 100% |
-| `crt-perfect` flat | 501 | 14 | 104% |
-| v6 (curvature, flat patterns) | 588 | 14 | 109% |
-| v8 (curvature, warped patterns) | 628 | 14 | 124% |
+| `crt-perfect` (shipped) | 501 | 14 | 104% |
+| `crt-perfect-v8`, curvature off | 628 | 14 | 123% |
+| `crt-perfect-v8`, curvature on | 628 | 14 | 133% |
 
 So on an Apple GPU, SFU is *not* the bottleneck. A Mali G31 has far less ALU per
 transcendental and may rank them the other way round. **Use SFU as the device proxy
@@ -152,10 +152,16 @@ only the Brick settles it.
 
 Measured cost of the two optional features, at 1024x768 from 320x240:
 
-- **curvature costs ~9%** (v6 108.6 → 117.9, v8 123.5 → 133.9). Clears the noise.
-- **gamma costs nothing measurable** (v6 108.6 → 108.5, v8 123.5 → 123.7, both inside
-  1.4%), even though the `pow` is 6 of the 14 SFU slots. Another sign this GPU is not
-  SFU-bound.
+- **curvature costs ~8%** (v8 123.2 → 132.8 against `pixellate`). Clears the noise.
+- **gamma is free** — `crt-perfect` 103.6 → 104.5 and v8 123.2 → 122.7, both at or
+  inside the 0.9% noise floor, even though the `pow` is 6 of the 14 SFU slots. Another
+  sign this GPU is not SFU-bound.
+- **`crt-perfect` is at parity with `pixellate`** (103.6%) and v8 costs ~19% more than
+  it. Worst case measured, v8 with curvature, is 133% of the yardstick.
+
+Comparing two shaders at their own defaults is fair here even though they differ
+(0.55/0.40 against 0.60/0.20): both are non-zero, so both take the same branches and
+issue the same instructions. Amplitude is data, not work.
 
 The two independent implementations are the whole point of this setup: an error has to
 be made identically in GLSL and in numpy to slip through. It has happened once (see

@@ -37,24 +37,22 @@ OW, OH = 1024, 768
 IW, IH = 320, 240
 DRAWS = 200
 
-# Identical overrides on v6 and v8 so the only difference is the code, plus each
-# shader at its own shipped defaults. Gamma "on" is 1.40; at 1.00 the shader
-# skips the pow() entirely on a uniform branch, which is the point of measuring
-# both. Curvature "on" is 0.10, mid-range for both versions.
+# pixellate is the budget yardstick, crt-perfect is what ships today, and v8 is
+# the candidate. crt-perfect has no cp_curvature at all, so the curvature corners
+# exist only for v8 - a row for "crt-perfect, curvature on" would silently be the
+# defaults again, since build() drops uniforms the program does not declare.
+#
+# The two shaders' pattern defaults differ (0.55/0.40 against 0.60/0.20) but that
+# does not bias the timing: both are non-zero, so both take the same branches and
+# execute the same instructions. Amplitude is data, not work.
 GAMMA_ON = 1.40
 CURV_ON = 0.10
 
 CASES = [
     ("pixellate (vendor)", "pixellate.glsl", {"INTERPOLATE_IN_LINEAR_GAMMA": 1.0}),
-    ("crt-perfect (flat)", "crt-perfect.glsl", {}),
 
-    ("v6 defaults", "crt-perfect-v6.glsl", {}),
-    ("v6 curve on, gamma off", "crt-perfect-v6.glsl",
-     {"cp_curvature": CURV_ON, "cp_gamma": 1.0}),
-    ("v6 curve off, gamma on", "crt-perfect-v6.glsl",
-     {"cp_curvature": 0.0, "cp_gamma": GAMMA_ON}),
-    ("v6 curve on, gamma on", "crt-perfect-v6.glsl",
-     {"cp_curvature": CURV_ON, "cp_gamma": GAMMA_ON}),
+    ("crt-perfect defaults", "crt-perfect.glsl", {}),
+    ("crt-perfect gamma on", "crt-perfect.glsl", {"cp_gamma": GAMMA_ON}),
 
     ("v8 defaults", "crt-perfect-v8.glsl", {}),
     ("v8 curve on, gamma off", "crt-perfect-v8.glsl",
