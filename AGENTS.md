@@ -22,7 +22,8 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | `shaders/pixel-perfect-v2.glsl` | in flight: adds a post-blend `pp_gamma` |
 | `shaders/pixel-perfect-v3.glsl` | in flight: no `pp_sharpness`, adds a four-control grade |
 | `shaders/pixel-perfect-v4.glsl` | in flight: v3, but the grade costs nothing when off |
-| `shaders/dmg-perfect-v4.glsl` | Game Boy DMG: two-pass in one pass, shadow cast under the dots. `dp_` params |
+| `shaders/dmg-perfect-v5.glsl` | Game Boy DMG: two-pass in one pass, soft shadow, colour trim. `dp_` params |
+| `shaders/dmg-perfect-v4.glsl` | superseded: hard-edged shadow, offset exposed per axis |
 | `shaders/dmg-perfect-v3.glsl` | superseded: shadow subtracted from the gap colour only |
 | `shaders/dmg-perfect-v2.glsl` | superseded: same scaling, shadow measured opacity against white |
 | `shaders/dmg-perfect-v1.glsl` | superseded: gap as a share of a cell, forced to 2px |
@@ -924,6 +925,49 @@ resolves it toward the cell whose dot actually starts there; where the bias
 picks the far side instead, the displaced aperture is in its gap and the shadow
 is zero anyway.
 
+### A box filter you already have is a blur you can widen for free
+
+The shadow's coverage is the exact mean of the displaced aperture over the
+output pixel's footprint - that is what `dotInt(q + h) - dotInt(q - h)` divided
+by `2h` computes. Widening `h` past the footprint therefore convolves the
+aperture with a wider box, which is a real blur, and it costs **nothing**: the
+same two antiderivative evaluations, a larger constant. Measured, the
+everything-off path is 291 instructions with the blur and 291 without.
+
+Checked against an explicit convolution of the hard pulse train rather than
+assumed - the residual is discretisation only and falls as the window grows.
+
+Two things to know before reaching for it elsewhere:
+
+- **It fills in as it widens.** A box wider than the aperture's gap raises the
+  minimum off zero: at a 0.80 duty cycle the trough goes 0.00, 0.50, 0.71 as the
+  half-width goes 0.10, 0.20, 0.35 of a cell. For a shadow that is right - a
+  blurred shadow should lose its internal structure - but a pattern that needs
+  to keep its contrast cannot be softened this way.
+- **It only blurs what the aperture controls.** The shadow's strength also comes
+  from a per-cell opacity that is sampled nearest, and widening the aperture
+  window does not touch that. It works here because the aperture's gaps sit
+  exactly where the opacity steps, so the hard part of the step lands where the
+  coverage is already near zero.
+
+### An affine trim is free after the blend, and free again when it is neutral
+
+`dp_red`, `dp_green` and `dp_blue` are plain per-channel gains. A gain is affine
+and the blend weights sum to one, so applying it to the finished colour is
+*identical* to applying it to the four taps at a quarter of the cost - the same
+argument that lets `pixel-perfect-v3` grade after the blend, and not an
+exception to the design rule but its converse.
+
+It goes on the finished colour rather than on the taps for a second reason: the
+substrate is part of the panel, so it should take the same tint as the picture.
+
+Behind a uniform branch it costs nothing at all when neutral, which is what
+makes it worth having on a shader with a tight budget: **291 ops with the trim
+present and neutral, the same as the version that had no trim.** Measured on a
+DMG palette it adds no beat at any setting tested, including gains above 1,
+because a Game Boy palette peaks at 0.455 and a 1.4x gain still does not reach
+the clamp - which is the thing that would have cost beat.
+
 ### A weighted blend is stable where a max over the same taps is not
 
 The paper estimate reads the four taps and takes their maximum. That is not
@@ -1536,8 +1580,9 @@ already taken out, for the reason the metric section above gives:
 | `dmg-perfect-v1` | 0.12 | **0.0% / 0.0%** | **0.0% / 0.0%** | **1.98** | 265 | 6 |
 | `dmg-perfect-v2` | 0.13 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 295 | 6 |
 | `dmg-perfect-v3` | 0.13 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 295 | 6 |
-| **`dmg-perfect-v4`** | **0.13** | **0.1% / 0.3%** | **0.0% / 0.7%** | **1.05** | 291 | 6 |
-| `dmg-perfect-v4` + shadow 0.35 | 0.19 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 463 | 6 |
+| `dmg-perfect-v4` | 0.13 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 291 | 6 |
+| **`dmg-perfect-v5`** | **0.13** | **0.1% / 0.3%** | **0.0% / 0.7%** | **1.05** | 291 | 6 |
+| `dmg-perfect-v5` + shadow 0.45 | 0.29 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 489 | 6 |
 
 v2 and v3 differ only in the shadow, so their geometry rows are the same figures
 and the beat column, taken on a full-range checkerboard, cannot tell them apart
