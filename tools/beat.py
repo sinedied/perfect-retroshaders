@@ -64,6 +64,35 @@ def checkerboard(w, h):
     return (((yy + xx) % 2) * 255).astype(np.uint8)[..., None].repeat(3, axis=2)
 
 
+# The four shades a Game Boy core actually puts on screen, lightest first.
+# Gambatte's GB-DMG, which is its default and the darkest paper of any palette
+# surveyed at luma 0.401 - so it is the strictest case for anything that has to
+# tell an undriven pixel from a driven one.
+DMG_PALETTE = [(87, 130, 0), (49, 116, 0), (0, 81, 33), (0, 66, 12)]
+
+
+def dmg_checkerboard(w, h):
+    """A checkerboard in a real DMG palette rather than in black and white.
+
+    The plain checkerboard is full-range, so its light square IS white, and any
+    fault that depends on the difference between "white" and "the panel's
+    undriven level" is invisible to it. dmg-perfect-v2's shadow measured every
+    shade of a Game Boy palette as most of the way opaque and dimmed the whole
+    picture; on this metric's own source that bug was *unmeasurable*, because
+    on that source it is not a bug. Every beat figure taken before this existed
+    was correct and none of them could have caught it.
+
+    Alternating the lightest and darkest shades keeps the same 1px structure and
+    the same worst-case contrast the plain checkerboard has, so the two numbers
+    stay comparable.
+    """
+    yy, xx = np.mgrid[0:h, 0:w]
+    a = np.empty((h, w, 3), np.uint8)
+    a[...] = np.array(DMG_PALETTE[0], np.uint8)
+    a[(yy + xx) % 2 == 0] = np.array(DMG_PALETTE[3], np.uint8)
+    return a
+
+
 def _band(out_w, out_h, src_w, src_h, pattern, fx, fy):
     """The cutoff mask, shared by the flat and the curved metric."""
     px_f, py_f = pattern if pattern else (src_w / out_w, src_h / out_h)
@@ -200,8 +229,9 @@ def beat(img, src_w, src_h, pattern=None):
     return float(np.sqrt((np.abs(F[band]) ** 2).sum()))
 
 
-def measure(render, src_w=320, src_h=240, out_w=1024, out_h=768, pattern=None):
-    src = checkerboard(src_w, src_h)
+def measure(render, src_w=320, src_h=240, out_w=1024, out_h=768, pattern=None,
+            source=checkerboard):
+    src = source(src_w, src_h)
     return beat(render(src, out_w, out_h), src_w, src_h, pattern)
 
 
@@ -346,6 +376,82 @@ def report():
         print(f"  {sw}x{sh} -> {ow}x{oh}".ljust(24) + "".join(row))
     print(f"\n  worst at defaults: {worst:.3f} ({worst_at})   "
           f"{'OK' if worst <= VISIBLE else 'VISIBLE MOIRE'}")
+    return worst
+
+
+def report_dmg():
+    """The dmg shaders on a DMG-palette source, which the plain metric cannot see.
+
+    Reported separately rather than folded into the table above, because the two
+    sources are not comparable: this one's contrast is a real palette's rather
+    than black to white, so its absolute numbers run lower.
+
+    Two columns, and only the first is gated. Defaults are what ships and what
+    the repo gates everywhere else. The shadow is off by default in every
+    version that has one, so forcing it on is the only way to see it at all -
+    and it is worth seeing, because it is where v2's caster fault shows up as a
+    number: v2 measures past the visible threshold on a palette and v3 roughly
+    halves it. That column is evidence, not a gate; a user who turns the shadow
+    up is choosing a look, and the header says what it costs.
+    """
+    from shaders import REGISTRY
+
+    names = [n for n in REGISTRY if n.startswith("dmg-perfect")]
+    if not names:
+        return 0.0
+    scales = [((160, 144), (800, 720)), ((160, 144), (853, 768)),
+              ((160, 144), (1024, 768)), ((160, 144), (533, 480)),
+              ((160, 144), (640, 480))]
+
+    print(f"\nbeat on a DMG-palette checkerboard (visible above ~{VISIBLE})\n"
+          f"The plain metric above is structurally blind to anything that "
+          f"depends on the\npanel's undriven level not being white, which is "
+          f"every Game Boy palette.\n")
+
+    def run(shadow):
+        out = {}
+        for name in names:
+            model = REGISTRY[name]
+            for (sw, sh), (ow, oh) in scales:
+                p = dict(model.defaults)
+                if shadow is not None and "dp_shadow" in p:
+                    p["dp_shadow"] = shadow
+                out[(name, ow, oh)] = measure(
+                    lambda s, w, h, m=model, p=p: m.render(s, w, h, p) / 255.0,
+                    sw, sh, ow, oh, pattern_freq(name, sw, sh, ow, oh),
+                    source=dmg_checkerboard)
+        return out
+
+    at_def, at_sh = run(None), run(0.35)
+    short = [n.replace(".glsl", "").replace("dmg-perfect", "dmg") for n in names]
+    print("  " + " " * 22 + "".join(f"{c:>14s}" for c in short)
+          + "   |" + "".join(f"{c:>14s}" for c in short))
+    print("  " + " " * 22 + f"{'at defaults':>{14*len(names)}s}"
+          + "   |" + f"{'shadow forced to 0.35':>{14*len(names)}s}")
+    # Gate the current version only. The earlier ones are kept on purpose and
+    # their numbers are the record of why they were replaced - v1's 2px line
+    # costs it 0.402 here, which is the fault that got it superseded, so gating
+    # on it would mean failing forever for a reason already written down.
+    current = max(names)
+    worst, worst_at, worst_sh = 0.0, "", 0.0
+    for (sw, sh), (ow, oh) in scales:
+        row, row2 = [], []
+        for name in names:
+            d, x = at_def[(name, ow, oh)], at_sh[(name, ow, oh)]
+            if name == current and d > worst:
+                worst, worst_at = d, f"{sw}x{sh} -> {ow}x{oh}"
+            if name == current:
+                worst_sh = max(worst_sh, x)
+            row.append(f"{d:14.3f}")
+            row2.append(f"{x:14.3f}")
+        print(f"  {sw}x{sh} -> {ow}x{oh}".ljust(24) + "".join(row)
+              + "   |" + "".join(row2))
+    print(f"\n  {current} at defaults, worst {worst:.3f} "
+          f"({worst_at or 'nowhere'})   "
+          f"{'OK' if worst <= VISIBLE else 'VISIBLE MOIRE'}")
+    print(f"  {current} with the shadow forced to 0.35, worst {worst_sh:.3f}   "
+          f"(not gated: the shadow is opt-in and the header states its cost)")
+    print(f"  earlier versions are shown for the record and are not gated")
     return worst
 
 
@@ -619,7 +725,8 @@ def report_grade():
 if __name__ == "__main__":
     ok = self_test()
     w = report()
+    wd = report_dmg()
     wg = report_grade()
     wc = report_curvature()
     wu = report_curvature_uniformity()
-    sys.exit(0 if ok and max(w, wg, wc) <= VISIBLE and wu <= UNIFORM else 1)
+    sys.exit(0 if ok and max(w, wd, wg, wc) <= VISIBLE and wu <= UNIFORM else 1)
