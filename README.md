@@ -30,7 +30,7 @@ All shaders provided here follow these principles, and were tested on a real dev
 | [`pixel-perfect.glsl`](shaders/pixel-perfect.glsl) | **Sharp pixel upscaling.** Uniform pixel blocks, no shimmer, fast |
 | [`crt-perfect.glsl`](shaders/crt-perfect.glsl) | **CRT.** Scanlines, RGB mask, pixel-perfect scaling |
 | [`lcd-perfect.glsl`](shaders/lcd-perfect.glsl) | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling |
-| [`dmg-perfect-v2.glsl`](shaders/dmg-perfect-v2.glsl) | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, pixel-perfect scaling |
+| [`dmg-perfect-v3.glsl`](shaders/dmg-perfect-v3.glsl) | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, pixel-perfect scaling |
 
 <!-- Include screenshots here and links to RetroShader Lab for each shader, so users can see the differences and tweak the parameters to their liking. -->
 
@@ -118,8 +118,8 @@ reference to match rather than to improve on.
 |---|---|---|---|
 | `dp_grid` | 0.30 | 0.00–1.00 | grid visibility |
 | `dp_gap` | 1.00 | 0.25–2.00 | grid line thickness, in pixels |
-| `dp_shadow` | 0.00 | 0.00–1.00 | cast shadow under each dot; 0 disables it |
-| `dp_shadow_offset` | 1.00 | 0.25–3.00 | how far the shadow falls, in pixels |
+| `dp_shadow` | 0.00 | 0.00–1.00 | shadow cast by driven dots; 0 disables it |
+| `dp_shadow_offset` | 1.50 | 0.25–3.00 | how far the shadow falls, in pixels |
 | `dp_brightness` | 1.00 | 0.25–4.00 | output gain |
 | `dp_gamma` | 1.00 | 0.50–2.00 | gamma |
 
@@ -160,25 +160,31 @@ pixel** (0/255 at 3×, 4× and 5×), whenever the two are set the same. Set
 contrast curve applied after the blend, so they give partial-coverage pixels a
 coverage-dependent shift; the defaults leave them neutral and the trade to you.
 
-`dp_shadow` casts a shadow down and right of each dot so they read as sitting above
-the substrate rather than being holes in it, in the manner of libretro's Game Boy
-shaders. It is off by default and the branch is uniform, so it costs nothing until it
-is asked for, and it adds no transcendental and no extra texture fetch when it is.
+`dp_shadow` casts a shadow down and to the right of each dot, so the dots read as
+sitting above the substrate rather than as holes in it. It is off by default and the
+branch is uniform, so it costs nothing until it is asked for, and it adds no
+transcendental and no extra texture fetch when it is.
 
-It does cost pattern, though, and faster than the grid does — a shadow is one-sided
-and locked to the cell boundary, which is the hardest thing to draw cleanly at a
-fractional scale. Worst measured across 1024×768, 853×768, 640×480 and 533×480, where
-anything past about 0.4 starts to show:
+**Only a driven pixel casts one.** A dark pixel is opaque and blocks light; an
+undriven one is transparent and casts nothing at all. That sounds obvious and is easy
+to get wrong: strength has to be measured against the panel's *undriven* level, not
+against white. Measured against white — which is what `1 - luma` does — every shade of
+a Game Boy palette counts as most of the way opaque, and since the lightest shade is
+typically 67–75% of the screen the result is a flat dimming of the whole picture
+rather than a shadow. The undriven level is read from the pixels around each dot, so
+it follows whatever palette your core is using, from Gambatte's dark DMG green through
+to a plain greyscale one.
 
-| `dp_shadow` | offset 0.5px | 1.0px | 1.5px | 2.5px |
-|---|---|---|---|---|
-| 0.15 | 0.23 | 0.38 | **0.21** | 0.31 |
-| 0.25 | 0.33 | 0.61 | **0.34** | 0.51 |
-| 0.35 | 0.44 | 0.82 | 0.47 | 0.73 |
-| 0.50 | 0.60 | 1.18 | 0.68 | 1.05 |
+It does cost a little pattern. Worst measured on a Game Boy palette across 1024×768,
+853×768, 640×480 and 533×480, where anything past about 0.4 starts to show:
 
-So keep it around 0.15–0.20. Avoid an offset near exactly 1.00: a one-pixel lobe has
-no solid core, so it wobbles from cell to cell, and it measures worst of any distance.
+| `dp_shadow` | 0.00 | 0.15 | 0.30 | 0.50 | 0.75 |
+|---|---|---|---|---|---|
+| beat | 0.19 | 0.24 | **0.31** | 0.40 | 0.56 |
+
+So keep it at or below about 0.30. Avoid an offset near exactly 1.00: a one-pixel lobe
+has no solid core, so it wobbles from cell to cell, and it measures worst of any
+distance.
 
 Below two output pixels per cell there is no room for a dot and a line, so the grid
 fades out rather than folding to a coarser pitch. Every Game Boy case is well above

@@ -20,7 +20,8 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | `shaders/pixel-perfect.glsl` | scaling only, no effect. `pp_` params |
 | `shaders/pixel-perfect-v2.glsl` | in flight: adds a post-blend `pp_gamma` |
 | `shaders/pixel-perfect-v3.glsl` | in flight: no `pp_sharpness`, adds a four-control grade |
-| `shaders/dmg-perfect-v2.glsl` | Game Boy DMG: the two-pass pipeline in one pass. `dp_` params |
+| `shaders/dmg-perfect-v3.glsl` | Game Boy DMG: two-pass in one pass, plus a cast shadow. `dp_` params |
+| `shaders/dmg-perfect-v2.glsl` | superseded: same scaling, shadow measured opacity against white |
 | `shaders/dmg-perfect-v1.glsl` | superseded: gap as a share of a cell, forced to 2px |
 | `tools/` | the verification harness |
 | `tools/vendor/` | **third-party shaders**, benchmark and comparison references only |
@@ -747,6 +748,86 @@ v2 looks four times worse than it is.
 will eventually be optimised against that preference.** This one shipped a shader
 nobody wanted, and it was only caught because the shader was looked at.
 
+### A shadow measures opacity, and opacity is relative to the paper
+
+A pixel casts a shadow because it blocks light, so its shadow strength is its
+**opacity**, and on a reflective panel that is `1 - luma / luma(paper)` — the
+level of undriven panel is the divisor, not an absolute. dmg-perfect-v2 used
+`clamp(1 - luma, 0, 1)`, which is the same expression with the paper hardcoded
+to **white**.
+
+Nothing in a Game Boy palette is anywhere near white, so every shade was judged
+most of the way opaque and the shadow became a flat dimming of the whole
+picture. Measured on real frames: the undriven shade is luma 0.455 and covers
+**67–75% of the screen**, and it was casting **55% of a full shadow**. Paper
+dimmed 2.87/255 against ink's 3.88 — a ratio of **1.4x**, which is why it read
+as a veil rather than as depth. With the divisor restored the same frame gives
+0.02 against 1.45, a ratio of **65x**.
+
+The tell that this was the cause rather than merely a plausible fix: on **GBC**
+content, where the paper really is near-white, the old expression measures
+*correctly* (paper opacity 0.027). It was never wrong in general — only whenever
+paper is not white, which is every DMG palette in existence.
+
+**The divisor cannot be a constant.** Lightest shade, by core:
+
+| palette | paper luma |
+|---|---|
+| Gambatte GB-DMG — its default | **0.401** |
+| mGBA DMG Green | 0.560 |
+| Gambatte GB-Light | 0.568 |
+| Gambatte GB-Pocket / SameBoy olive | 0.664 – 0.767 |
+| SameBoy lime | 0.806 |
+| SameBoy / mGBA greyscale | 0.973 – 1.000 |
+
+So it is taken as **the brightest of the four taps the scaler already has**,
+floored at 0.35. The taps are free and cannot be wrong on the high side, since
+undriven panel is by definition the brightest thing near a dot; the floor stops
+the estimate collapsing in the middle of a large dark region, where all four
+taps are ink and the shadow would otherwise switch off exactly where the picture
+is darkest. **The floor must sit below the darkest paper anyone ships** — 0.45
+was proposed and would have dimmed Gambatte's *default* palette by 10.8%,
+reintroducing the same bug on the most likely core, and the sample screenshots
+at 0.455 would have hidden it.
+
+Cost: the shadow-off path is **295 ops, unchanged from v2** - the branch is
+uniform, so the fix is free unless the shadow is asked for. With it on the
+static count is 459 against v2's 400, and it is still **6 SFU**, still four
+taps, and still free of transcendentals.
+
+**Do not copy libretro's caster.** Its Game Boy shaders compute alpha from
+`1 - source.rgb` exactly as v2 did, and get away with it because those presets
+*replace* the palette — they reduce the frame to a brightness and re-colour it
+from their own `COLOR_PALETTE`, so the input they are handed genuinely does have
+white paper. They also add a `baseline_alpha` of 0.05 to 0.10 so that even fully
+undriven dots cast a shadow, which is a deliberate look and the exact opposite
+of what is wanted here. No libretro Game Boy shader reconstructs a drive level
+from an already-palettised frame; there is no prior art for this.
+
+### A weighted blend is stable where a max over the same taps is not
+
+The paper estimate reads the four taps and takes their maximum. That is not
+safe as written, and the reason is a variant of the `floor()` knife edge already
+recorded here.
+
+`B = floor(p + 0.5)` selects the tap *pair*. At an exact boundary — which at a
+whole scale factor is not an edge case but every other pixel — it can land on
+either side, giving `{n-1, n}` or `{n, n+1}`. **The blend does not care**,
+because whichever way it goes the weight lands entirely on the same texel; that
+is why the scaler has always been stable there. A maximum over the pair very
+much does care: it swaps in a different neighbour, and on a real frame that
+moved the shadow by **29/255** between the GPU and the model.
+
+The fix is to weight before reducing — gate each tap by its own blend weight,
+`k = wA.x * wA.y` and so on, through a narrow `smoothstep`. At the knife edge
+both candidate pairings collapse onto the same contributing tap, so the estimate
+is identical either way.
+
+**The general lesson: a reduction over the taps is not automatically as stable
+as the blend over them.** Any new term that reads the taps directly rather than
+through the blend has to be checked against the boundary case separately, and a
+whole scale factor is where to look, not a fractional one.
+
 ### Bit-identity with a reference is reachable, and worth gating on
 
 At a whole scale factor a four-tap area average returns the source texel exactly, so a
@@ -952,6 +1033,28 @@ threshold is 0.4 rather than 0.2; the original tool was not in the repo and had 
 rebuilt from its description. A metric whose ratio to the record *drifts* per
 construction is measuring something else and must not be trusted.
 
+- **Beat metric, test source**: a full-range black-and-white checkerboard cannot
+  see any fault that depends on the difference between white and *the panel's
+  own undriven level*. dmg-perfect-v2's shadow dimmed three quarters of a real
+  Game Boy frame and measured perfectly clean on this metric, because on a
+  source whose light square is white the broken expression and the correct one
+  are the same expression. Every beat figure taken before `dmg_checkerboard()`
+  existed was correct and none of them could have caught it. **A test pattern
+  chosen for maximum contrast is not neutral — it silently asserts that the
+  content reaches white.**
+
+Also: **a flip that preserves the picture still reverses a handed effect.**
+`preview.py` fed the source flipped and flipped the result back. That pair is an
+identity for *content*, so every screenshot came out the right way up and it
+went unnoticed for the whole life of the tool — but the shader ran on a flipped
+image, so anything with a direction came out mirrored in y. A grid, a scanline
+and an RGB mask are all symmetric and cannot show it; the first handed effect in
+the repo, dmg-perfect's cast shadow, rendered up-and-right through `preview.py`
+and down-and-right through `gl_check.py` from the same shader and the same
+parameters. `gl_render()` already returns rows in the source's order, so the
+flips were never needed. **Verify an orientation convention against the harness
+that indexes the model, not against whether the picture looks upright.**
+
 Also: a shared constant between a model and several shaders is a trap. Widening
 `STRIPE_FADE` in `lcd_preview.py` silently changed v1's model while v1's `.glsl` kept
 the old window - `gl_check.py` catches it, but only if it is run over *every* shader
@@ -1128,8 +1231,14 @@ already taken out, for the reason the metric section above gives:
 |---|---|---|---|---|---|---|
 | `dmg_dot_matrix` | 1.23 | 6.7% / 7.6% | 0.0% / 12.2% | 1.00 | 80 | 6 |
 | `dmg-perfect-v1` | 0.12 | **0.0% / 0.0%** | **0.0% / 0.0%** | **1.98** | 265 | 6 |
-| **`dmg-perfect-v2`** | **0.13** | **0.1% / 0.3%** | **0.0% / 0.7%** | **1.05** | 295 | 6 |
-| `dmg-perfect-v2` + shadow 0.5 | 0.64 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 400 | 6 |
+| `dmg-perfect-v2` | 0.13 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 295 | 6 |
+| **`dmg-perfect-v3`** | **0.13** | **0.1% / 0.3%** | **0.0% / 0.7%** | **1.05** | 295 | 6 |
+| `dmg-perfect-v3` + shadow 0.30 | 0.31 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 459 | 6 |
+
+v2 and v3 differ only in the shadow, so their geometry rows are the same figures
+and the beat column, taken on a full-range checkerboard, cannot tell them apart
+at all - see the test-source trap above. On a **DMG-palette** checkerboard with
+the shadow at 0.35 the two separate cleanly, 0.69 against 0.32.
 
 v1's zeroes are real and were bought at a price the numbers here do not show: it
 forced every line to two output pixels, which is what made its grid read as heavy and
