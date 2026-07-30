@@ -16,8 +16,9 @@ from crt_preview import (
 )
 from dmg_preview import (
     DEFAULTS_DMG, DEFAULTS_DMG_V2, DEFAULTS_DMG_V3, DEFAULTS_DMG_V4,
-    DEFAULTS_DMG_V5,
+    DEFAULTS_DMG_V5, DEFAULTS_DMG_V6, DEFAULTS_DMG_V7,
     render_dmg, render_dmg_v2, render_dmg_v3, render_dmg_v4, render_dmg_v5,
+    render_dmg_v6, render_dmg_v7,
 )
 from lcd_preview import (
     # aliased: crt_preview exports a DEFAULTS_V3 of its own, and a bare
@@ -25,8 +26,9 @@ from lcd_preview import (
     # defaults and a 255/255 mismatch that looked like a shader bug
     DEFAULTS_V3 as DEFAULTS_LCD_V3, render_lcd_v3,
     DEFAULTS_LCD, DEFAULTS_PP, DEFAULTS_PP_V2, DEFAULTS_PP_V3, DEFAULTS_PP_V4,
-    DEFAULTS_V2A, DEFAULTS_V2B,
+    DEFAULTS_PP_V5, DEFAULTS_V2A, DEFAULTS_V2B,
     render_pixel_perfect_v2, render_pixel_perfect_v3, render_pixel_perfect_v4,
+    render_pixel_perfect_v5,
     render_lcd, render_lcd_v2a, render_pixel_perfect,
 )
 
@@ -274,6 +276,36 @@ REGISTRY = {
             ("crisp + gamma", dict(pp_sharpness=0.3, pp_gamma=0.8)),
         ],
     ),
+    "pixel-perfect-v5.glsl": Model(
+        render=render_pixel_perfect_v5,
+        defaults=DEFAULTS_PP_V5,
+        variants=[
+            # the grade v4 already had, so the fold is checked against every
+            # setting it used to handle rather than only against neutral
+            ("greyscale", dict(pp_saturation=0.0)),
+            ("flat", dict(pp_contrast=0.4)),
+            ("dim", dict(pp_brightness=0.6)),
+            ("clipped gain", dict(pp_brightness=2.0)),
+            ("gamma 1.4", dict(pp_gamma=1.4)),
+            # each channel on its own, so a swapped coefficient cannot hide
+            ("red only", dict(pp_red=1.4)),
+            ("green only", dict(pp_green=1.4)),
+            ("blue only", dict(pp_blue=1.4)),
+            ("red killed", dict(pp_red=0.0)),
+            # the realistic uses: warm and cool by pulling channels down
+            ("warm", dict(pp_blue=0.85, pp_green=0.95)),
+            ("cool", dict(pp_red=0.85, pp_green=0.95)),
+            ("clipping trim", dict(pp_red=2.0, pp_green=2.0, pp_blue=2.0)),
+            # the trim interacting with the rest of the fold, which is where a
+            # coefficient that is right alone but wrong in composition shows
+            ("trim + grade", dict(pp_red=1.2, pp_blue=0.8, pp_saturation=1.4,
+                                  pp_contrast=1.2, pp_brightness=1.1)),
+            ("trim + greyscale", dict(pp_red=1.3, pp_blue=0.7,
+                                      pp_saturation=0.0)),
+            # gains that cancel in a sum but not when tested separately
+            ("cancelling trim", dict(pp_red=1.1, pp_green=0.9)),
+        ],
+    ),
     "pixel-perfect-v4.glsl": Model(
         render=render_pixel_perfect_v4,
         defaults=DEFAULTS_PP_V4,
@@ -327,6 +359,69 @@ REGISTRY = {
         render=render_pixel_perfect,
         defaults=DEFAULTS_PP,
         variants=[("crisp", dict(pp_sharpness=0.3))],
+    ),
+    "dmg-perfect-v7.glsl": Model(
+        render=render_dmg_v7,
+        defaults=DEFAULTS_DMG_V7,
+        variants=[
+            ("grid off", dict(dp_grid=0.0)),
+            ("full grid", dict(dp_grid=1.0)),
+            ("thin line", dict(dp_gap=0.25)),
+            ("fat line", dict(dp_gap=2.0)),
+            ("shadow", dict(dp_shadow=0.45)),
+            ("shadow strong", dict(dp_shadow=1.0)),
+            ("shadow + fat", dict(dp_shadow=0.5, dp_gap=1.75)),
+            ("shadow + bright", dict(dp_shadow=0.5, dp_brightness=1.6)),
+            ("warm", dict(dp_green=0.94, dp_blue=0.85)),
+            ("cool", dict(dp_red=0.88, dp_green=0.96)),
+            ("trim past 1", dict(dp_red=1.4, dp_blue=1.2)),
+            ("trim + shadow", dict(dp_shadow=0.5, dp_red=0.9, dp_blue=1.1)),
+            ("reference tone", dict(dp_brightness=1.2, dp_gamma=1.4)),
+            ("gamma 0.7", dict(dp_gamma=0.7)),
+        ],
+        cases=[
+            ("GB 5x integer", (160, 144), (800, 720)),
+            ("GB 4x integer", (160, 144), (640, 576)),
+            ("GB 3x integer", (160, 144), (480, 432)),
+            ("GB aspect 1024x768", (160, 144), (853, 768)),
+            ("GB fill   1024x768", (160, 144), (1024, 768)),
+            ("GB aspect  640x480", (160, 144), (533, 480)),
+            ("GB fill    640x480", (160, 144), (640, 480)),
+            ("GBA fill  1024x768", (240, 160), (1024, 768)),
+        ],
+    ),
+    "dmg-perfect-v6.glsl": Model(
+        render=render_dmg_v6,
+        defaults=DEFAULTS_DMG_V6,
+        variants=[
+            ("grid off", dict(dp_grid=0.0)),
+            ("shadow", dict(dp_shadow=0.45)),
+            # both ends of the blur, and the point where it collapses to v5
+            # blur is deliberately not taken to 0 here. At 0 the weight is a
+            # hard step at the half-cell, so the GPU and a float64 model pick
+            # opposite sides wherever the shifted point lands near it - an
+            # unstable selection, not an arithmetic difference, and it measures
+            # 11/255 over half a percent of the frame. It is a degenerate
+            # setting of a softness control rather than a mode anyone runs, and
+            # v7 removes the parameter precisely because nothing below full
+            # softness was worth keeping.
+            ("blur low", dict(dp_shadow=0.6, dp_shadow_blur=0.1)),
+            ("blur full", dict(dp_shadow=0.6, dp_shadow_blur=1.0)),
+            ("blur mid", dict(dp_shadow=0.6, dp_shadow_blur=0.30)),
+            ("shadow + fat", dict(dp_shadow=0.5, dp_gap=1.75)),
+            ("warm", dict(dp_green=0.94, dp_blue=0.85)),
+            ("trim + shadow", dict(dp_shadow=0.5, dp_red=0.9, dp_blue=1.1)),
+            ("reference tone", dict(dp_brightness=1.2, dp_gamma=1.4)),
+            ("gamma 0.7", dict(dp_gamma=0.7)),
+        ],
+        cases=[
+            ("GB 5x integer", (160, 144), (800, 720)),
+            ("GB 3x integer", (160, 144), (480, 432)),
+            ("GB aspect 1024x768", (160, 144), (853, 768)),
+            ("GB fill   1024x768", (160, 144), (1024, 768)),
+            ("GB aspect  640x480", (160, 144), (533, 480)),
+            ("GB fill    640x480", (160, 144), (640, 480)),
+        ],
     ),
     "dmg-perfect-v5.glsl": Model(
         render=render_dmg_v5,

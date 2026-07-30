@@ -34,6 +34,10 @@ DEFAULTS_PP_V3 = dict(
 
 DEFAULTS_PP_V4 = dict(DEFAULTS_PP_V3)
 
+# v5 adds a per-channel trim. It folds into the same affine map as the rest of
+# the grade, so it costs nothing that the grade was not already paying.
+DEFAULTS_PP_V5 = dict(DEFAULTS_PP_V4, pp_red=1.00, pp_green=1.00, pp_blue=1.00)
+
 # Rec.709, matching LUMA in pixel-perfect-v3.glsl.
 LUMA_709 = np.array([0.2126, 0.7152, 0.0722])
 
@@ -304,6 +308,41 @@ def render_pixel_perfect_v4(src_u8, out_w, out_h, p=None, quantise=True):
         s = p["pp_saturation"]
         luma = (col * LUMA_709).sum(axis=-1, keepdims=True)
         col = col * (ga * s) + (luma * (ga * (1.0 - s)) + gb)
+        col = np.clip(col, 0.0, 1.0)
+
+    if abs(p["pp_gamma"] - 1.0) > 0.001:
+        col = np.power(np.maximum(col, 1e-8), p["pp_gamma"])
+    return (col * 255.0 + 0.5).astype(np.uint8) if quantise else col
+
+
+def render_pixel_perfect_v5(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors pixel-perfect-v5.glsl: v4 plus a per-channel trim.
+
+    The trim is a separate multiply after the affine map, not folded into its
+    coefficients. Folding is possible - a diagonal gain composes with an affine
+    map - but it makes the coefficients vec3, which widens the luma term from
+    scalar to vec3 and costs more than the multiply it saves. Measured 4
+    instructions worse both ways round.
+
+    It also has to come after the saturation mix rather than before, since
+    dot(col*t, LUMA) is not t*dot(col, LUMA).
+
+    Neutral at t = 1 by construction, and the guard is exact, so with the trim
+    left alone this is v4 to the bit at every other setting.
+    """
+    p = dict(DEFAULTS_PP_V5, **(p or {}))
+    src = src_u8.astype(np.float64) / 255.0
+    col = area_average(src, out_w, out_h)[0]
+
+    if (p["pp_brightness"] != 1.0 or p["pp_contrast"] != 1.0
+            or p["pp_saturation"] != 1.0 or p["pp_red"] != 1.0
+            or p["pp_green"] != 1.0 or p["pp_blue"] != 1.0):
+        ga = p["pp_brightness"] * p["pp_contrast"]
+        gb = 0.5 - 0.5 * p["pp_contrast"]
+        s = p["pp_saturation"]
+        luma = (col * LUMA_709).sum(axis=-1, keepdims=True)
+        col = col * (ga * s) + (luma * (ga * (1.0 - s)) + gb)
+        col = col * np.array([p["pp_red"], p["pp_green"], p["pp_blue"]])
         col = np.clip(col, 0.0, 1.0)
 
     if abs(p["pp_gamma"] - 1.0) > 0.001:

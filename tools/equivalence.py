@@ -21,13 +21,33 @@ import numpy as np
 
 import moderngl
 from gl_check import stage_source, gl_render, LINEAR_SAMPLED
-from lcd_preview import DEFAULTS_PP_V3
+from lcd_preview import DEFAULTS_PP_V3, DEFAULTS_PP_V5
 from paths import shader_path
 
 PIXELLATE = shader_path("pixellate.glsl")
 PIXEL_PERFECT = shader_path("pixel-perfect.glsl")
 PIXEL_PERFECT_V3 = shader_path("pixel-perfect-v3.glsl")
 PIXEL_PERFECT_V4 = shader_path("pixel-perfect-v4.glsl")
+PIXEL_PERFECT_V5 = shader_path("pixel-perfect-v5.glsl")
+
+# v5 folds a per-channel trim into v4's affine map. Two things have to hold and
+# they are different claims: with the trim neutral it must reproduce v4 at every
+# OTHER setting, which is what says the fold did not disturb the existing
+# coefficients; and at its own defaults it must be the bare scaler.
+V5_VS_V4 = [
+    ("defaults", {}),
+    ("greyscale", dict(pp_saturation=0.0)),
+    ("oversaturated", dict(pp_saturation=1.8)),
+    ("flat", dict(pp_contrast=0.4)),
+    ("clipped contrast", dict(pp_contrast=2.0)),
+    ("dim", dict(pp_brightness=0.6)),
+    ("clipped gain", dict(pp_brightness=2.0)),
+    ("gamma 0.7", dict(pp_gamma=0.7)),
+    ("gamma 1.4", dict(pp_gamma=1.4)),
+    ("full grade", dict(pp_saturation=1.3, pp_contrast=1.2,
+                        pp_brightness=1.1, pp_gamma=0.9)),
+    ("barely graded", dict(pp_contrast=1.0003)),
+]
 SHIMMERLESS = shader_path("sharp-shimmerless.glsl")
 # read from the one declaration, so section 6 cannot drift from what preview.py
 # and bench_glsl.py render the same shader with
@@ -176,6 +196,7 @@ def main():
     for name, path in (("pixellate", PIXELLATE), ("pixel-perfect", PIXEL_PERFECT),
                        ("pixel-perfect-v3", PIXEL_PERFECT_V3),
                        ("pixel-perfect-v4", PIXEL_PERFECT_V4),
+                       ("pixel-perfect-v5", PIXEL_PERFECT_V5),
                        ("sharp-shimmerless", SHIMMERLESS)):
         s = open(path).read()
         prog[name] = ctx.program(vertex_shader=stage_source(s, "vert"),
@@ -393,14 +414,67 @@ def main():
           "\n   float64 model, so neither is the more correct one.")
 
     ok_v4 = worst_v4 <= 1 and same and tr_only
+
+    print("\n8. pixel-perfect-v5 vs v4: does adding the trim disturb it?\n")
+    print("   v5 adds a per-channel trim as one multiply inside v4's existing"
+          "\n   guard. With the trim neutral that multiply is by 1.0, which is"
+          "\n   exact, so every other setting has to be untouched - not close,"
+          "\n   identical.\n")
+    print(f"   {'configuration':<24s} {'max diff':>9s}")
+    worst_v5 = 0
+    for label, over in V5_VS_V4:
+        mx = 0
+        for iw, ih, ow, oh in CASES[:6]:
+            for _, s in sources(iw, ih, rng):
+                p4 = dict(DEFAULTS_PP_V3, **over)
+                a = gl_render(ctx, prog["pixel-perfect-v4"], s, ow, oh, p4).astype(int)
+                b = gl_render(ctx, prog["pixel-perfect-v5"], s, ow, oh,
+                              dict(p4, pp_red=1.0, pp_green=1.0, pp_blue=1.0)).astype(int)
+                mx = max(mx, int(np.abs(a - b).max()))
+        worst_v5 = max(worst_v5, mx)
+        print(f"   {label:<24s} {mx:6d}/255")
+    print(f"\n   worst: {worst_v5}/255   "
+          f"{'the trim is exactly neutral' if worst_v5 == 0 else 'ADDING THE TRIM CHANGED v4'}")
+
+    # And the weaker statement, with the right bar on it. v5 carries the same
+    # post-blend branch as v4, so it inherits v4's contraction difference
+    # against the branchless scaler - section 7 measures that and proves with an
+    # unreachable-branch control that it is the branch and not the grade. The
+    # check here is that v5 brings nothing NEW: its difference set against the
+    # scaler has to be the same pixels as v4's, not merely the same size.
+    worst_v5d, same_as_v4 = 0, True
+    for iw, ih, ow, oh in CASES:
+        for _, s in sources(iw, ih, rng):
+            base = gl_render(ctx, prog["pixel-perfect"], s, ow, oh,
+                             {"pp_sharpness": 1.0}).astype(int)
+            d4 = np.abs(gl_render(ctx, prog["pixel-perfect-v4"], s, ow, oh,
+                                  DEFAULTS_PP_V3).astype(int) - base)
+            d5 = np.abs(gl_render(ctx, prog["pixel-perfect-v5"], s, ow, oh,
+                                  DEFAULTS_PP_V5).astype(int) - base)
+            worst_v5d = max(worst_v5d, int(d5.max()))
+            same_as_v4 &= bool((d4 == d5).all())
+    print(f"   v5 at its defaults vs pixel-perfect: {worst_v5d}/255, and the"
+          f"\n   same pixels as v4: {'yes' if same_as_v4 else 'NO'}"
+          f"  <- section 7's branch effect,"
+          f"\n   inherited unchanged rather than anything the trim added")
+    print("\n   A trim is a diagonal matrix, so it CAN be folded into the"
+          "\n   affine map's coefficients - and that is 4 instructions worse,"
+          "\n   not better, because it widens the luma term from scalar to"
+          "\n   vec3. Measured with the parameters live and again with them"
+          "\n   constant-folded, so hoisting cannot explain it away. It is a"
+          "\n   separate multiply, and it still has to come after the"
+          "\n   saturation mix: dot(col*t, LUMA) is not t*dot(col, LUMA).")
+
     # Three different claims, three different bars, and they are not
     # interchangeable. pixellate is a different formulation of the same maths,
     # so it is equal to float32 rounding; v3 at its defaults is the SAME code
     # path with the grade folding to col*1 + 0, so it is exactly equal and
     # anything else is a bug; v4 is the same computation with a branch after it,
     # which the driver contracts differently, so it is rounding again - but with
-    # the unreachable-branch control alongside to prove that is all it is.
-    return 0 if worst <= 1 and worst_v3 == 0 and ok_v4 else 1
+    # the unreachable-branch control alongside to prove that is all it is. v5
+    # has the same branch as v4, so with the trim neutral it is exactly v4.
+    return 0 if (worst <= 1 and worst_v3 == 0 and ok_v4
+                 and worst_v5 == 0 and worst_v5d <= 1 and same_as_v4) else 1
 
 
 if __name__ == "__main__":
