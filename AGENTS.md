@@ -22,6 +22,7 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | `shaders/pixel-perfect-v2.glsl` | in flight: adds a post-blend `pp_gamma` |
 | `shaders/pixel-perfect-v3.glsl` | in flight: no `pp_sharpness`, adds a four-control grade |
 | `shaders/pixel-perfect-v4.glsl` | in flight: v3, but the grade costs nothing when off |
+| `shaders/pixel-perfect-v5.glsl` | in flight: v4 plus per-channel r/g/b gains |
 | `shaders/dmg-perfect-v5.glsl` | Game Boy DMG: two-pass in one pass, soft shadow, colour trim. `dp_` params |
 | `shaders/dmg-perfect-v4.glsl` | superseded: hard-edged shadow, offset exposed per axis |
 | `shaders/dmg-perfect-v3.glsl` | superseded: shadow subtracted from the gap colour only |
@@ -1063,6 +1064,7 @@ fraction of the cost. Two things in the original are redundant:
 | `pixel-perfect-v2.glsl` | 131 | 4 | 6 |
 | `pixel-perfect-v3.glsl` | 161 | 4 | 6 |
 | `pixel-perfect-v4.glsl` | 174 | 4 | 6 |
+| `pixel-perfect-v5.glsl` | 190 | 4 | 6 |
 
 Four taps stay: an output footprint spans up to two texels per axis, so four is the
 minimum without delegating the blend to the texture unit. A one-tap LINEAR variant was
@@ -1304,6 +1306,55 @@ could see this.** That is the argument for the check, not the two levels of grid
 It is a **warning, not a failure**, because two shaders still fail and both are
 in-flight. Fix `crt-perfect-v8/v9`, then move it into `check()` — a warning nobody
 promotes is a warning that rots.
+
+### A diagonal trim does not want to be folded into the affine map
+
+`pixel-perfect-v5` adds `pp_red`, `pp_green` and `pp_blue`, matching
+`dmg-perfect-v7`'s names and ranges. They are plain gains, and a diagonal gain is
+affine, so they inherit the whole argument above: they commute with the blend, they
+paint no pattern, and what they cost is clipping. Measured, worst over five scales:
+
+| | mono | chroma | clips |
+|---|---|---|---|
+| neutral | 0.349 | 0.116 | 0.0% |
+| warm — blue 0.85, green 0.95 | 0.346 | 0.135 | 0.0% |
+| cool — red 0.85, green 0.95 | 0.346 | 0.145 | 0.0% |
+| `pp_red` 0.00 | 0.233 | 0.233 | 0.0% |
+| `pp_red` 1.40 | 5.326 | 5.277 | 16.7% |
+
+Pulling channels down — which is how you actually warm or cool a picture — sits *at or
+below* the neutral floor. Only pushing a channel above 1 costs anything, and it costs
+it through the clamp, exactly like `pp_brightness`.
+
+**The trim can be folded into the grade's coefficients, and it should not be.** A
+diagonal matrix composes with an affine map, so `t·(col·(ga·s) + luma·(ga·(1-s)) + gb)`
+collapses to the same one dot and one fma with `t·ga·s`, `t·ga·(1-s)` and `t·gb` as
+coefficients — all uniform-derived, so they hoist. That looks free and is not:
+
+| | live | with the coefficients constant-folded |
+|---|---|---|
+| folded into the coefficients | 185 | 141 |
+| **separate `col *= vec3(...)`** | **181** | **137** |
+
+**Folding is 4 instructions worse, both ways round.** Making the coefficients `vec3`
+widens the luma term from scalar to vector, and that costs precisely what the separate
+multiply would have. The second column constant-folds the parameters, which models a
+driver hoisting uniform expressions perfectly — so hoisting cannot rescue it either.
+Desktop timings cannot separate the two at all (101.2% against 100.1%, IQR up to 1.5%),
+which is the expected answer for a shader whose four texture taps dominate; the
+instruction count is what decides, and it decides against the clever form.
+
+There is still one ordering constraint: **the trim has to come after the saturation
+mix.** `dot(col·t, LUMA)` is not `t·dot(col, LUMA)`, so a trim applied earlier could not
+share the dot. Last is also what it should mean — a channel trim is a property of the
+panel, so it belongs on the finished picture, which is where `dmg-perfect` puts it too.
+
+At its defaults v5 is **111 ops, identical to v4**, because the trim joins v4's existing
+uniform guard rather than adding one. With the trim neutral it is **0/255 from v4** at
+every other setting — `col *= 1.0` is exact — so it is a strict superset rather than a
+new look. Its 1/255 against the bare scaler is v4's branch-contraction effect, and
+`equivalence.py` checks it lands on *the same pixels* as v4's rather than merely the
+same count.
 
 ## Measurement traps
 
@@ -1643,6 +1694,32 @@ cell. The default offset was 1.00 until this table was measured; it is 1.50 now.
 - [NextUI](https://github.com/LoveRetro/NextUI) — the firmware these target. Pipeline
   semantics live in `workspace/all/common/generic_video.c` and
   `workspace/all/minarch/ma_config.c`.
+
+## Never revert an unexplained change — ask
+
+**The project owner makes manual tweaks directly in the working tree.** A value
+that disagrees with a model, a default that is not what a commit message says, a
+constant that looks like a typo: assume it is deliberate until told otherwise.
+
+This is not hypothetical. `SHADOW_OFFSET` shipped at `vec2(0.60, 0.85)`, was
+tuned by hand to `0.50`, and when a model mismatch pointed at it the offset was
+"corrected" straight back to 0.60 in three shaders at once — silently undoing a
+deliberate tuning decision while chasing an unrelated bug.
+
+So, whenever an uncommitted or unexpected change turns up:
+
+- **Do not revert it, and do not "fix" it to match something else.** Ask.
+- When a shader and its model disagree on a constant, the **shader** is the
+  thing that was looked at and judged, so the model is the more likely thing to
+  be wrong. Change the model, then say so.
+- `git diff` before touching anything that looks anomalous. If the working tree
+  differs from HEAD, that difference is somebody's work.
+- Chasing one bug is exactly when this happens, because the wrong value looks
+  like the cause. Fix the bug you were chasing; raise the anomaly separately.
+
+The same applies to any file that is not yours: another agent may be mid-edit in
+the same tree, and `tools/shaders.py` referencing a shader that is not committed
+yet is a normal intermediate state, not a fault to repair.
 
 ## Commits
 
