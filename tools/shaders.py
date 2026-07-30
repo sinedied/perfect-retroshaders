@@ -10,9 +10,9 @@ Add a shader by adding an entry. Nothing else needs wiring.
 
 from crt_preview import (
     DEFAULTS, DEFAULTS_V2, DEFAULTS_V3, DEFAULTS_V4, DEFAULTS_V5, DEFAULTS_V6,
-    DEFAULTS_V7,
+    DEFAULTS_V7, DEFAULTS_V8,
     render_crt, render_crt_v3, render_crt_v4, render_crt_v5, render_crt_v6,
-    render_crt_v7,
+    render_crt_v7, render_crt_v8,
 )
 from lcd_preview import (
     # aliased: crt_preview exports a DEFAULTS_V3 of its own, and a bare
@@ -103,6 +103,26 @@ REGISTRY = {
             ("gamma 0.7", dict(cp_gamma=0.7)),
             ("gamma 1.6", dict(cp_gamma=1.6)),
         ],
+    ),
+    "crt-perfect-v8.glsl": Model(
+        render=render_crt_v8,
+        defaults=DEFAULTS_V8,
+        variants=[
+            ("curvature 0.05", dict(cp_curvature=0.05)),
+            ("curvature 0.10", dict(cp_curvature=0.10)),
+            ("curvature 0.15", dict(cp_curvature=0.15)),
+            ("curved slot mask", dict(cp_curvature=0.10, cp_mask_type=2.0)),
+            ("curved gamma 1.6", dict(cp_curvature=0.10, cp_gamma=1.6)),
+            ("curved, mask off", dict(cp_curvature=0.10, cp_rgb_mask=0.0)),
+        ],
+        # Same knife edge as v7, and for the same reason: warping the slot
+        # mask's row-parity floor() argument makes it cross integers across the
+        # frame, where float32 and float64 can disagree. It is a property of
+        # warping the parity, not of which constant the warp is normalised by.
+        outliers=32,
+        reason="slot-mask row parity: floor() knife-edge under warp, where the "
+               "argument must cross an integer and float32/float64 disagree on "
+               "which side; isolated pixels, never a region",
     ),
     "crt-perfect-v7.glsl": Model(
         render=render_crt_v7,

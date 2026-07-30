@@ -68,10 +68,19 @@ VENDOR_PARAMS = {
 
 LABEL_H = 14
 
+# Curvature defaults to 0, which is the right default for a shader and the wrong
+# one for a preview - a curvature variant rendered flat looks identical to every
+# other version and tells you nothing. Turn it on for anything that has it.
+PREVIEW_PARAMS = {
+    "crt-perfect-v6.glsl": dict(cp_curvature=0.10),
+    "crt-perfect-v7.glsl": dict(cp_curvature=0.10),
+    "crt-perfect-v8.glsl": dict(cp_curvature=0.10),
+}
+
 
 def params_for(name):
     if name in REGISTRY:
-        return dict(REGISTRY[name].defaults)
+        return dict(REGISTRY[name].defaults, **PREVIEW_PARAMS.get(name, {}))
     return dict(VENDOR_PARAMS.get(name, {}))
 
 
@@ -84,12 +93,34 @@ def label(text, width):
     return np.asarray(img)
 
 
+def border_grid(w=320, h=240, step=20):
+    """A grid whose four edges are each a different colour.
+
+    For geometry, not for looks. Anything that warps the image has to be judged
+    on what happens to the *border*, and neither a screenshot nor a plain grid
+    shows that: crt-perfect-v7 shipped having quietly cropped its entire border
+    off-screen, which every number in the harness read as perfect and one look
+    at this pattern makes obvious. Red top and bottom, blue left and right,
+    green centre lines.
+    """
+    img = np.full((h, w, 3), 20, np.uint8)
+    img[::step, :] = 255
+    img[:, ::step] = 255
+    img[0:3, :] = img[-3:, :] = (255, 60, 60)
+    img[:, 0:3] = img[:, -3:] = (60, 160, 255)
+    img[h // 2 - 2:h // 2 + 2, :] = (60, 255, 60)
+    img[:, w // 2 - 2:w // 2 + 2] = (60, 255, 60)
+    return img
+
+
 def load_samples(folder, only=None):
     """Real screenshots, each at its console's native resolution, so the image
     itself decides the source size. Returns [] if the folder is not there."""
-    if not os.path.isdir(folder):
-        return []
     out = []
+    if not only or any(k in "border-grid" for k in only):
+        out.append(("border-grid", border_grid()))
+    if not os.path.isdir(folder):
+        return out
     for fn in sorted(os.listdir(folder)):
         if not fn.endswith(".png"):
             continue
