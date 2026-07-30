@@ -81,6 +81,14 @@ CASES = [
      {"cp_curvature": 0.0, "cp_gamma": GAMMA_ON}),
     ("v9 curve on, gamma on", "crt-perfect-v9.glsl",
      {"cp_curvature": CURV_ON, "cp_gamma": GAMMA_ON}),
+
+    ("v10 defaults", "crt-perfect-v10.glsl", {}),
+    ("v10 curve on, gamma off", "crt-perfect-v10.glsl",
+     {"cp_curvature": CURV_ON, "cp_gamma": 1.0}),
+    ("v10 curve off, gamma on", "crt-perfect-v10.glsl",
+     {"cp_curvature": 0.0, "cp_gamma": GAMMA_ON}),
+    ("v10 curve on, gamma on", "crt-perfect-v10.glsl",
+     {"cp_curvature": CURV_ON, "cp_gamma": GAMMA_ON}),
 ]
 
 NEAR, LIN = "nearest", "linear"

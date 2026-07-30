@@ -518,6 +518,27 @@ def pattern_strength(img, tile=16):
     return b.transpose(0, 2, 1, 3).reshape(ny, nx, -1).std(axis=2)
 
 
+def source_lock(src_h, out_h, curvature, min_pitch=MIN_PITCH, lift=False):
+    """Pattern cycles per source line. 1.000 means the pattern still lands on
+    the source pixel rows, which is what makes scanlines read as scanlines.
+
+    This is the check that was missing while v7, v8 and v9 shipped. Every
+    curvature test measures a flat grey field, or a checkerboard through the
+    scaler with the patterns switched off - so none of them can see the pattern
+    drifting off the source, because none of them has a source with rows in it.
+    Those versions lifted the pitch floor by the frame's worst magnification to
+    protect the corners, which quietly rescaled the pattern everywhere: 240
+    source lines came out as 201 scanlines at cp_curvature 0.10, and the only
+    reason it was caught is that someone looked at the screen.
+
+    lift=True models that older behaviour, as the control.
+    """
+    jmax = (1.0 + 4.0 * curvature) / (1.0 + curvature)
+    src_pitch = out_h / max(src_h, 1)
+    floor = min_pitch * jmax if lift else min_pitch
+    return src_pitch / max(src_pitch, floor)
+
+
 def min_local_pitch(src_h, out_h, curvature, min_pitch=MIN_PITCH, lift=True):
     """Smallest number of output pixels per pattern cycle anywhere in the frame.
 
@@ -573,6 +594,26 @@ def report_curvature_uniformity():
     print(f"\n  worst: v7 {worst_ok:.2f}  naive {worst_naive:.2f}   "
           f"{'OK' if worst_ok >= MIN_PITCH - 1e-6 else 'PATTERN GOES BELOW THE FLOOR'}")
 
+    print("\ncurvature: pattern cycles per source line")
+    print("(1.000 = the pattern still lands on the source rows; 'lifted' is the")
+    print(" pre-v10 floor, which scaled the pitch by the worst magnification)\n")
+    print("  " + " " * 22 + "".join(f"{f'k={k:.2f}':>16s}" for k in ks))
+    print("  " + " " * 22 + "".join(f"{'v10':>8s}{'lifted':>8s}" for _ in ks))
+    worst_lock = 1.0
+    for (sw, sh), (ow, oh) in scales:
+        row = []
+        for k in ks:
+            a = source_lock(sh, oh, k, lift=False)
+            b = source_lock(sh, oh, k, lift=True)
+            flat = source_lock(sh, oh, 0.0)
+            # only a scale that was locked when flat can lose the lock
+            if flat > 0.999:
+                worst_lock = min(worst_lock, a)
+            row.append(f"{a:8.3f}{b:8.3f}")
+        print(f"  {sw}x{sh} -> {ow}x{oh}".ljust(24) + "".join(row))
+    print(f"\n  worst lock where the flat shader had one: {worst_lock:.3f}   "
+          f"{'OK' if worst_lock > 0.999 else 'PATTERN DRIFTS OFF THE SOURCE'}")
+
     # Only tiles wholly inside the tube. A tile straddling the curved edge is
     # part black, so it carries almost no pattern energy and drags the minimum
     # to nearly zero - the ratio then reads 13 to 38 for a shader that is
@@ -581,10 +622,11 @@ def report_curvature_uniformity():
     # v8 shipped with this check silently not applying to it.
     print("\ncurvature: pattern strength across the frame, 16x16 windows")
     print("(tiles wholly inside the tube; a partly lit tile is not a measurement)\n")
-    from crt_preview import DEFAULTS_V8, DEFAULTS_V9, render_crt_v8, render_crt_v9
-    shaders = [("v7", render_crt_v7, DEFAULTS_V7),
-               ("v8", render_crt_v8, DEFAULTS_V8),
-               ("v9", render_crt_v9, DEFAULTS_V9)]
+    from crt_preview import (DEFAULTS_V8, DEFAULTS_V9, DEFAULTS_V10,
+                             render_crt_v8, render_crt_v9, render_crt_v10)
+    shaders = [("v8", render_crt_v8, DEFAULTS_V8),
+               ("v9", render_crt_v9, DEFAULTS_V9),
+               ("v10", render_crt_v10, DEFAULTS_V10)]
     tile = 16
 
     def lit_tiles(ow, oh, k, curved):
@@ -620,7 +662,7 @@ def report_curvature_uniformity():
             for k in ks[:2]:
                 m = pattern_strength(render(src, ow, oh,
                                             dict(defaults, cp_curvature=k)), tile)
-                keep = lit_tiles(ow, oh, k, name != "v7")
+                keep = lit_tiles(ow, oh, k, True)
                 keep = keep[:m.shape[0], :m.shape[1]]
                 vals = m[keep]
                 ratio = float(vals.max() / max(vals.min(), 1e-6)) if vals.size else 1.0
@@ -629,7 +671,9 @@ def report_curvature_uniformity():
         print(f"  {sw}x{sh} -> {ow}x{oh}".ljust(24) + "".join(row))
     print(f"\n  worst max/min across the frame: {worst:.2f}   "
           f"{'OK' if worst <= UNIFORM else 'PATTERN COLLAPSING'}")
-    return worst if worst_ok >= MIN_PITCH - 1e-6 else 99.0
+    if worst_ok < MIN_PITCH - 1e-6 or worst_lock <= 0.999:
+        return 99.0
+    return worst
 
 
 def report_grade():

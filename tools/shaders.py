@@ -10,9 +10,9 @@ Add a shader by adding an entry. Nothing else needs wiring.
 
 from crt_preview import (
     DEFAULTS, DEFAULTS_V2, DEFAULTS_V3, DEFAULTS_V4, DEFAULTS_V5, DEFAULTS_V6,
-    DEFAULTS_V7, DEFAULTS_V8, DEFAULTS_V9,
+    DEFAULTS_V7, DEFAULTS_V8, DEFAULTS_V9, DEFAULTS_V10,
     render_crt, render_crt_v3, render_crt_v4, render_crt_v5, render_crt_v6,
-    render_crt_v7, render_crt_v8, render_crt_v9,
+    render_crt_v7, render_crt_v8, render_crt_v9, render_crt_v10,
 )
 from dmg_preview import (
     DEFAULTS_DMG, DEFAULTS_DMG_V2, DEFAULTS_DMG_V3, DEFAULTS_DMG_V4,
@@ -107,6 +107,22 @@ REGISTRY = {
             ("gamma 0.7", dict(cp_gamma=0.7)),
             ("gamma 1.6", dict(cp_gamma=1.6)),
         ],
+    ),
+    "crt-perfect-v10.glsl": Model(
+        render=render_crt_v10,
+        defaults=DEFAULTS_V10,
+        variants=[
+            ("curvature 0.05", dict(cp_curvature=0.05)),
+            ("curvature 0.10", dict(cp_curvature=0.10)),
+            ("curvature 0.15", dict(cp_curvature=0.15)),
+            ("curved slot mask", dict(cp_curvature=0.10, cp_mask_type=2.0)),
+            ("curved gamma 1.6", dict(cp_curvature=0.10, cp_gamma=1.6)),
+            ("curved, mask off", dict(cp_curvature=0.10, cp_rgb_mask=0.0)),
+        ],
+        outliers=32,
+        reason="slot-mask row parity: floor() knife-edge under warp, where the "
+               "argument must cross an integer and float32/float64 disagree on "
+               "which side; isolated pixels, never a region",
     ),
     "crt-perfect-v9.glsl": Model(
         render=render_crt_v9,

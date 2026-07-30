@@ -43,6 +43,8 @@ DEFAULTS_V8 = dict(DEFAULTS_V7, cp_scanlines=0.60, cp_rgb_mask=0.20)
 
 DEFAULTS_V9 = dict(DEFAULTS_V8)
 
+DEFAULTS_V10 = dict(DEFAULTS_V9)
+
 DEFAULTS_V4 = dict(
     Scanlines=0.55,
     RGB_Mask=0.40,
@@ -777,6 +779,124 @@ def render_crt_v9(src_u8, out_w, out_h, p=None, quantise=True):
     mask_locked = (1.0 - smoothstep(mp * 1.001, mp * 1.02, mask_src)) * no_warp
     mask_f = 1.0 / mask_pitch
     mask_local = mask_f * jmax
+
+    mask_amp = p["cp_rgb_mask"] * (nyquist_fade(mask_local) * (1 - mask_locked)
+                                   + mask_locked)
+
+    mask = np.ones((out_h, out_w, 3))
+    if np.max(mask_amp) > 0.0 and p["cp_mask_type"] >= 0.5:
+        x = su * out_w - 0.5 * mask_locked
+        ph = x * mask_f - 1.0 / 6.0
+        if p["cp_mask_type"] >= 1.5:
+            row = np.floor((sv * out_h - 0.5 * scan_locked) * scan_f + 1e-3)
+            ph = ph + 0.5 * np.mod(row, 2.0)
+        dc = 1.0 - 0.5 * mask_amp
+        ac = 0.5 * mask_amp * (box_sinc(mask_local) * (1 - mask_locked) + mask_locked)
+        off = np.array([0.0, 1.0 / 3.0])
+        rg = (np.asarray(dc)[..., None]
+              + np.asarray(ac)[..., None]
+              * np.cos(2.0 * math.pi * (np.mod(ph, 1.0)[..., None] - off)))
+        b = np.maximum(3.0 * np.asarray(dc)[..., None] - rg[..., :1] - rg[..., 1:2], 0.0)
+        mask = np.concatenate([rg, b], axis=2)
+
+    gain = np.sqrt(np.maximum(mask * (scan[..., None] * p["cp_brightness"]), 0.0))
+    out = np.clip(col * gain * np.asarray(tube)[..., None], 0.0, 1.0)
+    return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
+
+
+def render_crt_v10(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors crt-perfect-v10.glsl: pitch and band-limit as though the screen
+    were flat, with only the pattern's position warped.
+
+    Taking no account of the curvature is what keeps the pattern locked to the
+    source - one cycle per source line, one triad per source column. Scaling the
+    pitch by the frame's worst magnification, which v7 to v9 did, silently broke
+    that: 240 source lines came out as 201 scanlines at cp_curvature 0.10.
+
+    The magnified corners then run finer than the band-limit assumes, so the
+    pattern is drawn slightly stronger there than its true box average. It stays
+    above two output pixels per cycle across the parameter range, so that is
+    over-contrast rather than aliasing, and curvature is a distortion by
+    construction.
+    """
+    p = dict(DEFAULTS_V10, **(p or {}))
+    src = src_u8.astype(np.float64) / 255.0
+    in_h, in_w = src.shape[:2]
+    tex_w, tex_h = in_w, in_h
+    k = p["cp_curvature"]
+
+    u1 = (np.arange(out_w) + 0.5) / out_w
+    v1 = (np.arange(out_h) + 0.5) / out_h
+    u, v = np.meshgrid(u1, v1)
+
+    su, sv = u, v
+    tube = 1.0
+    jac_x = jac_y = np.float64(1.0)
+    no_warp = 1.0
+    if k > 0.0:
+        norm = 1.0 / (1.0 + k)
+        cx, cy = u * 2.0 - 1.0, v * 2.0 - 1.0
+        xx, yy = cx * cx, cy * cy
+        stretch = (1.0 + k * (xx + yy)) * norm
+        su = cx * stretch * 0.5 + 0.5
+        sv = cy * stretch * 0.5 + 0.5
+        jac_x = (1.0 + k * (3.0 * xx + yy)) * norm
+        jac_y = (1.0 + k * (xx + 3.0 * yy)) * norm
+        no_warp = 0.0
+
+        # Beyond the image the sampler clamps to edge, which smears the border
+        # texel across the corner, so the corners have to be masked explicitly.
+        ex, ey = 1.0 / out_w, 1.0 / out_h
+        tube = (smoothstep(0.0, ex, su) * smoothstep(0.0, ex, 1.0 - su)
+                * smoothstep(0.0, ey, sv) * smoothstep(0.0, ey, 1.0 - sv))
+
+    rng_x = abs(in_w / (out_w * tex_w)) / 2.0 * 0.999 * jac_x
+    rng_y = abs(in_h / (out_h * tex_h)) / 2.0 * 0.999 * jac_y
+    texel_x, texel_y = 1.0 / tex_w, 1.0 / tex_h
+
+    left, right = su - rng_x, su + rng_x
+    bottom, top = sv - rng_y, sv + rng_y
+    ix_l = np.clip(np.floor(left / texel_x).astype(int), 0, tex_w - 1)
+    ix_r = np.clip(np.floor(right / texel_x).astype(int), 0, tex_w - 1)
+    iy_b = np.clip(np.floor(bottom / texel_y).astype(int), 0, tex_h - 1)
+    iy_t = np.clip(np.floor(top / texel_y).astype(int), 0, tex_h - 1)
+    border_x = np.clip(np.floor(su / texel_x + 0.5) * texel_x, left, right)
+    border_y = np.clip(np.floor(sv / texel_y + 0.5) * texel_y, bottom, top)
+    wl = (border_x - left) / (2.0 * rng_x)
+    wt = (top - border_y) / (2.0 * rng_y)
+    wr, wb = 1.0 - wl, 1.0 - wt
+
+    col = (src[iy_b, ix_l] * (wb * wl)[..., None]
+           + src[iy_b, ix_r] * (wb * wr)[..., None]
+           + src[iy_t, ix_l] * (wt * wl)[..., None]
+           + src[iy_t, ix_r] * (wt * wr)[..., None])
+
+    if abs(p["cp_gamma"] - 1.0) > 0.001:
+        col = np.power(np.maximum(col, 1e-8), p["cp_gamma"])
+
+    mp = p["cp_min_pitch"]
+
+    scan_src = out_h / max(in_h, 1)
+    scan_pitch = max(scan_src, mp)
+    scan_locked = (1.0 - smoothstep(mp * 1.001, mp * 1.02, scan_src)) * no_warp
+    scan_f = 1.0 / scan_pitch
+    scan_local = scan_f
+
+    scan_amp = p["cp_scanlines"] * (nyquist_fade(scan_local) * (1 - scan_locked)
+                                    + scan_locked)
+    scan_ac = 0.5 * scan_amp * (box_sinc(scan_local) * (1 - scan_locked) + scan_locked)
+
+    scan = np.ones((out_h, out_w))
+    if np.max(scan_amp) > 0.0:
+        y = sv * out_h - 0.5 * scan_locked
+        scan = (1.0 - 0.5 * scan_amp) - scan_ac * np.cos(
+            2.0 * math.pi * np.mod(y * scan_f, 1.0))
+
+    mask_src = out_w / max(in_w * p["cp_mask_size"], 1)
+    mask_pitch = max(mask_src, mp)
+    mask_locked = (1.0 - smoothstep(mp * 1.001, mp * 1.02, mask_src)) * no_warp
+    mask_f = 1.0 / mask_pitch
+    mask_local = mask_f
 
     mask_amp = p["cp_rgb_mask"] * (nyquist_fade(mask_local) * (1 - mask_locked)
                                    + mask_locked)

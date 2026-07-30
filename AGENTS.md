@@ -16,6 +16,7 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | `shaders/crt-perfect-v7.glsl` | in flight: curvature, zoomed to fill — **crops the border** |
 | `shaders/crt-perfect-v8.glsl` | in flight: curvature, fills the screen and crops nothing |
 | `shaders/crt-perfect-v9.glsl` | in flight: v8, but curvature costs nothing when off |
+| `shaders/crt-perfect-v10.glsl` | in flight: v9, with the pattern still locked to the source |
 | `shaders/lcd-perfect.glsl` | LCD: sinusoidal mesh on whole-cell periods, 120-degree stripes. `lp_` params |
 | `shaders/pixel-perfect.glsl` | scaling only, no effect. `pp_` params |
 | `shaders/pixel-perfect-v2.glsl` | in flight: adds a post-blend `pp_gamma` |
@@ -345,11 +346,43 @@ where CRT-Geom-style curvature is not:
 | v6 — patterns flat, black on all four sides | 588 | 4 | **14** | | |
 | v7 — patterns warped, border cropped away | 596 | 4 | **14** | | |
 | v8 — patterns warped, nothing cropped | 628 | 4 | **14** | 124.3% | 134.4% |
-| **v9 — v8 with the band-limit made uniform** | **626** | 4 | **14** | **108.2%** | **117.9%** |
+| v9 — v8 with the band-limit made uniform | 626 | 4 | **14** | 108.3% | 117.3% |
+| **v10 — v9 with the pitch computed as if flat** | **610** | 4 | **14** | **107.5%** | **117.2%** |
 
 **SFU never moves**, and it never predicted the time either — see the benchmark
 section. The figure that matters here is that **v8 cost 19.6 points over the flat
 shader even with curvature switched off**, and v9 gets that down to 3.5.
+
+### The pattern pitch is computed as though there were no curvature
+
+Curvature must not change the pattern's *pitch*, only its *position*. v7 to v9 lifted
+the pitch floor to `cp_min_pitch * jmax` so the most magnified corner would keep
+`cp_min_pitch` output pixels per cycle — and since the floor applies frame-wide, that
+quietly rescaled the pattern everywhere:
+
+| `cp_curvature` | cycles per source line | scanlines drawn |
+|---|---|---|
+| 0.00 | **1.000** | 240 |
+| 0.05 | 0.933 | 224 |
+| 0.10 | 0.838 | **201** |
+| 0.15 | 0.767 | 184 |
+
+One cycle per source line is what makes scanlines read as scanlines. Losing it is worse
+than anything the floor was protecting against, because **curvature is a distortion by
+construction** — artifacts it creates inside the region it is distorting are the effect,
+not a defect in the pattern. v10 drops `jmax` from both the floor and the band-limit, at
+which point `jmax` is dead and comes out entirely (626 → 610 ops).
+
+The corners then run finer than the band-limit assumes: 2.16 to 2.80 output pixels per
+cycle across the parameter range, always above the 2.0 that would alias, so the pattern
+is drawn a little stronger there than its true box average rather than breaking up.
+Measured evenness is 1.11–1.15, the same band as every other version.
+
+**Nothing in the harness could see this.** Every curvature test measures a flat grey
+field, or a checkerboard through the scaler with the patterns switched off — none of
+them has a source with rows in it, so none of them can watch the pattern drift off the
+source. It was caught by looking at the screen. `beat.py:source_lock()` now checks it
+directly, against the older behaviour as a control.
 
 ### Do not make a band-limit argument per-fragment
 
