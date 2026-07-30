@@ -12,9 +12,11 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | Path | What |
 |---|---|
 | `shaders/crt-perfect.glsl` | CRT: scanlines + RGB mask + pixel-perfect scaling. `cp_` params |
-| `shaders/crt-perfect-v6.glsl` | in flight: v6 adds optional barrel distortion (`cp_curvature`) |
+| `shaders/crt-perfect-v6.glsl` | in flight: curvature, patterns flat, black frame |
+| `shaders/crt-perfect-v7.glsl` | in flight: curvature, patterns curve too, zoomed to fill |
 | `shaders/lcd-perfect.glsl` | LCD: sinusoidal mesh on whole-cell periods, 120-degree stripes. `lp_` params |
 | `shaders/pixel-perfect.glsl` | scaling only, no effect. `pp_` params |
+| `shaders/dmg-perfect-v1.glsl` | Game Boy DMG: rectangular dots, light gaps, adaptive gap floor. `dp_` params |
 | `tools/` | the verification harness |
 | `tools/vendor/` | **third-party shaders**, benchmark and comparison references only |
 | `tools/iterations/` | superseded versions of our own shaders, kept for the record |
@@ -67,13 +69,22 @@ cd tools && PYTHONPATH=. ../.venv/bin/python spirv_cost.py    # 2. what does it 
 cd tools && PYTHONPATH=. ../.venv/bin/python gl_check.py      # 3. does it do what you think?
 cd tools && PYTHONPATH=. ../.venv/bin/python equivalence.py   # 4. pixel-perfect vs pixellate
 cd tools && PYTHONPATH=. ../.venv/bin/python beat.py          # 5. does it paint moire?
-cd tools && PYTHONPATH=. ../.venv/bin/python check_headers.py # 6. does the header still match?
+cd tools && PYTHONPATH=. ../.venv/bin/python grid.py          # 6. is the grid even?
+cd tools && PYTHONPATH=. ../.venv/bin/python check_headers.py # 7. does the header still match?
 ```
 
 `gl_check.py` walks the registry in `tools/shaders.py`; add a shader there and it is
 checked with no further wiring. A `Model` may raise its `tolerance` above 1 only with
 a `reason` naming a mechanism that has been measured — the reason is printed next to
 the result, so a tolerated divergence stays visible rather than silently accepted.
+
+`grid.py` measures grid geometry rather than colour: spacing evenness, line width in
+output pixels and as a share of a cell, and bit-identity against a reference shader at
+whole scale factors. It self-tests twice on every run — once analytically, against
+grids whose spacing is exact by construction, and once on the GPU against
+`dmg_dot_matrix`, whose line is one output pixel wide by construction. Both halves are
+needed: two earlier attempts at this measurement read a good grid as good and a bad
+one as good too.
 
 To iterate on a shader:
 
@@ -132,7 +143,10 @@ Then one blank line, then the `#pragma parameter` lines, column-aligned.
   headers during the repo extraction produced stray `..` fragments and a duplicated
   copyright block, and took three attempts. Build the lines, assert none exceeds 80,
   splice on the first delimiter, then diff.
-- Parameter identifiers are prefixed per shader (`cp_`, `lp_`, `pp_`) and lowercase.
+- Parameter identifiers are prefixed per shader (`cp_`, `lp_`, `pp_`, `dp_`) and
+  lowercase. **Order them geometry first, colour last**, ending with `*_brightness`
+  then `*_gamma` — every shader here follows that, so a user moving between them finds
+  the same two controls in the same place.
 - **The `#pragma parameter` label and the identifier are both user-visible, on
   different hosts.** RetroArch and RetroShader Lab render the quoted label; **minarch
   renders the identifier** (`ma_config.c` uses `params[j].name`). So the identifier
@@ -220,70 +234,138 @@ did — which is the thing being simulated. Peak normalisation is about where th
 `cp_brightness` are legitimate controls; the headers state what they cost and stop
 there.
 
-## Barrel distortion (crt-perfect-v6)
+## Barrel distortion (crt-perfect-v6, v7)
 
 Curvature is **pure ALU** — a radial polynomial warp is `dot(c,c)` and a few
 multiply-adds, with no `tan`/`atan` anywhere. That is what makes it affordable here
-where CRT-Geom-style curvature is not: **588 ops / 4 tex / 14 SFU** against the flat
-shader's 501 / 4 / **14**. SFU, the metric this repo trusts, is *unchanged*. ALU is
-+17%, which has never been validated on the Mali — "+0 on the metric we trust" is not
-the same claim as "free", and only the device can close that gap.
+where CRT-Geom-style curvature is not:
 
-Three things had to be got right, and two of them are not obvious.
+| | ops | tex | SFU |
+|---|---|---|---|
+| `pixellate` (yardstick) | 292 | 4 | **30** |
+| `crt-perfect` flat | 501 | 4 | **14** |
+| v6 — sampling warped, patterns flat, black frame | 588 | 4 | **14** |
+| v7 — everything warped, zoomed to fill | 596 | 4 | **14** |
 
-- **Warp the sampling coordinate only; leave the patterns in screen space.**
-  `vTexCoord` does double duty in this shader — it samples the source *and*, times
-  `OutputSize`, positions the scanlines and the mask. Warping it warps both, which
-  detunes the grid-locking the whole shader is built on. Measured on a flat field,
-  worst interior tile: patterns-flat is **completely** unaffected by curvature (0.048
-  at 1024x768 and 0.002 at 640x480, at every `k`), while warping them costs 2x at
-  1024x768 and **65x** at 640x480. Neither crosses visibility, so a warped mask is a
-  legitimate look — it is what a real tube does — but it is strictly worse where the
-  shader is already tightest, and it is not the default for that reason.
-- **The footprint correction is not cosmetic, and it is anisotropic.** The scaler
-  derives `range` from a constant `InputSize/OutputSize`; under warp the local
-  magnification varies, so at the edges the footprint is too small and the blend is
-  wrong over about a third of the frame, by up to 94/255. The correction is *not* the
-  scalar radial factor: for `u' = u(1 + k(u^2+v^2))` the axis-aligned derivatives are
-  `1 + k(3u^2 + v^2)` and `1 + k(u^2 + 3v^2)`, which differ. Both fall out of `c*c`,
-  already computed for `r2`, so the exact per-axis Jacobian costs the same as the
-  wrong scalar one. Against a supersampled reference (RMS in 8-bit levels):
+**SFU never moves**, and v7 costs only 8 ops more than v6 despite warping the patterns
+too. The reason is worth knowing: `boxSinc`'s `sin` and the pattern `cos` are *already*
+evaluated per fragment, because their arguments come from uniforms and nothing hoists
+a uniform expression out of a fragment shader. Making those arguments vary per pixel
+changes what feeds an instruction that was being paid for anyway, so **local
+band-limiting is free**. ALU is +19% over the flat shader and unvalidated on the Mali.
 
-  | `cp_curvature` | no correction | isotropic (wrong) | anisotropic (shipped) |
-  |---|---|---|---|
-  | 0.05 | 0.901 | 0.861 | **0.817** |
-  | 0.10 | 1.049 | 0.927 | **0.778** |
-  | 0.15 | 1.239 | 1.007 | **0.753** |
+At `cp_curvature = 0` both versions are **bit-identical** to the flat shader (0/255,
+including 480x272 which exercises the locked regime). The guard is a uniform branch.
 
-  Note the direction: uncorrected error *rises* with curvature while the corrected
-  error *falls*. That divergence, not the absolute values, is what says the correction
-  is right rather than merely different.
+### v6 and v7 differ on two judgement calls, not on correctness
+
+v6 kept the patterns in flat screen space and let the image sit in a black frame. v7
+warps the patterns and zooms to fill. **v7 is the requested behaviour; v6 is the
+conservative one and is kept, not superseded.**
+
+Do not re-litigate this from the v6 measurements. The number v6 leaned on — warped
+patterns measuring 65x worse at 640x480 — was of a *naive* warp with no local
+band-limiting and no magnification-aware pitch floor. Done properly the penalty
+disappears.
+
+### The zoom needs no cubic solve
+
+Normalising the warp by its own corner value fits the corners exactly:
+
+    uv = c * (1 + k*r2) / (1 + 2k)
+
+At the corner `r2 = 2`, so the factor is `(1+2k)/(1+2k) = 1`. **That divisor is the
+zoom**: it is a uniform, `|uv| <= 1` holds everywhere in the square so nothing is ever
+black, and there is no cubic to solve at runtime. The same divisor rides the Jacobian
+into the scaler, which is how the zoom reaches the pixel-perfect blend.
+
+Measured: v7 renders **0.0% black pixels at every curvature**, against v6's 10.8% /
+18.4% / 24.3% at k = 0.05 / 0.10 / 0.15. What it costs instead is crop, which is why
+v7 caps `cp_curvature` at 0.10 where v6 caps at 0.15:
+
+| `cp_curvature` | v6: screen lost to frame | v7: image cropped per edge |
+|---|---|---|
+| 0.05 | 10.8% | 4.5% |
+| 0.10 | 18.4% | 8.3% |
+| 0.15 | 24.3% | 11.5% |
+
+### The footprint correction is anisotropic
+
+The scaler derives `range` from a constant `InputSize/OutputSize`; under warp the local
+magnification varies, so at the edges the footprint is too small and the blend is wrong
+over about a third of the frame, by up to 94/255. The correction is *not* the scalar
+radial factor: for `u' = u(1 + k(u^2+v^2))` the axis-aligned derivatives are
+`1 + k(3u^2 + v^2)` and `1 + k(u^2 + 3v^2)`, which differ. Both fall out of `c*c`,
+already computed for `r2`, so the exact per-axis Jacobian costs the same as the wrong
+scalar one. Against a supersampled reference (RMS, 8-bit levels):
+
+| `cp_curvature` | no correction | isotropic (wrong) | anisotropic (shipped) |
+|---|---|---|---|
+| 0.05 | 0.901 | 0.861 | **0.817** |
+| 0.10 | 1.049 | 0.927 | **0.778** |
+| 0.15 | 1.239 | 1.007 | **0.753** |
+
+Note the direction: uncorrected error *rises* with curvature while corrected error
+*falls*. That divergence, not the absolute values, is what says the correction is right
+rather than merely different.
+
+### Warped patterns: the invariant, and why no image metric can check it
+
+A pattern locked to the source cannot also be locked to the output pixel grid, so under
+warp its screen pitch varies and is finest at the corners. Two things keep it safe, and
+both are needed:
+
+- the pitch floor is lifted to `cp_min_pitch * jmax`, where `jmax = (1+4k)/(1+2k)` is
+  the largest magnification in the frame, so **even the worst corner keeps
+  `cp_min_pitch` output pixels per cycle**;
+- `boxSinc` and `nyquistFade` are evaluated on the *local* frequency `freq * jac`.
+
+**Check this on the geometry, not on the image.** `beat.py:min_local_pitch()` does. The
+obvious empirical checks do not work, because aliasing does not remove pattern energy,
+it relocates it — so a strength or uniformity metric reads an aliased pattern as
+perfectly healthy. Measured: the naive implementation is *more* uniform (1.07–1.14)
+than the correct one (1.10–1.21) at every curvature, and its corner strength is equal
+or higher. Only the invariant separates them:
+
+| smallest output px per cycle | v7 | naive |
+|---|---|---|
+| 320x240 -> 1024x768, k=0.10 | **3.00** | 2.74 |
+| 480x272 -> 1024x768, k=0.10 | **3.00** | 2.57 |
+| 480x272 -> 1024x768, k=0.20 | **3.00** | 2.33 |
+
+v7 sits exactly on the floor everywhere; naive falls through it.
+
+### Two traps hit while measuring curvature
+
+- **A row-mean profile is invalid on a warped image.** Measuring pattern contrast as
+  the peak-to-peak of a tile's row-mean reported the corner collapsing from 34.7 to
+  3.2 — a 10x falloff that looks exactly like catastrophic aliasing. The scanlines are
+  curved there, so averaging along tile rows smears them. RMS about the local mean has
+  no preferred direction and reads 12.4 against 12.1 on the same image.
 - **A curved render cannot be measured with the flat beat metric.** Barrel distortion
   varies the local magnification on purpose, so block sizes genuinely change across the
-  frame and a band-limited FFT scores that intended variation as moire — it reads 4 to
-  20 where the flat metric reads 0.26. Difference against a supersampled reference of
-  the same warp instead: that cancels the intended geometry *and* the black surround,
-  whose step edge otherwise dominates every spectrum (13-22). See the reference-noise
-  trap above before trusting any number that comes out of this.
+  frame and a band-limited FFT scores that intended variation as moire — 4 to 20 where
+  the flat metric reads 0.26. Difference against a supersampled reference of the same
+  warp instead, and read the reference-noise trap below before trusting the result.
 
-**Black frame, not auto-zoom.** With `k > 0` the image sits inside a curved border and
-screen area is lost. The usual fix is a compensating zoom, and it was rejected here on
-measurement: filling the screen at `k = 0.10` crops **6.6% off each edge**, about 16
-lines of a 240-line image, and retro games put health bars, timers and score counters
-hard against the edge. Silently eating a HUD is a worse surprise than a border, and a
-curved black frame reads as a bezel. `cp_curvature` is capped at **0.15** on the same
-argument — 24% of the display is about the limit of reasonable.
+### The slot mask has an irreducible knife edge under warp
 
-| `cp_curvature` | screen lost to the frame | crop per edge if zoomed instead |
-|---|---|---|
-| 0.05 | 10.8% | 3.9% |
-| 0.10 | 18.4% | 6.6% |
-| 0.15 | 24.3% | 8.5% |
-| 0.30 | 36.1% | 12.6% |
+The slot mask picks its row parity with `floor()`. Flat, that argument is constant
+along a row, so the `+ 1e-3` epsilon nudges whole rows clear of the boundary. **Under
+warp the argument varies smoothly across the frame, so it must cross an integer
+somewhere** — that crossing is what makes the rows — and wherever it does, float32 and
+float64 can land on opposite sides. No epsilon fixes this; an epsilon only moves where
+the crossing happens.
 
-At `cp_curvature = 0`, v6 is **bit-identical** to the flat shader (0/255 across three
-sources and three scale factors). The guard is a uniform branch, the same pattern
-`cp_gamma` uses, so off costs nothing.
+Measured at curvature 0.10: **16 pixels of 786432**, every one within `1.9e-5` of an
+integer against a median distance of 0.25 across the frame. Isolated single pixels,
+never a region, and only ever on the slot mask.
+
+This is what `Model(outliers=N)` is for. Raising `tolerance` to 45 would have covered
+it and simultaneously blinded the check to a real systematic error of the same size;
+the outlier budget keeps `tolerance` at 1, counts the offenders, and prints the count.
+Negative-tested both ways: a +3/255 bias everywhere fails on 921600 outliers, and
+shrinking the budget to 4 fails on 16.
 
 ## LCD apertures, and why they are not sinusoids
 
@@ -391,6 +473,99 @@ One measured wrinkle to know about: the stripes leave a tint of about one 8-bit 
 on a white field, because the `sqrt` is applied per channel and the three stripes do
 not sample the same phases.
 
+## The DMG is a negative display, and it changes the sign of everything
+
+A Game Boy DMG is a **reflective, normally-white STN panel with no backlight**.
+Undriven crystal passes light, so an unpowered pixel shows the pale green substrate
+and driving a pixel makes it **dark**. The gaps between pixels have no electrode at
+all, so they can never be driven and sit permanently at the lightest state.
+
+So its matrix is **lighter than a lit pixel** — the opposite of every backlit panel
+`lcd-perfect` models. That is why `dmg_dot_matrix` defaults its grid colour to white
+and mixes *toward* it, and why the grid is invisible on a white field and strongest on
+dark content, which is how a real DMG reads. A web search asserted the opposite and
+was discounted: the same answer claimed a DMG's "on" pixels look "almost white", which
+is backwards for this panel, and it cited no measurement.
+
+Three consequences that are not obvious until the sign is right:
+
+- **A brightness default above 1 has no job here.** Across this family the gain exists
+  to restore the level the pattern removes — `lcd-perfect` and `crt-perfect` sit at
+  82% and 83% of white *with* their 1.20 and 1.25 lifts. A DMG grid adds light, so
+  dmg-perfect sits at **100%** of white and a lift only meets the clamp. Measured 2.06
+  beat on a full-range checkerboard, against 0.12 at unity. Check the mean level on
+  white before copying a brightness default across.
+- **A mean-normalised aperture cannot be reused as a coverage mask.** `lcd-perfect`
+  normalises its aperture to a *mean* of 1, which for these parameters peaks near 2.9;
+  as a mask that drives the mix past white and blows the frame out. A mask has to be
+  **peak**-normalised, 0 in the gap and 1 in the dot.
+- **No ramp.** A plain rectangular pulse box-filtered over the output pixel *is* the
+  reference at a whole scale factor, so the trapezoid `lcd-perfect` v1 used would be
+  visibly softer than the thing it is copying — and it costs 334 instructions against
+  262. Cheaper and more faithful at once; the box filter is already the correct
+  anti-aliasing width. The band-limiting the ramp was there to provide comes instead
+  from the gap floor below, which is exact at a whole scale where the ramp was only
+  close.
+
+### State a minimum feature size in output pixels, not as a share of a cell
+
+`dmg_dot_matrix` draws a line of exactly **one output pixel**. That is right at a
+whole scale factor and wrong everywhere else: a 1px line cannot be placed 6.4 apart,
+so its cells alternate 6, 7, 6, 7; and one pixel is 16% of a cell at 1024x768 and 50%
+at 320x288, so it is not the same shader at two resolutions.
+
+Making the gap a *share* of a cell fixes both — and introduces a third fault, because
+a share lands on an arbitrary number of output pixels. **Below about two pixels a line
+has no guaranteed fully-covered pixel at its core**, whatever its phase, so how its ink
+spreads shifts cell to cell. Measured on an exactly-even synthetic grid at a 6.4px
+period: a 1.28px line reads 1.7% spacing variation, a 1.99px line reads 0.04%. That is
+a 40x difference with the geometry held exactly constant, and it matches which one
+reads as steady by eye.
+
+So the rule is a floor in output pixels, applied per axis:
+
+```glsl
+vec2 sc    = OutputSize / max(InputSize, 1.0);
+vec2 offs  = abs(sc - floor(sc + 0.5));      // smooth, never an equality
+vec2 room  = clamp(sc - 4.0, 0.0, 1.0);
+vec2 minpx = 1.0 + clamp(offs / 0.25, 0.0, 1.0) * room;
+vec2 gapEff = max(vec2(dp_gap), minpx / sc);
+```
+
+Three things in there took measuring:
+
+- **`room` is not optional.** The second pixel costs `1/sc` of a cell, which is
+  already 40% at five output pixels per cell and **60%** at the 3.33 a Game Boy gets
+  down the screen at 640x480 — where it stops edging the dot and starts swallowing it.
+  Without the limit, 640x480 measured a 1.35px *dot* rather than a line. The metric
+  caught it; the eye would have too, eventually.
+- **The whole-scale test is a distance, never an equality.** A mathematically whole
+  scale can land a few ULP off, which is already a recorded trap here.
+- **The floor has to fade out with the parameter.** At `dp_gap` 0 the floor would
+  otherwise hold a 1px line open under a slider the user has closed, so it is gated by
+  `smoothstep(0.0, 0.01, dp_gap)`.
+
+### Bit-identity with a reference is reachable, and worth gating on
+
+At a whole scale factor a four-tap area average returns the source texel exactly, so a
+scaler-based shader can be **bit-identical** to a point-sampling one. dmg-perfect
+measures 0/255 against `dmg_dot_matrix` at 3x, 4x and 5x on both a flat field and a
+game frame, wherever the two are set the same. That is a far stronger statement than
+"looks the same", and `tools/grid.py` gates it.
+
+The two 1/255 rows it reports are float32 and both were traced rather than shrugged
+at: at a gamma of exactly 1 this shader skips the `pow` and the reference still
+evaluates `pow(x, 1.0)`, which is `exp2(log2(x))` on a GPU and rounds; and at gamma
+0.8 over a black gap `pow` has unbounded slope at 0, which moved 2 pixels out of 1.7
+million. Wherever both take the same `pow`, the match is exact.
+
+**That identity is what pins the gamma placement.** Putting the curve on the taps
+instead would be design-rule-clean, but the reference gammas *after* its grid mix, and
+`mix(pow(level,g), pow(c,g), m)` is not `pow(mix(level,c,m), g)` — on a dark pixel
+under a light gap the two differ by **21 levels**, which is exactly where a DMG's grid
+is most visible. So the cheap placement is kept and the cost is documented instead:
+gamma 1.40 measures 0.86 beat against 0.12 at 1.00.
+
 ## GLSL traps that actually bit
 
 - **`pow(0.0, k)` is undefined** and returned NaN on a real driver, rendering whole
@@ -403,6 +578,10 @@ not sample the same phases.
   contrast. Use a narrow, biased `smoothstep` instead.
 - **`floor()` used for row parity** has its argument cross whole numbers once per line;
   a few ULP flips an entire row's mask stagger. Add an epsilon: `floor(x + 1e-3)`.
+  **Under a warp no epsilon helps** — see the knife-edge section above.
+- **`flat` is a reserved word** in GLSL ES (an interpolation qualifier), and so are
+  `smooth`, `noperspective`, `sample`, `input`, `output`, `filter`. `validate_glsl.py`
+  catches these; a desktop-only compile may not.
 - **`sqrt()` of an analytically-non-negative value** can still see a small negative in
   float. Clamp with `max(..., 0.0)`.
 - `#pragma parameter` menus display the **identifier**, not the quoted label. Name
@@ -653,6 +832,23 @@ On a 1px checkerboard, 320x240 → 1024x768, white field for the swings:
 `lcd-perfect` sits below crt-perfect's own beat. `lcd-grid-v2` was researched and not
 vendored: ~48 SFU slots against `pixellate`'s 30, so it is out of budget before any
 discussion of how it looks.
+
+`dmg-perfect` is not in that table because its swings are not comparable — its grid is
+*lighter* than a lit pixel, so on a white field there is nothing to measure. Against
+its own reference instead, at 160x144, on a flat field for the grid and a 1px
+checkerboard for the beat:
+
+| | Beat, GB → 1024x768 | Spacing CV, 1024x768 | Spacing CV, 640x480 | ops | SFU |
+|---|---|---|---|---|---|
+| `dmg_dot_matrix` | 1.23 | 7.7% / 8.9% | 0.0% / 14.2% | 80 | 6 |
+| `dmg-perfect-v1` defaults | **0.12** | **0.0% / 0.0%** | **0.0% / 0.0%** | 265 | 6 |
+| `dmg-perfect-v1` at 1.20/1.40 | 0.86 | 0.0% / 0.0% | 0.0% / 0.0% | 265 | 6 |
+
+The reference's figures are with its own defaults, which are a 1.20 gain and a 1.40
+gamma; the third row is dmg-perfect set to match them, and is bit-identical to it at
+every whole scale. So the beat column is not a like-for-like win over the reference so
+much as a demonstration that most of what either shader paints comes from that
+post-blend contrast curve, and that turning it off is free.
 
 ## Deployment gotchas (NextUI / minarch targets)
 

@@ -47,6 +47,12 @@ from lcd_preview import DEFAULTS_LCD, render_lcd
 
 VISIBLE = 0.4
 
+# Largest max/min of pattern strength across a frame before the pattern is
+# judged to be collapsing somewhere. A flat render is 1.00 by construction; the
+# curved shader measures 1.15 at its strongest setting, and a warped pattern
+# with no local band-limiting runs away well past 2.
+UNIFORM = 1.5
+
 # The smallest pitch any shader here puts a pattern at, in output pixels. Both
 # crt-perfect and lcd-perfect v3 lock to this when the source cells get too
 # small to carry the pattern, so it is the floor of what counts as signal.
@@ -381,8 +387,107 @@ def report_curvature():
     return worst
 
 
+def pattern_strength(img, tile=16):
+    """RMS about the local mean, in tile x tile windows.
+
+    Orientation-independent on purpose. The obvious way to measure how strong a
+    scanline pattern is - peak-to-peak of a tile's row-mean - is only valid while
+    the scanlines are horizontal. On a curved image they are not, and averaging
+    along tile rows smears them: measured that way, a perfectly healthy warped
+    pattern read 34.7 at the centre and 3.2 at the corner, a 10x collapse that
+    looks exactly like catastrophic corner aliasing and is entirely the metric.
+    RMS about the local mean has no preferred direction and reports 12.4 against
+    12.1 for the same image.
+
+    Returns a (rows, cols) array, one figure per window.
+    """
+    a = img.astype(np.float64)
+    if a.ndim == 3:
+        a = a.mean(axis=2)
+    if a.max() <= 1.0001:
+        a = a * 255.0
+    h, w = a.shape
+    ny, nx = h // tile, w // tile
+    b = a[:ny * tile, :nx * tile].reshape(ny, tile, nx, tile)
+    return b.transpose(0, 2, 1, 3).reshape(ny, nx, -1).std(axis=2)
+
+
+def min_local_pitch(src_h, out_h, curvature, min_pitch=MIN_PITCH, lift=True):
+    """Smallest number of output pixels per pattern cycle anywhere in the frame.
+
+    This is the invariant the whole warped-pattern design rests on, and it is
+    geometry, not an image statistic - which makes it the decisive check. A
+    pattern locked to the source cannot also be locked to the output grid, so
+    under warp its screen pitch varies, and it is finest where the magnification
+    is greatest, at the corners. Keeping that worst case at or above min_pitch is
+    what stops it aliasing.
+
+    lift=False models the obvious implementation, which sets the pitch floor from
+    the source and band-limits on a frame-wide frequency. It is the control: the
+    floor has to absorb the largest magnification in the frame, not just exist.
+
+    Note this cannot be measured from the rendered image. Aliasing does not
+    remove pattern energy, it relocates it, so a strength or uniformity metric
+    reads an aliased pattern as perfectly healthy - the naive version measures
+    *more* uniform than the correct one. Only the geometry tells you.
+    """
+    jmax = (1.0 + 4.0 * curvature) / (1.0 + 2.0 * curvature)
+    src_pitch = out_h / max(src_h, 1)
+    floor = min_pitch * jmax if lift else min_pitch
+    return max(src_pitch, floor) / jmax
+
+
+def report_curvature_uniformity():
+    """Does the pattern survive being warped, everywhere in the frame?
+
+    Two checks. The invariant - worst-case local pitch, which is what the design
+    guarantees - with the obvious implementation alongside as a control. Then the
+    rendered pattern strength, which confirms nothing has collapsed.
+    """
+    from crt_preview import DEFAULTS_V7, render_crt_v7
+
+    print("\ncurvature: smallest output px per pattern cycle, anywhere in frame")
+    print(f"(must stay >= cp_min_pitch = {MIN_PITCH:.2f}; 'naive' floors the pitch")
+    print(" from the source only, without absorbing the magnification)\n")
+    scales = [((320, 240), (1024, 768)), ((256, 224), (1024, 768)),
+              ((480, 272), (1024, 768)), ((320, 240), (640, 480))]
+    ks = [0.05, 0.10, 0.20]
+
+    print("  " + " " * 22 + "".join(f"{f'k={k:.2f}':>16s}" for k in ks))
+    print("  " + " " * 22 + "".join(f"{'v7':>8s}{'naive':>8s}" for _ in ks))
+    worst_ok, worst_naive = 99.0, 99.0
+    for (sw, sh), (ow, oh) in scales:
+        row = []
+        for k in ks:
+            a = min_local_pitch(sh, oh, k, lift=True)
+            b = min_local_pitch(sh, oh, k, lift=False)
+            worst_ok, worst_naive = min(worst_ok, a), min(worst_naive, b)
+            row.append(f"{a:8.2f}{b:8.2f}")
+        print(f"  {sw}x{sh} -> {ow}x{oh}".ljust(24) + "".join(row))
+    print(f"\n  worst: v7 {worst_ok:.2f}  naive {worst_naive:.2f}   "
+          f"{'OK' if worst_ok >= MIN_PITCH - 1e-6 else 'PATTERN GOES BELOW THE FLOOR'}")
+
+    print("\ncurvature: pattern strength across the frame, 16x16 windows\n")
+    print("  " + " " * 22 + "".join(f"{f'k={k:.2f}':>12s}" for k in [0.0] + ks[:2]))
+    worst = 1.0
+    for (sw, sh), (ow, oh) in scales:
+        src = np.full((sh, sw, 3), 128, np.uint8)
+        row = []
+        for k in [0.0] + ks[:2]:
+            m = pattern_strength(render_crt_v7(src, ow, oh,
+                                               dict(DEFAULTS_V7, cp_curvature=k)))
+            ratio = float(m.max() / max(m.min(), 1e-6))
+            worst = max(worst, ratio)
+            row.append(f"{ratio:12.2f}")
+        print(f"  {sw}x{sh} -> {ow}x{oh}".ljust(24) + "".join(row))
+    print(f"\n  worst max/min across the frame: {worst:.2f}   "
+          f"{'OK' if worst <= UNIFORM else 'PATTERN COLLAPSING'}")
+    return worst if worst_ok >= MIN_PITCH - 1e-6 else 99.0
+
+
 if __name__ == "__main__":
     ok = self_test()
     w = report()
     wc = report_curvature()
-    sys.exit(0 if ok and max(w, wc) <= VISIBLE else 1)
+    wu = report_curvature_uniformity()
+    sys.exit(0 if ok and max(w, wc) <= VISIBLE and wu <= UNIFORM else 1)

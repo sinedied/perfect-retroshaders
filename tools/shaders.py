@@ -10,7 +10,9 @@ Add a shader by adding an entry. Nothing else needs wiring.
 
 from crt_preview import (
     DEFAULTS, DEFAULTS_V2, DEFAULTS_V3, DEFAULTS_V4, DEFAULTS_V5, DEFAULTS_V6,
+    DEFAULTS_V7,
     render_crt, render_crt_v3, render_crt_v4, render_crt_v5, render_crt_v6,
+    render_crt_v7,
 )
 from lcd_preview import (
     # aliased: crt_preview exports a DEFAULTS_V3 of its own, and a bare
@@ -53,7 +55,7 @@ class Model:
     """
 
     def __init__(self, render, defaults, variants=(), sources=DEFAULT_SOURCES,
-                 cases=None, tolerance=1, reason=""):
+                 cases=None, tolerance=1, reason="", outliers=0):
         self.render = render
         self.defaults = defaults
         # (label, param overrides) - defaults are always checked as well
@@ -62,6 +64,14 @@ class Model:
         self.cases = cases or CASES
         self.tolerance = tolerance
         self.reason = reason
+        # How many individual pixels per case may be ignored before the
+        # tolerance is applied. This is for knife-edge disagreements - a pixel
+        # sitting within a few ULP of a decision boundary, where float32 and
+        # float64 legitimately land on opposite sides - which are unbounded in
+        # amplitude but countable. Raising `tolerance` to cover them would blind
+        # the check to a real systematic error of the same size; this does not,
+        # and the count is printed so it cannot creep up unnoticed.
+        self.outliers = outliers
 
 
 # v1 to v3 predate the epsilon in the slot mask's row-parity floor(). Their
@@ -92,6 +102,31 @@ REGISTRY = {
             ("gamma 0.7", dict(cp_gamma=0.7)),
             ("gamma 1.6", dict(cp_gamma=1.6)),
         ],
+    ),
+    "crt-perfect-v7.glsl": Model(
+        render=render_crt_v7,
+        defaults=DEFAULTS_V7,
+        variants=[
+            ("curvature 0.05", dict(cp_curvature=0.05)),
+            ("curvature 0.10", dict(cp_curvature=0.10)),
+            ("curved slot mask", dict(cp_curvature=0.10, cp_mask_type=2.0)),
+            ("curved gamma 1.6", dict(cp_curvature=0.10, cp_gamma=1.6)),
+            ("curved, mask off", dict(cp_curvature=0.10, cp_rgb_mask=0.0)),
+            ("curved, big triads", dict(cp_curvature=0.10, cp_mask_size=0.5)),
+        ],
+        # The slot mask picks its row parity with floor(), and under curvature
+        # that argument varies smoothly across the frame instead of being
+        # constant along a row - so it *must* cross an integer somewhere, and
+        # wherever it does, float32 and float64 can land on opposite sides and
+        # the pixel takes the other row's half-cell stagger. No epsilon fixes
+        # this; an epsilon only moves where the crossing happens. Measured at
+        # curvature 0.10: 16 pixels of 786432, every one within 1.9e-5 of an
+        # integer against a median distance of 0.25. Isolated single pixels,
+        # invisible in practice, and only ever on the slot mask.
+        outliers=32,
+        reason="slot-mask row parity: floor() knife-edge under warp, where the "
+               "argument must cross an integer and float32/float64 disagree on "
+               "which side; isolated pixels, never a region",
     ),
     "crt-perfect-v6.glsl": Model(
         render=render_crt_v6,
