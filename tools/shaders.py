@@ -17,7 +17,8 @@ from lcd_preview import (
     # import here silently shadowed it, handing crt-perfect-v3 the LCD
     # defaults and a 255/255 mismatch that looked like a shader bug
     DEFAULTS_V3 as DEFAULTS_LCD_V3, render_lcd_v3,
-    DEFAULTS_LCD, DEFAULTS_PP, DEFAULTS_V2A, DEFAULTS_V2B,
+    DEFAULTS_LCD, DEFAULTS_PP, DEFAULTS_PP_V2, DEFAULTS_V2A, DEFAULTS_V2B,
+    render_pixel_perfect_v2,
     render_lcd, render_lcd_v2a, render_pixel_perfect,
 )
 
@@ -154,6 +155,17 @@ REGISTRY = {
             ("min pitch 6", dict(lp_min_pitch=6.0)),
             ("gamma 0.7", dict(lp_gamma=0.7)),
             ("bright", dict(lp_brightness=1.6)),
+        ],
+    ),
+    "pixel-perfect-v2.glsl": Model(
+        render=render_pixel_perfect_v2,
+        defaults=DEFAULTS_PP_V2,
+        variants=[
+            ("crisp", dict(pp_sharpness=0.3)),
+            ("gamma 0.7", dict(pp_gamma=0.7)),
+            ("gamma 1.4", dict(pp_gamma=1.4)),
+            ("gamma 2.0", dict(pp_gamma=2.0)),
+            ("crisp + gamma", dict(pp_sharpness=0.3, pp_gamma=0.8)),
         ],
     ),
     "pixel-perfect.glsl": Model(

@@ -4,3 +4,4 @@ __pycache__/
 preview/
 *.spv
 TODO
+.DS_Store

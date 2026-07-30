@@ -16,6 +16,11 @@ DEFAULTS_PP = dict(
     pp_sharpness=1.00,
 )
 
+DEFAULTS_PP_V2 = dict(
+    pp_sharpness=1.00,
+    pp_gamma=1.00,
+)
+
 DEFAULTS_LCD = dict(
     lp_grid=0.30,
     lp_gap=0.16,
@@ -212,6 +217,21 @@ def render_pixel_perfect(src_u8, out_w, out_h, p=None):
     src = src_u8.astype(np.float64) / 255.0
     color = area_average(src, out_w, out_h, p["pp_sharpness"])[0]
     return (np.clip(color, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
+
+
+def render_pixel_perfect_v2(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors pixel-perfect-v2.glsl: the scaler plus a post-blend gamma.
+
+    The gamma goes on the blended colour, not on the taps, so this is NOT
+    area_average's gamma argument - that one applies it before the blend.
+    """
+    p = dict(DEFAULTS_PP_V2, **(p or {}))
+    src = src_u8.astype(np.float64) / 255.0
+    col = area_average(src, out_w, out_h, p["pp_sharpness"])[0]
+    if abs(p["pp_gamma"] - 1.0) > 0.001:
+        col = np.power(np.maximum(col, 1e-8), p["pp_gamma"])
+    out = np.clip(col, 0.0, 1.0)
+    return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
 
 
 def render_lcd(src_u8, out_w, out_h, p=None, mode="edge", quantise=True,
