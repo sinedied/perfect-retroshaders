@@ -30,6 +30,7 @@ All shaders provided here follow these principles, and were tested on a real dev
 | [`pixel-perfect.glsl`](shaders/pixel-perfect.glsl) | **Sharp pixel upscaling.** Uniform pixel blocks, no shimmer, fast |
 | [`crt-perfect.glsl`](shaders/crt-perfect.glsl) | **CRT.** Scanlines, RGB mask, pixel-perfect scaling |
 | [`lcd-perfect.glsl`](shaders/lcd-perfect.glsl) | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling |
+| [`dmg-perfect-v2.glsl`](shaders/dmg-perfect-v2.glsl) | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, pixel-perfect scaling |
 
 <!-- Include screenshots here and links to RetroShader Lab for each shader, so users can see the differences and tweak the parameters to their liking. -->
 
@@ -106,6 +107,82 @@ panel — one knob instead of two.
 `lp_subpixels` costs beat much faster than the grid does (0.24 at the default 0.20,
 0.56 at 0.35, 1.18 at 0.50) and needs at least ~3 output pixels per cell to have room
 for three stripes, so it fades out below that and is off almost everywhere at 640×480.
+
+#### dmg-perfect
+
+Simulates an original Game Boy: square dots separated by a visible grid. Based on
+`dmg_dot_matrix`, which already looks right at integer scaling and is kept as the
+reference to match rather than to improve on.
+
+| Name | Default | Range | |
+|---|---|---|---|
+| `dp_grid` | 0.30 | 0.00–1.00 | grid visibility |
+| `dp_gap` | 1.00 | 0.25–2.00 | grid line thickness, in pixels |
+| `dp_shadow` | 0.00 | 0.00–1.00 | cast shadow under each dot; 0 disables it |
+| `dp_shadow_offset` | 1.00 | 0.25–3.00 | how far the shadow falls, in pixels |
+| `dp_brightness` | 1.00 | 0.25–4.00 | output gain |
+| `dp_gamma` | 1.00 | 0.50–2.00 | gamma |
+
+A DMG is a **negative display**: reflective, no backlight, normally-white crystal.
+Driving a pixel makes it dark, and the gaps between pixels have no electrode at all,
+so they sit permanently at the lightest state. Its matrix is therefore *lighter* than
+a lit pixel — the opposite of every backlit panel, and why the grid is invisible on a
+white field and strongest on dark content, exactly as a real DMG reads.
+
+**It reproduces, in one pass, what you get from two.** The way to get a good DMG out
+of a frontend is to draw the dot matrix at a whole scale factor and let a `pixellate`
+pass do the rest — and that is not a workaround, it is a better computation. Drawing
+the matrix at a whole scale and resampling filters the image and the grid *together*;
+multiplying a scaled image by a grid does not, and the difference shows up as cells
+that break into a pattern at a fractional scale. Both passes are linear, so the
+composite has a closed form, and this evaluates it directly: **no intermediate buffer,
+no second pass, no preset change.** `tools/twopass.py` builds the two-pass pipeline
+literally and gates the match, which comes out at 1/255.
+
+Measured on a flat field against the reference:
+
+| | 5× integer | 1024×768 | 640×480 |
+|---|---|---|---|
+| `dmg_dot_matrix` cell spacing | 5, 5, 5 | **6, 7, 6, 7** | 3, 3, 4, 3 down |
+| `dmg_dot_matrix` lattice error | 0.0% | **6.7% / 7.6%** | 0.0% / **12.2%** |
+| **`dmg-perfect` lattice error** | **0.0%** | **0.1% / 0.3%** | **0.0% / 0.7%** |
+| **`dmg-perfect` line width** | 1.00px | 1.27, 1.05px | 1.34, 1.08px |
+
+The reference draws a line of exactly one output pixel, which cannot be placed 6.4
+apart, so its cells alternate six and seven wide. Here `dp_gap` is a thickness in
+pixels *at the whole scale that fits the screen* — 5× at 1024×768, 3× at 640×480 —
+so a line stays about one pixel wide at every resolution while the spacing stays
+exact, and 1.00 is precisely the line the reference draws.
+
+**At every whole scale factor the output is identical to `dmg_dot_matrix`, pixel for
+pixel** (0/255 at 3×, 4× and 5×), whenever the two are set the same. Set
+`dp_brightness` 1.20 and `dp_gamma` 1.40 to reproduce its defaults. Those two are a
+contrast curve applied after the blend, so they give partial-coverage pixels a
+coverage-dependent shift; the defaults leave them neutral and the trade to you.
+
+`dp_shadow` casts a shadow down and right of each dot so they read as sitting above
+the substrate rather than being holes in it, in the manner of libretro's Game Boy
+shaders. It is off by default and the branch is uniform, so it costs nothing until it
+is asked for, and it adds no transcendental and no extra texture fetch when it is.
+
+It does cost pattern, though, and faster than the grid does — a shadow is one-sided
+and locked to the cell boundary, which is the hardest thing to draw cleanly at a
+fractional scale. Worst measured across 1024×768, 853×768, 640×480 and 533×480, where
+anything past about 0.4 starts to show:
+
+| `dp_shadow` | offset 0.5px | 1.0px | 1.5px | 2.5px |
+|---|---|---|---|---|
+| 0.15 | 0.23 | 0.38 | **0.21** | 0.31 |
+| 0.25 | 0.33 | 0.61 | **0.34** | 0.51 |
+| 0.35 | 0.44 | 0.82 | 0.47 | 0.73 |
+| 0.50 | 0.60 | 1.18 | 0.68 | 1.05 |
+
+So keep it around 0.15–0.20. Avoid an offset near exactly 1.00: a one-pixel lobe has
+no solid core, so it wobbles from cell to cell, and it measures worst of any distance.
+
+Below two output pixels per cell there is no room for a dot and a line, so the grid
+fades out rather than folding to a coarser pitch. Every Game Boy case is well above
+that — the smallest is 3.33 at 640×480.
 
 
 ## Performance
