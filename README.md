@@ -14,26 +14,16 @@ performance, brightness, or your sanity.**
 
 I'm sure everyone has their own idea of what a "perfect" retro shader is, but for me, it has to meet a few criteria:
 
-- Good enough to give a **nice retro look without compromising performance**. It runs fast on cheap handheld devices (Trimui Brick, H700, etc.)
+- Good enough to give a **nice retro look without compromising performance**. It runs fast on cheap handheld devices (Trimui Brick, H700, etc).
 - **Avoid brightness loss, moire patterns, and other artifacts** that can be annoying at non-integer scaling factors.
-- **Good defaults, tweakable** yet easy to use even for non-technical users.
+- **Good defaults but tweakable** to appeal both non-technical users and shader enthusiasts alike.
 
 All shaders provided here follow these principles, and were tested on a real device to ensure they meet the performance and visual quality goals.
 
 ## Shaders
 
-TODO
-
-crt-perfect
-lcd-perfect
-pixel-perfect
-dmg-perfect
-
-
-
 > [!IMPORTANT]
-> All shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to work at non-integer scaling factors with almost no visible artifacts/patterns, though the image will still look better at integer scales.
-
+> All shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to work at non-integer scaling factors with almost no visible artifacts/patterns, though the image will still look better at integer scales. 
 
 | Shader | Description |
 |---|---|
@@ -45,7 +35,7 @@ dmg-perfect
 
 ### Parameters
 
-TODO
+(1-line intro here, then keep the descriptions short and to the point for each shader. Include notes and limitations where relevant, as well as tips (for example GBA has a BGR lcd IIRC). Saying to use gamma instead of brightness to brighten is NOT a good tip, as it kills the contrast and wash out the colors. Brightness clips, yes, but matches more the look of old CRTs and LCDs, which is what we're trying to simulate.)
 
 #### pixel-perfect
 
@@ -120,7 +110,7 @@ for three stripes, so it fades out below that and is off almost everywhere at 64
 
 ## Performance
 
-TODO: performance tests 
+TODO: performance tests: pixellate (baseline), pixel-perfect, crt-perfect, lcd-perfect. Include a table with the results and a graph, including real GPU usage.
 
 ## Related
 
