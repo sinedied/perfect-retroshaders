@@ -58,6 +58,104 @@ def checkerboard(w, h):
     return (((yy + xx) % 2) * 255).astype(np.uint8)[..., None].repeat(3, axis=2)
 
 
+def _band(out_w, out_h, src_w, src_h, pattern, fx, fy):
+    """The cutoff mask, shared by the flat and the curved metric."""
+    px_f, py_f = pattern if pattern else (src_w / out_w, src_h / out_h)
+    cx = min(0.5 * src_w / out_w, 0.85 * px_f) * 0.999
+    cy = min(0.5 * src_h / out_h, 0.85 * py_f) * 0.999
+    band = (fy[:, None] < cy) & (fx[None, :] < cx)
+    band[0, 0] = False  # DC is the image's mean level, not a beat
+    return band
+
+
+def _supersampled(src_u8, out_w, out_h, curvature, ss=4):
+    """Ground truth for the warped scale: ss x ss rays per output pixel through
+    the warp, nearest source texel each, averaged. No footprint model is used -
+    the mean of point samples over the pixel is the answer a footprint model is
+    trying to approximate."""
+    src = src_u8.astype(np.float64) / 255.0
+    in_h, in_w = src.shape[:2]
+    off = (np.arange(ss) + 0.5) / ss
+    acc = np.zeros((out_h, out_w, 3))
+    ys, xs = np.mgrid[0:out_h, 0:out_w]
+    for dy in off:
+        for dx in off:
+            u = (xs + dx) / out_w * 2.0 - 1.0
+            v = (ys + dy) / out_h * 2.0 - 1.0
+            s = 1.0 + curvature * (u * u + v * v)
+            su, sv = u * s * 0.5 + 0.5, v * s * 0.5 + 0.5
+            ix = np.clip((su * in_w).astype(int), 0, in_w - 1)
+            iy = np.clip((sv * in_h).astype(int), 0, in_h - 1)
+            inside = (su >= 0) & (su <= 1) & (sv >= 0) & (sv <= 1)
+            acc += src[iy, ix] * inside[..., None]
+    return acc / (ss * ss)
+
+
+def curvature_residual(shaded, src_u8, curvature, src_w, src_h, pattern,
+                       tile=128, ss=(8, 16)):
+    """Worst tile-local low-frequency energy in the *residual* against truth.
+
+    Measuring the curved render directly does not work, and the reason is worth
+    keeping: barrel distortion varies the local magnification on purpose, so
+    block sizes genuinely change across the frame. A band-limited FFT scores
+    that intended variation as beat - it reads 4 to 20 where the flat metric
+    reads 0.26, and none of it is an artifact. That is the trap the flat metric
+    documents wearing a different hat: a band that does not exclude the effect
+    under test measures the effect.
+
+    Differencing against a supersampled reference of the same warp cancels the
+    intended geometry and the black surround, leaving only what the shader got
+    wrong.
+
+    THE REFERENCE IS NOISY AND THE NOISE LOOKS EXACTLY LIKE THE ANSWER. Each ray
+    takes one nearest texel, so a reference built from n samples per pixel
+    quantises to 1/n and on a 1px checkerboard - maximum contrast between
+    neighbours - that quantisation is enormous: 16.2 at 2x2, 8.0 at 4x4, 3.8 at
+    8x8, 1.9 at 16x16, 0.9 at 32x32. Halving on every doubling is the signature
+    of a 1/ss error and nothing to do with the shader, but any single one of
+    those numbers reads as a confident, damning measurement.
+
+    So the error is extrapolated away rather than sampled away: with e = C/ss,
+    two references at ss and 2*ss give 2*r(2ss) - r(ss) with the C term removed.
+    That reads -0.06 where ss=8 alone reads 3.8, and it is stable across which
+    pair is used, which is the check that the model of the error is right.
+    """
+    lo, hi = ss
+    r = []
+    for n in (lo, hi):
+        truth = _supersampled(src_u8, shaded.shape[1], shaded.shape[0],
+                              curvature, n)
+        resid = (shaded.astype(np.float64) / 255.0 - truth).mean(axis=2) * 255.0
+        r.append(_worst_tile(resid, curvature, src_w, src_h, pattern, tile))
+    return max(2.0 * r[1][0] - r[0][0], 0.0), r[1][1]
+
+
+def _worst_tile(resid, curvature, src_w, src_h, pattern, tile):
+    out_h, out_w = resid.shape
+    fx = np.abs(np.fft.fftfreq(tile))
+    band = _band(out_w, out_h, src_w, src_h, pattern, fx, fx)
+
+    ys, xs = np.mgrid[0:out_h, 0:out_w]
+    u = (xs + 0.5) / out_w * 2.0 - 1.0
+    v = (ys + 0.5) / out_h * 2.0 - 1.0
+    s = 1.0 + curvature * (u * u + v * v)
+    su, sv = u * s * 0.5 + 0.5, v * s * 0.5 + 0.5
+    lit = (su >= 0.005) & (su <= 0.995) & (sv >= 0.005) & (sv <= 0.995)
+
+    worst, n = 0.0, 0
+    for y in range(0, out_h - tile + 1, tile):
+        for x in range(0, out_w - tile + 1, tile):
+            if not lit[y:y + tile, x:x + tile].all():
+                continue
+            n += 1
+            F = np.fft.fft2(resid[y:y + tile, x:x + tile]) / (tile * tile)
+            worst = max(worst, float(np.sqrt((np.abs(F[band]) ** 2).sum())))
+    if n == 0:
+        raise ValueError(f"no {tile}x{tile} tile fits inside the tube at "
+                         f"curvature {curvature}")
+    return worst, n
+
+
 def beat(img, src_w, src_h, pattern=None):
     """RMS of everything slower than the content and the pattern, in 8-bit levels."""
     lum = img.astype(np.float64)
@@ -92,11 +190,7 @@ def beat(img, src_w, src_h, pattern=None):
     # 1/offset decay, and an edge sitting on the pattern swallows half its
     # skirt. Windowing the frame was tried and wrecked the self-test; cropping
     # to a whole number of periods just moves the leakage onto the content.
-    px_f, py_f = pattern if pattern else (src_w / out_w, src_h / out_h)
-    cx = min(0.5 * src_w / out_w, 0.85 * px_f) * 0.999
-    cy = min(0.5 * src_h / out_h, 0.85 * py_f) * 0.999
-    band = (fy[:, None] < cy) & (fx[None, :] < cx)
-    band[0, 0] = False  # DC is the image's mean level, not a beat
+    band = _band(out_w, out_h, src_w, src_h, pattern, fx, fy)
     return float(np.sqrt((np.abs(F[band]) ** 2).sum()))
 
 
@@ -226,8 +320,9 @@ def report():
     # that gets gated; a parameter pushed past its default is the user's choice
     # and the headers document what it costs.
     from shaders import REGISTRY
-    cols = [(n.replace(".glsl", "").replace("lcd-perfect", "lcd"), n)
-            for n in REGISTRY if n.startswith("lcd-")]
+    cols = [(n.replace(".glsl", "").replace("lcd-perfect", "lcd")
+              .replace("dmg-perfect", "dmg"), n)
+            for n in REGISTRY if n.startswith(("lcd-", "dmg-"))]
     cols.append(("crt-perfect", "crt-perfect.glsl"))
 
     print("  " + " " * 22 + "".join(f"{n:>14s}" for n, _ in cols))
@@ -248,7 +343,46 @@ def report():
     return worst
 
 
+def report_curvature():
+    """What barrel distortion costs crt-perfect-v6.
+
+    The scaler only, with the patterns disabled: curvature acts on the sampling
+    coordinate, and the patterns are deliberately left in unwarped screen space,
+    so this is where any damage would land. Measured as the residual against a
+    supersampled reference of the same warp, because the curved render cannot be
+    measured directly - see curvature_residual().
+    """
+    from crt_preview import DEFAULTS_V6, render_crt_v6
+
+    print("\ncurvature: worst 128x128 tile of the residual against supersampled")
+    print(f"truth, scaler only (visible above ~{VISIBLE})\n")
+    scales = [((320, 240), (1024, 768)), ((256, 224), (1024, 768)),
+              ((320, 240), (640, 480))]
+    ks = [0.0, 0.05, 0.10, 0.15]
+    off = dict(DEFAULTS_V6, cp_scanlines=0.0, cp_rgb_mask=0.0,
+               cp_mask_type=0.0, cp_brightness=1.0)
+
+    print("  " + " " * 22 + "".join(f"{f'k={k:.2f}':>10s}" for k in ks) + "     tiles")
+    worst, worst_at = 0.0, ""
+    for (sw, sh), (ow, oh) in scales:
+        src = checkerboard(sw, sh)
+        pat = pattern_freq("crt-perfect.glsl", sw, sh, ow, oh)
+        row, tiles = [], 0
+        for k in ks:
+            img = render_crt_v6(src, ow, oh, dict(off, cp_curvature=k))
+            r, tiles = curvature_residual(img, src, k, sw, sh, pat)
+            if r > worst:
+                worst, worst_at = r, f"curvature {k:.2f} at {sw}x{sh} -> {ow}x{oh}"
+            row.append(f"{r:10.3f}")
+        print(f"  {sw}x{sh} -> {ow}x{oh}".ljust(24) + "".join(row) + f"    {tiles:4d}")
+
+    print(f"\n  worst with curvature: {worst:.3f} ({worst_at})   "
+          f"{'OK' if worst <= VISIBLE else 'VISIBLE MOIRE'}")
+    return worst
+
+
 if __name__ == "__main__":
     ok = self_test()
     w = report()
-    sys.exit(0 if ok and w <= VISIBLE else 1)
+    wc = report_curvature()
+    sys.exit(0 if ok and max(w, wc) <= VISIBLE else 1)

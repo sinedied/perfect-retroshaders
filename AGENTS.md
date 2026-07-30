@@ -12,11 +12,16 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | Path | What |
 |---|---|
 | `shaders/crt-perfect.glsl` | CRT: scanlines + RGB mask + pixel-perfect scaling. `cp_` params |
+| `shaders/crt-perfect-v6.glsl` | in flight: v6 adds optional barrel distortion (`cp_curvature`) |
 | `shaders/lcd-perfect.glsl` | LCD: sinusoidal mesh on whole-cell periods, 120-degree stripes. `lp_` params |
 | `shaders/pixel-perfect.glsl` | scaling only, no effect. `pp_` params |
 | `tools/` | the verification harness |
 | `tools/vendor/` | **third-party shaders**, benchmark and comparison references only |
 | `tools/iterations/` | superseded versions of our own shaders, kept for the record |
+
+A `-vN` file in `shaders/` is an iteration still being compared against the canonical
+one; it moves to `tools/iterations/` when it is superseded, or replaces the canonical
+file when it wins. Both stay registered in `tools/shaders.py` either way.
 
 `shaders/` holds only the shaders this repo ships. Anything third-party lives in
 `tools/vendor/`: not part of the MIT grant, not edited, present purely to measure
@@ -205,7 +210,80 @@ the pattern then costs no brightness at all — but it puts the pattern's top ab
 so every bright pixel meets the output clamp, which is the post-blend non-linearity
 the table above already convicts. Measured on `lcd-perfect`: mean-normalised, beat
 0.60 and grid contrast 37; peak-normalised, beat **0.22** and contrast **58**. Better
-on both axes at once. Give the level back with gamma below 1, never with gain.
+on both axes at once.
+
+**Do not turn this into "brighten with gamma, never with gain."** That advice was
+given here and has been **rejected by the project owner**: gamma below 1 flattens
+contrast and washes the colours out, and clipping is what old CRTs and LCDs actually
+did — which is the thing being simulated. Peak normalisation is about where the
+*pattern* sits, not about how the user is told to brighten. `lp_brightness` and
+`cp_brightness` are legitimate controls; the headers state what they cost and stop
+there.
+
+## Barrel distortion (crt-perfect-v6)
+
+Curvature is **pure ALU** — a radial polynomial warp is `dot(c,c)` and a few
+multiply-adds, with no `tan`/`atan` anywhere. That is what makes it affordable here
+where CRT-Geom-style curvature is not: **588 ops / 4 tex / 14 SFU** against the flat
+shader's 501 / 4 / **14**. SFU, the metric this repo trusts, is *unchanged*. ALU is
++17%, which has never been validated on the Mali — "+0 on the metric we trust" is not
+the same claim as "free", and only the device can close that gap.
+
+Three things had to be got right, and two of them are not obvious.
+
+- **Warp the sampling coordinate only; leave the patterns in screen space.**
+  `vTexCoord` does double duty in this shader — it samples the source *and*, times
+  `OutputSize`, positions the scanlines and the mask. Warping it warps both, which
+  detunes the grid-locking the whole shader is built on. Measured on a flat field,
+  worst interior tile: patterns-flat is **completely** unaffected by curvature (0.048
+  at 1024x768 and 0.002 at 640x480, at every `k`), while warping them costs 2x at
+  1024x768 and **65x** at 640x480. Neither crosses visibility, so a warped mask is a
+  legitimate look — it is what a real tube does — but it is strictly worse where the
+  shader is already tightest, and it is not the default for that reason.
+- **The footprint correction is not cosmetic, and it is anisotropic.** The scaler
+  derives `range` from a constant `InputSize/OutputSize`; under warp the local
+  magnification varies, so at the edges the footprint is too small and the blend is
+  wrong over about a third of the frame, by up to 94/255. The correction is *not* the
+  scalar radial factor: for `u' = u(1 + k(u^2+v^2))` the axis-aligned derivatives are
+  `1 + k(3u^2 + v^2)` and `1 + k(u^2 + 3v^2)`, which differ. Both fall out of `c*c`,
+  already computed for `r2`, so the exact per-axis Jacobian costs the same as the
+  wrong scalar one. Against a supersampled reference (RMS in 8-bit levels):
+
+  | `cp_curvature` | no correction | isotropic (wrong) | anisotropic (shipped) |
+  |---|---|---|---|
+  | 0.05 | 0.901 | 0.861 | **0.817** |
+  | 0.10 | 1.049 | 0.927 | **0.778** |
+  | 0.15 | 1.239 | 1.007 | **0.753** |
+
+  Note the direction: uncorrected error *rises* with curvature while the corrected
+  error *falls*. That divergence, not the absolute values, is what says the correction
+  is right rather than merely different.
+- **A curved render cannot be measured with the flat beat metric.** Barrel distortion
+  varies the local magnification on purpose, so block sizes genuinely change across the
+  frame and a band-limited FFT scores that intended variation as moire — it reads 4 to
+  20 where the flat metric reads 0.26. Difference against a supersampled reference of
+  the same warp instead: that cancels the intended geometry *and* the black surround,
+  whose step edge otherwise dominates every spectrum (13-22). See the reference-noise
+  trap above before trusting any number that comes out of this.
+
+**Black frame, not auto-zoom.** With `k > 0` the image sits inside a curved border and
+screen area is lost. The usual fix is a compensating zoom, and it was rejected here on
+measurement: filling the screen at `k = 0.10` crops **6.6% off each edge**, about 16
+lines of a 240-line image, and retro games put health bars, timers and score counters
+hard against the edge. Silently eating a HUD is a worse surprise than a border, and a
+curved black frame reads as a bezel. `cp_curvature` is capped at **0.15** on the same
+argument — 24% of the display is about the limit of reasonable.
+
+| `cp_curvature` | screen lost to the frame | crop per edge if zoomed instead |
+|---|---|---|
+| 0.05 | 10.8% | 3.9% |
+| 0.10 | 18.4% | 6.6% |
+| 0.15 | 24.3% | 8.5% |
+| 0.30 | 36.1% | 12.6% |
+
+At `cp_curvature = 0`, v6 is **bit-identical** to the flat shader (0/255 across three
+sources and three scale factors). The guard is a uniform branch, the same pattern
+`cp_gamma` uses, so off costs nothing.
 
 ## LCD apertures, and why they are not sinusoids
 
@@ -418,6 +496,33 @@ rather than the ones just edited. Per-variant constants, or run the whole gate.
 Also: the desktop GL context is 4.1 Core, so ESSL-1.00 shaders do not run there. The
 harness compiles them as `#version 410 core` via the compat macros; the device is the
 only true target.
+
+### A supersampled reference is itself a measurement, and it lies convincingly
+
+`beat.py`'s `_supersampled()` builds ground truth by shooting `ss * ss` rays per output
+pixel and taking the nearest texel for each. Each ray is a point sample, so a reference
+built from `n` samples quantises to `1/n`, and on a 1px checkerboard — maximum contrast
+between neighbours — that quantisation is enormous:
+
+| rays per pixel | measured "shader error" |
+|---|---|
+| 2x2 | 16.18 |
+| 4x4 | 8.00 |
+| 8x8 | 3.82 |
+| 16x16 | 1.88 |
+| 32x32 | 0.91 |
+
+**Halving on every doubling is the signature of a `1/ss` error in the reference**, and
+none of it is the shader. Any single row of that table reads as a damning result — 8.00
+against a visible threshold of 0.4 — and the curvature work briefly "found" exactly
+that artifact before the convergence was checked.
+
+The fix is to extrapolate the error away rather than sample it away: with `e = C/ss`,
+two references at `ss` and `2*ss` give `2*r(2ss) - r(ss)` with the `C` term cancelled.
+That reads **-0.06** where `ss=8` alone reads 3.82, and it is stable across which pair
+is used — which is the check that the error model is right, not just convenient.
+
+**Rule: never quote a number from a sampled reference without showing it converged.**
 
 ## LCD meshes: what v3 had to fix
 

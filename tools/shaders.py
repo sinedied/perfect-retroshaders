@@ -9,8 +9,8 @@ Add a shader by adding an entry. Nothing else needs wiring.
 """
 
 from crt_preview import (
-    DEFAULTS, DEFAULTS_V2, DEFAULTS_V3, DEFAULTS_V4, DEFAULTS_V5,
-    render_crt, render_crt_v3, render_crt_v4, render_crt_v5,
+    DEFAULTS, DEFAULTS_V2, DEFAULTS_V3, DEFAULTS_V4, DEFAULTS_V5, DEFAULTS_V6,
+    render_crt, render_crt_v3, render_crt_v4, render_crt_v5, render_crt_v6,
 )
 from lcd_preview import (
     # aliased: crt_preview exports a DEFAULTS_V3 of its own, and a bare
@@ -91,6 +91,17 @@ REGISTRY = {
             ("slot mask", dict(cp_mask_type=2.0)),
             ("gamma 0.7", dict(cp_gamma=0.7)),
             ("gamma 1.6", dict(cp_gamma=1.6)),
+        ],
+    ),
+    "crt-perfect-v6.glsl": Model(
+        render=render_crt_v6,
+        defaults=DEFAULTS_V6,
+        variants=[
+            ("curvature 0.05", dict(cp_curvature=0.05)),
+            ("curvature 0.10", dict(cp_curvature=0.10)),
+            ("curvature 0.15", dict(cp_curvature=0.15)),
+            ("curved slot mask", dict(cp_curvature=0.10, cp_mask_type=2.0)),
+            ("curved gamma 1.6", dict(cp_curvature=0.10, cp_gamma=1.6)),
         ],
     ),
     "lcd-perfect-v1.glsl": Model(

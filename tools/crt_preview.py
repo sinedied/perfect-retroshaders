@@ -35,6 +35,8 @@ DEFAULTS_V5 = dict(
     cp_gamma=1.0,
 )
 
+DEFAULTS_V6 = dict(DEFAULTS_V5, cp_curvature=0.0)
+
 DEFAULTS_V4 = dict(
     Scanlines=0.55,
     RGB_Mask=0.40,
@@ -309,6 +311,114 @@ def render_crt_v5(src_u8, out_w, out_h, p=None, after=False, quantise=True):
     # quantise=False returns 0..1 floats. Only the output format changes; beat.py
     # needs them unquantised because the figures it reports are smaller than one
     # 8-bit level.
+    return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
+
+
+def render_crt_v6(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors crt-perfect-v6.glsl: the shipped shader plus barrel distortion.
+
+    Written from the geometry rather than from the GLSL. The warp makes the
+    sampling coordinate a full 2D field - u depends on the row and v on the
+    column - so the separable 1D arrays the other models use do not survive
+    here, and the taps have to be gathered per pixel.
+
+    The patterns are deliberately *not* warped: they keep the unwarped screen
+    coordinate, which is what preserves their lock to the output pixel grid.
+    """
+    p = dict(DEFAULTS_V6, **(p or {}))
+    src = src_u8.astype(np.float64) / 255.0
+    in_h, in_w = src.shape[:2]
+    tex_w, tex_h = in_w, in_h
+    k = p["cp_curvature"]
+
+    # screen coordinate, before any warp: this is what the patterns use
+    u1 = (np.arange(out_w) + 0.5) / out_w
+    v1 = (np.arange(out_h) + 0.5) / out_h
+    u, v = np.meshgrid(u1, v1)
+
+    su, sv = u, v
+    jac_x = jac_y = 1.0
+    tube = 1.0
+    if k > 0.0:
+        # map to [-1,1], push each point outward by (1 + k r^2), map back
+        cx, cy = u * 2.0 - 1.0, v * 2.0 - 1.0
+        xx, yy = cx * cx, cy * cy
+        r2 = xx + yy
+        stretch = 1.0 + k * r2
+        su = cx * stretch * 0.5 + 0.5
+        sv = cy * stretch * 0.5 + 0.5
+
+        # d/dx of x(1 + k(x^2+y^2)) = 1 + k(3x^2 + y^2), and symmetrically in y.
+        # The two differ, so the footprint is anisotropic under this warp.
+        jac_x = 1.0 + k * (3.0 * xx + yy)
+        jac_y = 1.0 + k * (xx + 3.0 * yy)
+
+        ex, ey = 1.0 / out_w, 1.0 / out_h
+        tube = (smoothstep(0.0, ex, su) * smoothstep(0.0, ex, 1.0 - su)
+                * smoothstep(0.0, ey, sv) * smoothstep(0.0, ey, 1.0 - sv))
+
+    rng_x = abs(in_w / (out_w * tex_w)) / 2.0 * 0.999 * jac_x
+    rng_y = abs(in_h / (out_h * tex_h)) / 2.0 * 0.999 * jac_y
+    texel_x, texel_y = 1.0 / tex_w, 1.0 / tex_h
+
+    left, right = su - rng_x, su + rng_x
+    bottom, top = sv - rng_y, sv + rng_y
+    ix_l = np.clip(np.floor(left / texel_x).astype(int), 0, tex_w - 1)
+    ix_r = np.clip(np.floor(right / texel_x).astype(int), 0, tex_w - 1)
+    iy_b = np.clip(np.floor(bottom / texel_y).astype(int), 0, tex_h - 1)
+    iy_t = np.clip(np.floor(top / texel_y).astype(int), 0, tex_h - 1)
+    border_x = np.clip(np.floor(su / texel_x + 0.5) * texel_x, left, right)
+    border_y = np.clip(np.floor(sv / texel_y + 0.5) * texel_y, bottom, top)
+    wl = (border_x - left) / (2.0 * rng_x)
+    wt = (top - border_y) / (2.0 * rng_y)
+    wr, wb = 1.0 - wl, 1.0 - wt
+
+    col = (src[iy_b, ix_l] * (wb * wl)[..., None]
+           + src[iy_b, ix_r] * (wb * wr)[..., None]
+           + src[iy_t, ix_l] * (wt * wl)[..., None]
+           + src[iy_t, ix_r] * (wt * wr)[..., None])
+
+    if abs(p["cp_gamma"] - 1.0) > 0.001:
+        col = np.power(np.maximum(col, 1e-8), p["cp_gamma"])
+
+    mp = p["cp_min_pitch"]
+
+    scan_src = out_h / max(in_h, 1)
+    scan_pitch = max(scan_src, mp)
+    scan_locked = 1.0 - smoothstep(mp * 1.001, mp * 1.02, scan_src)
+    scan_f = 1.0 / scan_pitch
+    scan_amp = p["cp_scanlines"] * (nyquist_fade(scan_f) * (1 - scan_locked) + scan_locked)
+    scan_ac = 0.5 * scan_amp * (box_sinc(scan_f) * (1 - scan_locked) + scan_locked)
+
+    scan = np.ones(out_h)
+    if scan_amp > 0.0:
+        y = v1 * out_h - 0.5 * scan_locked
+        scan = (1.0 - 0.5 * scan_amp) - scan_ac * np.cos(
+            2.0 * math.pi * np.mod(y * scan_f, 1.0))
+
+    mask_src = out_w / max(in_w * p["cp_mask_size"], 1)
+    mask_pitch = max(mask_src, mp)
+    mask_locked = 1.0 - smoothstep(mp * 1.001, mp * 1.02, mask_src)
+    mask_f = 1.0 / mask_pitch
+    mask_amp = p["cp_rgb_mask"] * (nyquist_fade(mask_f) * (1 - mask_locked) + mask_locked)
+
+    mask = np.ones((out_h, out_w, 3))
+    if mask_amp > 0.0 and p["cp_mask_type"] >= 0.5:
+        x = u1 * out_w - 0.5 * mask_locked
+        phase = x * mask_f - 1.0 / 6.0
+        ph = np.repeat(phase[None, :], out_h, axis=0)
+        if p["cp_mask_type"] >= 1.5:
+            row = np.floor((v1 * out_h - 0.5 * scan_locked) * scan_f + 1e-3)
+            ph = ph + 0.5 * np.mod(row, 2.0)[:, None]
+        dc = 1.0 - 0.5 * mask_amp
+        ac = 0.5 * mask_amp * (box_sinc(mask_f) * (1 - mask_locked) + mask_locked)
+        off = np.array([0.0, 1.0 / 3.0])
+        rg = dc + ac * np.cos(2.0 * math.pi * (np.mod(ph, 1.0)[..., None] - off))
+        b = np.maximum(3.0 * dc - rg[..., :1] - rg[..., 1:2], 0.0)
+        mask = np.concatenate([rg, b], axis=2)
+
+    gain = np.sqrt(np.maximum(mask * (scan[:, None, None] * p["cp_brightness"]), 0.0))
+    out = np.clip(col * gain * np.asarray(tube)[..., None], 0.0, 1.0)
     return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
 
 
