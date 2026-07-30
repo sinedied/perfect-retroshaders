@@ -32,6 +32,8 @@ DEFAULTS_PP_V3 = dict(
     pp_gamma=1.00,
 )
 
+DEFAULTS_PP_V4 = dict(DEFAULTS_PP_V3)
+
 # Rec.709, matching LUMA in pixel-perfect-v3.glsl.
 LUMA_709 = np.array([0.2126, 0.7152, 0.0722])
 
@@ -272,6 +274,38 @@ def render_pixel_perfect_v3(src_u8, out_w, out_h, p=None, quantise=True):
     col = col * (A * s) + (luma * (A * (1.0 - s)) + B)
 
     col = np.clip(col, 0.0, 1.0)
+    if abs(p["pp_gamma"] - 1.0) > 0.001:
+        col = np.power(np.maximum(col, 1e-8), p["pp_gamma"])
+    return (col * 255.0 + 0.5).astype(np.uint8) if quantise else col
+
+
+def render_pixel_perfect_v4(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors pixel-perfect-v4.glsl: v3 with the affine block behind a guard.
+
+    Same output as v3 everywhere - the guard is an exact comparison with no dead
+    band, and at 1.00 the block it skips is col*1.0 + 0.0, which is exact, so
+    the two agree at every parameter value rather than merely outside a
+    tolerance. That is why this is a guard and not a behaviour change.
+
+    Tested separately per control, never as a sum: brightness 1.1 with contrast
+    0.9 sums to exactly 3.0 and would be read as neutral.
+
+    The clamp is inside the guard because only a grade can push a value out of
+    0 to 1: the scaler's output is a convex blend of taps already in range.
+    """
+    p = dict(DEFAULTS_PP_V4, **(p or {}))
+    src = src_u8.astype(np.float64) / 255.0
+    col = area_average(src, out_w, out_h)[0]
+
+    if (p["pp_brightness"] != 1.0 or p["pp_contrast"] != 1.0
+            or p["pp_saturation"] != 1.0):
+        ga = p["pp_brightness"] * p["pp_contrast"]
+        gb = 0.5 - 0.5 * p["pp_contrast"]
+        s = p["pp_saturation"]
+        luma = (col * LUMA_709).sum(axis=-1, keepdims=True)
+        col = col * (ga * s) + (luma * (ga * (1.0 - s)) + gb)
+        col = np.clip(col, 0.0, 1.0)
+
     if abs(p["pp_gamma"] - 1.0) > 0.001:
         col = np.power(np.maximum(col, 1e-8), p["pp_gamma"])
     return (col * 255.0 + 0.5).astype(np.uint8) if quantise else col

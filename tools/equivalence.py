@@ -20,6 +20,49 @@ from paths import shader_path
 PIXELLATE = shader_path("pixellate.glsl")
 PIXEL_PERFECT = shader_path("pixel-perfect.glsl")
 PIXEL_PERFECT_V3 = shader_path("pixel-perfect-v3.glsl")
+PIXEL_PERFECT_V4 = shader_path("pixel-perfect-v4.glsl")
+
+# v4 guards v3's affine block with an exact uniform test, so the two must agree
+# at EVERY setting, not merely at the one that skips the block. Near-neutral
+# values are in here on purpose: an epsilon guard would skip them and disagree
+# with v3 over a whole range, which is the reason the guard is exact.
+V4_SWEEP = [
+    ("defaults", {}),
+    ("greyscale", dict(pp_saturation=0.0)),
+    ("oversaturated", dict(pp_saturation=1.8)),
+    ("flat", dict(pp_contrast=0.4)),
+    ("clipped contrast", dict(pp_contrast=2.0)),
+    ("dim", dict(pp_brightness=0.6)),
+    ("clipped gain", dict(pp_brightness=2.0)),
+    ("gamma 0.7", dict(pp_gamma=0.7)),
+    ("gamma 1.4", dict(pp_gamma=1.4)),
+    ("full grade", dict(pp_saturation=1.3, pp_contrast=1.2,
+                        pp_brightness=1.1, pp_gamma=0.9)),
+    ("barely graded", dict(pp_contrast=1.0003)),
+    ("cancelling deviations", dict(pp_brightness=1.1, pp_contrast=0.9)),
+]
+
+# The exact text of v4's guard, so the unreachable-branch control below can
+# replace it. Asserted at use, because a silent miss would turn the control
+# into a copy of v4 and it would agree with itself.
+COND_V4 = """    if (pp_brightness != 1.0 || pp_contrast != 1.0
+        || pp_saturation != 1.0) {"""
+
+
+def transition_mask(iw, ih, ow, oh):
+    """Output pixels whose footprint straddles a texel boundary on either axis.
+
+    These are the only pixels where the blend does any arithmetic at all -
+    everywhere else a weight clamps to exactly 0 or 1 and the result is a texel
+    copied through - so they are the only ones a change in how that arithmetic
+    is contracted can possibly move.
+    """
+    u = (np.arange(ow) + 0.5) / ow * iw
+    v = (np.arange(oh) + 0.5) / oh * ih
+    hx, hy = 0.4995 * iw / ow, 0.4995 * ih / oh
+    wx = np.clip((np.floor(u + 0.5) - u + hx) / (2 * hx), 0, 1)
+    wy = np.clip((np.floor(v + 0.5) - v + hy) / (2 * hy), 0, 1)
+    return ((wx > 0) & (wx < 1))[None, :] | ((wy > 0) & (wy < 1))[:, None]
 
 CASES = [(320, 240, 1024, 768), (256, 224, 1024, 768), (352, 240, 1024, 768),
          (368, 240, 1280, 720), (320, 240, 1280, 720), (160, 144, 1024, 768),
@@ -68,7 +111,8 @@ def main():
     ctx = moderngl.create_standalone_context()
     prog = {}
     for name, path in (("pixellate", PIXELLATE), ("pixel-perfect", PIXEL_PERFECT),
-                       ("pixel-perfect-v3", PIXEL_PERFECT_V3)):
+                       ("pixel-perfect-v3", PIXEL_PERFECT_V3),
+                       ("pixel-perfect-v4", PIXEL_PERFECT_V4)):
         s = open(path).read()
         prog[name] = ctx.program(vertex_shader=stage_source(s, "vert"),
                                  fragment_shader=stage_source(s, "frag"))
@@ -91,6 +135,11 @@ def main():
         worst = max(worst, mx)
         print(f"   {iw}x{ih:<6d} {ow}x{oh:<5d} {ow/iw:5.2f}x{oh/ih:<5.2f} {mx:4d} {pc:6.2f}%")
     print(f"\n   worst: {worst}/255")
+    print("   1/255 here is float32 rounding, not a disagreement: the four"
+          "\n   corner-area products and the divide factor into one horizontal"
+          "\n   and one vertical weight, which is exact to 2.5e-15 in float64"
+          "\n   but is a different order of operations on the GPU. The >1/255"
+          "\n   column is the one that would have to be 0.00% either way.")
 
     print("\n2. Block structure at 320x240 -> 1024x768 (3.2x)\n")
     src = np.zeros((240, 320, 3), np.uint8)
@@ -143,7 +192,68 @@ def main():
     verdict = "bit-identical" if worst_v3 == 0 else "NOT NEUTRAL AT DEFAULTS"
     print(f"\n   worst: {worst_v3}/255   {verdict}")
 
-    return 0 if worst == 0 and worst_v3 == 0 else 1
+    print("\n7. pixel-perfect-v4 vs v3, over the whole parameter range\n")
+    print("   v4 only guards v3's affine block behind an exact uniform test, so"
+          "\n   it has to agree with v3 at EVERY setting, not just at the one"
+          "\n   that skips the block. The near-neutral rows are the point: an"
+          "\n   epsilon guard would skip those and quietly disagree with v3"
+          "\n   across a whole band of settings.\n")
+    print(f"   {'configuration':<24s} {'max diff':>9s} {'px':>7s}")
+    worst_v4, ndiff = 0, 0
+    for label, over in V4_SWEEP:
+        mx, n = 0, 0
+        for iw, ih, ow, oh in CASES[:6]:
+            for _, s in sources(iw, ih, rng):
+                p3 = dict(DEFAULTS_PP_V3, **over)
+                a = gl_render(ctx, prog["pixel-perfect-v3"], s, ow, oh, p3).astype(int)
+                b = gl_render(ctx, prog["pixel-perfect-v4"], s, ow, oh, p3).astype(int)
+                mx = max(mx, int(np.abs(a - b).max()))
+                n += int((np.abs(a - b) > 0).any(axis=2).sum())
+        worst_v4 = max(worst_v4, mx)
+        ndiff += n
+        print(f"   {label:<24s} {mx:6d}/255 {n:7d}")
+
+    # The control. Same shader, but the branch is one the driver cannot fold
+    # away and can never take, so the affine block is unreachable and the grade
+    # cannot be what differs. If this reproduces v4's divergence exactly, the
+    # divergence belongs to the branch's presence and not to anything v4 does.
+    src4 = open(PIXEL_PERFECT_V4).read()
+    if COND_V4 not in src4:
+        raise SystemExit("equivalence.py: the v4 guard moved; fix COND_V4")
+    never = src4.replace(COND_V4, "    if (OutputSize.x < 0.0) {")
+    prog["never"] = ctx.program(vertex_shader=stage_source(never, "vert"),
+                                fragment_shader=stage_source(never, "frag"))
+    same, tr_only = True, True
+    for iw, ih, ow, oh in CASES[:6]:
+        for _, s in sources(iw, ih, rng):
+            d = dict(DEFAULTS_PP_V3)
+            a = gl_render(ctx, prog["pixel-perfect-v3"], s, ow, oh, d).astype(int)
+            b = gl_render(ctx, prog["pixel-perfect-v4"], s, ow, oh, d).astype(int)
+            c = gl_render(ctx, prog["never"], s, ow, oh, d).astype(int)
+            same &= bool((np.abs(a - b) == np.abs(a - c)).all())
+            tr_only &= bool((np.abs(a - b) > 0).any(axis=2)[
+                transition_mask(iw, ih, ow, oh) == False].sum() == 0)
+
+    print(f"\n   worst: {worst_v4}/255 over {ndiff} pixels")
+    print(f"   an unreachable branch reproduces it exactly: "
+          f"{'yes' if same else 'NO'}")
+    print(f"   confined to transition pixels: {'yes' if tr_only else 'NO'}")
+    print("\n   So this is not the grade. Putting ANY branch after the blend"
+          "\n   changes how the driver contracts the blend's own arithmetic, and"
+          "\n   the only pixels that can show it are the ones whose weights are"
+          "\n   strictly between 0 and 1. v3 and v4 are the same computation"
+          "\n   rounded two ways; gl_check scores both at 1/255 against the"
+          "\n   float64 model, so neither is the more correct one.")
+
+    ok_v4 = worst_v4 <= 1 and same and tr_only
+    # Three different claims, three different bars, and they are not
+    # interchangeable. pixellate is a different formulation of the same maths,
+    # so it is equal to float32 rounding; v3 at its defaults is the SAME code
+    # path with the grade folding to col*1 + 0, so it is exactly equal and
+    # anything else is a bug; v4 is the same computation with a branch after it,
+    # which the driver contracts differently, so it is rounding again - but with
+    # the unreachable-branch control alongside to prove that is all it is.
+    return 0 if worst <= 1 and worst_v3 == 0 and ok_v4 else 1
 
 
 if __name__ == "__main__":

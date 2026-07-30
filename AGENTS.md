@@ -20,6 +20,7 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | `shaders/pixel-perfect.glsl` | scaling only, no effect. `pp_` params |
 | `shaders/pixel-perfect-v2.glsl` | in flight: adds a post-blend `pp_gamma` |
 | `shaders/pixel-perfect-v3.glsl` | in flight: no `pp_sharpness`, adds a four-control grade |
+| `shaders/pixel-perfect-v4.glsl` | in flight: v3, but the grade costs nothing when off |
 | `shaders/dmg-perfect-v3.glsl` | Game Boy DMG: two-pass in one pass, plus a cast shadow. `dp_` params |
 | `shaders/dmg-perfect-v2.glsl` | superseded: same scaling, shadow measured opacity against white |
 | `shaders/dmg-perfect-v1.glsl` | superseded: gap as a share of a cell, forced to 2px |
@@ -898,6 +899,7 @@ fraction of the cost. Two things in the original are redundant:
 | `pixel-perfect.glsl` | 112 | 4 | **0** |
 | `pixel-perfect-v2.glsl` | 131 | 4 | 6 |
 | `pixel-perfect-v3.glsl` | 161 | 4 | 6 |
+| `pixel-perfect-v4.glsl` | 174 | 4 | 6 |
 
 Four taps stay: an output footprint spans up to two texels per axis, so four is the
 minimum without delegating the blend to the texture unit. A one-tap LINEAR variant was
@@ -986,6 +988,117 @@ Note the declaration order (`pp_saturation`, `pp_contrast`, `pp_brightness`, `pp
 per the "brightness then gamma last" rule) deliberately differs from the evaluation
 order (brightness → contrast → saturation → gamma). The fold makes the evaluation order
 invisible in the code, so it is stated in the comment there.
+
+### Making it free when it is off, and what that cost to measure
+
+`pixel-perfect-v4` is v3 with the affine block and its clamp behind one uniform guard,
+the way `pp_gamma` already was. Measured by removing each block and recompiling: the
+affine block is **32 instructions**, the gamma block 16 plus 6 SFU lanes.
+
+**Compare the three controls separately and exactly.** Two forms were rejected:
+
+- `abs(b + k + s - 3.0) > eps` is **wrong**, not merely worse — brightness 1.1 with
+  contrast 0.9 sums to exactly 3.0, so a real grade is dropped without a trace.
+- summing the absolute deviations is correct but costs 17 instructions against 13 for
+  three exact comparisons, *and* it opens a dead band in which v4 and v3 disagree.
+
+**An epsilon here would have been cargo-culted from the gamma guard.** That one needs a
+dead band for an accuracy reason: `pow(x, 1.0)` is `exp2(log2(x))` on a GPU and rounds,
+so a gamma of 1.0 is not otherwise a no-op. The affine block at 1.00 is `col*1.0 + 0.0`,
+which is exact — nothing to protect against, so exact comparison is both cheaper and
+strictly equivalent. Check which of those two situations applies before copying a guard.
+
+### `spirv_cost.py` counts both arms of a branch, so it reported v4 as a regression
+
+The static count walks every instruction regardless of control flow. v4 reads **174**
+against v3's 161 while executing far less, which is exactly backwards, and quoting it
+would have buried the change. The tool now also compiles each shader through
+`spirv-opt` twice — once with the parameters live, once with `PARAMETER_UNIFORM`
+undefined so each resolves to its `#define` fallback and the guards fold away:
+
+| | ops | live | at defaults | SFU at defaults |
+|---|---|---|---|---|
+| `pixel-perfect.glsl` | 112 | 106 | 104 | 0 |
+| `pixel-perfect-v2.glsl` | 131 | 124 | 109 | 0 |
+| `pixel-perfect-v3.glsl` | 161 | 152 | 123 | 0 |
+| **`pixel-perfect-v4.glsl`** | 174 | 165 | **111** | 0 |
+| `crt-perfect.glsl` | 501 | 459 | 403 | **8**, from 14 |
+| `lcd-perfect.glsl` | 434 | 397 | 343 | **15**, from 39 |
+| `dmg-perfect-v3.glsl` | 459 | 445 | **265** | 0 |
+| `pixellate.glsl` | 292 | 254 | 240 | 30 |
+
+**The `at defaults` column understates an explicit guard, and that is the trap in it.**
+With the parameters as literals the optimiser also folds arithmetic that is merely
+neutral — v3's `col*1.0 + 0.0` collapses although v3 has no guard at all — and no
+runtime can do that with live uniforms. So it is a *lower* bound on what a guard buys:
+v4 reads 12 ops better than v3 there, where the runtime gap is nearer 19. Safe direction
+to be wrong in, but do not quote it as the saving.
+
+The unoptimised `ops` column is deliberately left alone: every cost figure recorded in
+this file is in those units, and re-basing them would invalidate the lot.
+
+### A branch after the blend perturbs the blend, and it is not a bug
+
+v4 is **1/255 from v3 on 0.02% of pixels**, not bit-identical, and the reason is worth
+knowing because any future guard added after the scaler will do the same.
+
+The cause is not the grade. `equivalence.py` compiles a control: the same shader with
+its condition replaced by `OutputSize.x < 0.0`, which can never be true and which the
+driver cannot fold away. That control **reproduces v4's divergence exactly**, and every
+differing pixel is a transition pixel — one whose blend weights are strictly between 0
+and 1, which is the only place the blend does arithmetic at all. Putting any branch
+after the blend changes which floating-point contractions the driver picks for the
+blend itself.
+
+So v3 and v4 are the same computation rounded two ways, and `gl_check` scores both at
+1/255 against the float64 model — neither is the more correct one. The gate is
+`<= 1` **plus** the control agreeing and the divergence staying on transition pixels;
+a bare tolerance of 1 would have hidden a real logic error of the same size.
+
+**Three claims, three different bars, and they are not interchangeable:**
+
+| | bar | why |
+|---|---|---|
+| `pixel-perfect` vs `pixellate` | 1/255 | a different formulation of the same maths |
+| v3 at defaults vs `pixel-perfect` | **0/255** | the same code path; the grade folds exactly |
+| v4 vs v3 | 1/255 + control | same computation, different contraction |
+
+The middle one was asserted at `== 0` for `pixellate` too when the gate was first
+written, which is simply not true of it, and `equivalence.py` shipped exiting 1 for a
+commit before anyone noticed — because the exit code was being read through a pipe, so
+`$?` was `tail`'s status and not the tool's. **Read `PIPESTATUS`, or do not pipe.**
+
+### `#define` fallbacks can disagree with `#pragma` defaults
+
+The `at defaults` column trusts each parameter's `#define` fallback, so `check_headers.py`
+now verifies it matches that parameter's `#pragma` default. Three shaders failed when
+the check was added, and the first was shipped:
+
+| shader | parameter | `#pragma` | stale `#define` |
+|---|---|---|---|
+| `lcd-perfect.glsl` — **fixed** | `lp_grid` | 0.30 | 0.34 |
+| `lcd-perfect.glsl` — **fixed** | `lp_balance` | 0.50 | 0.79 |
+| `lcd-perfect.glsl` — **fixed** | `lp_brightness` | 1.20 | 1.00 |
+| `crt-perfect-v8/v9.glsl` | `cp_scanlines` | 0.60 | 0.55 |
+| `crt-perfect-v8/v9.glsl` | `cp_rgb_mask` | 0.20 | 0.40 |
+
+`lcd-perfect`'s were the **pre-retune values**, left behind when the defaults were tuned
+in the `#pragma` block and nowhere else — 0.79 is exactly the balance that matched
+lcd1x's white-field figures before the render showed 0.50 read better. A host that does
+not parse `#pragma parameter` renders the `#define` values, so the shader shipped one
+look and documented another, and that class of host is already on the record elsewhere
+in this file.
+
+**A default lives in three places here and nothing used to tie them together**: the
+`#pragma` line, the `#define` fallback, and the model's `DEFAULTS_*` dict. The model
+had been retuned along with the `#pragma`, which is why `gl_check` stayed green
+throughout — it passes the registry's defaults explicitly and compiles with
+`PARAMETER_UNIFORM` defined, so it never reads the fallback at all. **No existing gate
+could see this.** That is the argument for the check, not the two levels of grid it cost.
+
+It is a **warning, not a failure**, because two shaders still fail and both are
+in-flight. Fix `crt-perfect-v8/v9`, then move it into `check()` — a warning nobody
+promotes is a warning that rots.
 
 ## Measurement traps
 

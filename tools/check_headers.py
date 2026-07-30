@@ -15,6 +15,9 @@ Checks, per shipped shader:
   - the PARAMETERS block and the #pragma lines list the same identifiers, in the
     same order, with the same ranges, and every default inside its own range
 
+And one thing it warns about rather than failing on: a parameter whose #define
+fallback disagrees with its #pragma default. See fallbacks() for why.
+
 Run:  cd tools && PYTHONPATH=. python3 check_headers.py
 Exits non-zero on the first shader that fails, so it can gate a commit.
 """
@@ -122,9 +125,44 @@ def check(name):
     return [f"{name}: {e}" for e in errors]
 
 
+def fallbacks(name):
+    """Mismatches between a parameter's #pragma default and its #define fallback.
+
+    Every shader declares each parameter twice - as a uniform when the host
+    defines PARAMETER_UNIFORM, and as a literal #define when it does not. A host
+    that does not parse #pragma parameter renders the #define values, so the two
+    disagreeing means the shader ships one look and documents another.
+
+    Reported rather than failed, because two shaders disagree today and neither
+    is this check's business to change. Promote it into check() once they are
+    fixed; a warning nobody promotes is a warning that rots.
+
+    A default lives in three places - the #pragma line, this fallback, and the
+    model's DEFAULTS_* dict - and nothing else ties them together. gl_check
+    cannot see a stale fallback: it passes the registry's defaults explicitly
+    and compiles with PARAMETER_UNIFORM defined, so it never reads one.
+    lcd-perfect shipped with its pre-retune values here for exactly that reason.
+
+    spirv_cost.py's 'at defaults' column also reads these fallbacks, so a
+    mismatch quietly makes that column describe a configuration nobody runs.
+    """
+    lines = open(shader_path(name)).read().split("\n")
+    prag, defs = {}, {}
+    for line in lines:
+        m = PRAGMA.match(line)
+        if m:
+            prag[m.group(1)] = float(m.group(3))
+        d = re.match(r'^#define\s+(\w+)\s+(-?[\d.]+)\s*$', line)
+        if d:
+            defs[d.group(1)] = float(d.group(2))
+    return [(k, prag[k], defs[k]) for k in prag
+            if k in defs and abs(prag[k] - defs[k]) > 1e-9]
+
+
 if __name__ == "__main__":
     names = sys.argv[1:] or list_shaders()
     failed = []
+    mismatched = []
     for name in names:
         errors = check(name)
         n = sum(1 for l in open(shader_path(name))
@@ -136,6 +174,20 @@ if __name__ == "__main__":
                 print(f"  {e}")
         else:
             print(f"{name:<22s} ok   ({n} parameters, header agrees)")
+        fb = fallbacks(name)
+        if fb:
+            mismatched.append(name)
+            for k, p, d in fb:
+                print(f"  warning: {k} defaults to {p:g} but its #define "
+                      f"fallback is {d:g}")
 
     print(f"\n{len(names) - len(failed)}/{len(names)} passed")
+    if mismatched:
+        print(f"\n{len(mismatched)} shader(s) have #define fallbacks that "
+              f"disagree with their\n#pragma defaults: "
+              f"{', '.join(mismatched)}."
+              f"\nA host that does not parse #pragma parameter renders those "
+              f"values, so\nthose shaders ship a different look from the one "
+              f"they document. Not\ncounted as a failure yet; fix them and move "
+              f"this into check().")
     sys.exit(1 if failed else 0)

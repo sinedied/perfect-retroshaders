@@ -23,9 +23,9 @@ from lcd_preview import (
     # import here silently shadowed it, handing crt-perfect-v3 the LCD
     # defaults and a 255/255 mismatch that looked like a shader bug
     DEFAULTS_V3 as DEFAULTS_LCD_V3, render_lcd_v3,
-    DEFAULTS_LCD, DEFAULTS_PP, DEFAULTS_PP_V2, DEFAULTS_PP_V3, DEFAULTS_V2A,
-    DEFAULTS_V2B,
-    render_pixel_perfect_v2, render_pixel_perfect_v3,
+    DEFAULTS_LCD, DEFAULTS_PP, DEFAULTS_PP_V2, DEFAULTS_PP_V3, DEFAULTS_PP_V4,
+    DEFAULTS_V2A, DEFAULTS_V2B,
+    render_pixel_perfect_v2, render_pixel_perfect_v3, render_pixel_perfect_v4,
     render_lcd, render_lcd_v2a, render_pixel_perfect,
 )
 
@@ -255,6 +255,32 @@ REGISTRY = {
             ("gamma 1.4", dict(pp_gamma=1.4)),
             ("gamma 2.0", dict(pp_gamma=2.0)),
             ("crisp + gamma", dict(pp_sharpness=0.3, pp_gamma=0.8)),
+        ],
+    ),
+    "pixel-perfect-v4.glsl": Model(
+        render=render_pixel_perfect_v4,
+        defaults=DEFAULTS_PP_V4,
+        variants=[
+            ("greyscale", dict(pp_saturation=0.0)),
+            ("oversaturated", dict(pp_saturation=1.8)),
+            ("flat", dict(pp_contrast=0.4)),
+            ("punchy", dict(pp_contrast=1.6)),
+            ("dim", dict(pp_brightness=0.6)),
+            ("gamma 0.7", dict(pp_gamma=0.7)),
+            ("gamma 1.4", dict(pp_gamma=1.4)),
+            ("clipped gain", dict(pp_brightness=2.0)),
+            ("clipped contrast", dict(pp_contrast=2.0)),
+            ("full grade", dict(pp_saturation=1.3, pp_contrast=1.2,
+                                pp_brightness=1.1, pp_gamma=0.9)),
+            # Near-neutral but not neutral: the guard is exact, so these take
+            # the branch and must reproduce v3 exactly. A guard written with an
+            # epsilon would skip them and quietly disagree with v3 over a whole
+            # range of settings.
+            ("barely graded", dict(pp_contrast=1.0003)),
+            ("barely desaturated", dict(pp_saturation=0.9995)),
+            # deviations that cancel in a sum of values but not when tested
+            # separately; this is the shape a summed guard gets wrong
+            ("cancelling deviations", dict(pp_brightness=1.1, pp_contrast=0.9)),
         ],
     ),
     "pixel-perfect-v3.glsl": Model(

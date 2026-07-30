@@ -133,12 +133,12 @@ uniform COMPAT_PRECISION float lp_layout;
 uniform COMPAT_PRECISION float lp_brightness;
 uniform COMPAT_PRECISION float lp_gamma;
 #else
-#define lp_grid 0.34
-#define lp_balance 0.79
+#define lp_grid 0.30
+#define lp_balance 0.50
 #define lp_min_pitch 3.00
 #define lp_subpixels 0.20
 #define lp_layout 0.0
-#define lp_brightness 1.00
+#define lp_brightness 1.20
 #define lp_gamma 1.00
 #endif
 
