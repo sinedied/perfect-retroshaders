@@ -39,7 +39,7 @@ DEFAULTS_V6 = dict(DEFAULTS_V5, cp_curvature=0.0)
 
 DEFAULTS_V7 = dict(DEFAULTS_V6, cp_curvature=0.0)
 
-DEFAULTS_V8 = dict(DEFAULTS_V7)
+DEFAULTS_V8 = dict(DEFAULTS_V7, cp_scanlines=0.60, cp_rgb_mask=0.20)
 
 DEFAULTS_V4 = dict(
     Scanlines=0.55,

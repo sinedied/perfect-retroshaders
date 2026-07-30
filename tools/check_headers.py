@@ -19,10 +19,12 @@ Run:  cd tools && PYTHONPATH=. python3 check_headers.py
 Exits non-zero on the first shader that fails, so it can gate a commit.
 """
 
+import os
 import re
 import sys
 
 from paths import list_shaders, shader_path
+from shaders import REGISTRY
 
 WIDTH = 80
 SEP = "// " + "-" * (WIDTH - 3)
@@ -104,6 +106,18 @@ def check(name):
             if not pmin <= default <= pmax:
                 errors.append(f"{n}: default {default:g} outside "
                               f"{pmin:g} to {pmax:g}")
+
+    # The numpy twin has to ship the same defaults as the shader. gl_check feeds
+    # both sides the same parameters so it stays green either way, but beat.py
+    # and preview.py both render `model.defaults` - so a drift here silently
+    # reports and screenshots a configuration nobody actually ships. It has
+    # happened once already, from a one-line tweak to a #pragma.
+    model = REGISTRY.get(name if not os.path.isabs(name) else os.path.basename(name))
+    if model is not None:
+        for n, _, _, default in declared:
+            if n in model.defaults and abs(model.defaults[n] - default) > 1e-9:
+                errors.append(f"{n}: shader default {default:g} but the model in "
+                              f"shaders.py uses {model.defaults[n]:g}")
 
     return [f"{name}: {e}" for e in errors]
 

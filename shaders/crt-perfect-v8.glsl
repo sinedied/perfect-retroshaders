@@ -1,4 +1,4 @@
-// crt-perfect-v8 - scanlines, an RGB mask and curvature, pixel-perfect.
+// crt-perfect-v8 - scanlines, an RGB mask and curvature, pixel-perfect scale.
 // -----------------------------------------------------------------------------
 // Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied
@@ -27,20 +27,18 @@
 // Scales the source into uniform pixel blocks, then modulates it with two pure
 // sinusoids: one across the source lines, one across the source columns in
 // three colour phases. Both are band-limited, so neither beats against the
-// pixel grid. cp_curvature bends the image onto a tube, and the patterns curve
+// pixel grid. Curvature bends the image onto a tube, and the patterns curve
 // with the glass the way a real mask and beam do.
 //
 // Notes:
 // - Render at the output resolution, 1:1 with the display.
 // - At cp_min_pitch 2.00 the mask degenerates to two-colour columns: use 2.50
 //   or more to keep the triads visible.
-// - Curvature crops nothing: the picture reaches all four screen edges and only
-//   the tube's rounded corners are left black, about 4% of the screen at 0.10.
 // - Curvature softens the patterns where the output is too small to lock them,
 //   since a pattern that follows the glass cannot also follow the pixel grid.
 
-#pragma parameter cp_scanlines  "Scanline visibility"        0.55 0.00 1.00 0.05
-#pragma parameter cp_rgb_mask   "RGB mask visibility"        0.40 0.00 1.00 0.05
+#pragma parameter cp_scanlines  "Scanline visibility"        0.60 0.00 1.00 0.05
+#pragma parameter cp_rgb_mask   "RGB mask visibility"        0.20 0.00 1.00 0.05
 #pragma parameter cp_mask_type  "Mask 0=off 1=grille 2=slot" 1.00 0.00 2.00 1.00
 #pragma parameter cp_mask_size  "Mask triads per pixel"      1.00 0.25 2.00 0.25
 #pragma parameter cp_min_pitch  "Min. pitch in px"           3.00 2.00 6.00 0.25
