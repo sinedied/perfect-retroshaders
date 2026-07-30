@@ -64,6 +64,9 @@ VENDOR_PARAMS = {
     "sharp-shimmerless-grid.glsl": dict(GRID_RATIO_X=0.3, GRID_RATIO_Y=0.3,
                                         GRID_OPACITY_X=0.3, GRID_OPACITY_Y=0.3),
     "pixellate.glsl": {},
+    "dmg_dot_matrix.glsl": dict(dmg_edge_alpha=0.3,
+                                dmg_brightness_correction=1.2,
+                                dmg_grid_lightness=1.0, dmg_gamma=1.4),
 }
 
 LABEL_H = 14

@@ -14,6 +14,9 @@ from crt_preview import (
     render_crt, render_crt_v3, render_crt_v4, render_crt_v5, render_crt_v6,
     render_crt_v7, render_crt_v8,
 )
+from dmg_preview import (
+    DEFAULTS_DMG, DEFAULTS_DMG_V2, render_dmg, render_dmg_v2,
+)
 from lcd_preview import (
     # aliased: crt_preview exports a DEFAULTS_V3 of its own, and a bare
     # import here silently shadowed it, handing crt-perfect-v3 the LCD
@@ -262,6 +265,66 @@ REGISTRY = {
         render=render_pixel_perfect,
         defaults=DEFAULTS_PP,
         variants=[("crisp", dict(pp_sharpness=0.3))],
+    ),
+    "dmg-perfect-v2.glsl": Model(
+        render=render_dmg_v2,
+        defaults=DEFAULTS_DMG_V2,
+        variants=[
+            ("grid off", dict(dp_grid=0.0)),
+            ("full grid", dict(dp_grid=1.0)),
+            ("thin line", dict(dp_gap=0.25)),
+            ("fat line", dict(dp_gap=2.0)),
+            ("shadow", dict(dp_shadow=0.35)),
+            ("shadow far", dict(dp_shadow=0.6, dp_shadow_offset=2.5)),
+            ("shadow + fat", dict(dp_shadow=0.5, dp_gap=1.75)),
+            ("reference tone", dict(dp_brightness=1.2, dp_gamma=1.4)),
+            ("gamma 0.7", dict(dp_gamma=0.7)),
+            ("bright", dict(dp_brightness=1.6)),
+        ],
+        # Both fill modes: a frontend either letterboxes, giving the same whole
+        # scale on each axis, or stretches, giving different ones - and under a
+        # stretch the two axes get different line widths on purpose, because the
+        # two-pass pipeline stretches its 1px lines unequally too.
+        cases=[
+            ("GB 5x integer", (160, 144), (800, 720)),
+            ("GB 4x integer", (160, 144), (640, 576)),
+            ("GB 3x integer", (160, 144), (480, 432)),
+            ("GB aspect 1024x768", (160, 144), (853, 768)),
+            ("GB fill   1024x768", (160, 144), (1024, 768)),
+            ("GB aspect  640x480", (160, 144), (533, 480)),
+            ("GB fill    640x480", (160, 144), (640, 480)),
+            ("GBA fill  1024x768", (240, 160), (1024, 768)),
+        ],
+    ),
+    "dmg-perfect-v1.glsl": Model(
+        render=render_dmg,
+        defaults=DEFAULTS_DMG,
+        variants=[
+            ("grid off", dict(dp_grid=0.0)),
+            ("gap off", dict(dp_gap=0.0)),
+            ("full grid", dict(dp_grid=1.0)),
+            ("dark matrix", dict(dp_level=0.0)),
+            ("fat gap", dict(dp_gap=0.45)),
+            ("thin gap", dict(dp_gap=0.05)),
+            ("gamma off", dict(dp_gamma=1.0)),
+            ("gamma 0.7", dict(dp_gamma=0.7)),
+            ("bright", dict(dp_brightness=1.6)),
+            # both sides of the gap floor's room limit, which is the one
+            # regime boundary in the shader
+            ("dim", dict(dp_brightness=0.5)),
+        ],
+        # a Game Boy is the only source this shader is for, so the awkward
+        # scales are its own: 5x letterboxed, 6.40x5.33 filled, and 4.00x3.33
+        # at the minimum supported output
+        cases=[
+            ("GB 5x integer", (160, 144), (800, 720)),
+            ("GB 4x integer", (160, 144), (640, 576)),
+            ("GB 3x integer", (160, 144), (480, 432)),
+            ("GB   -> 1024x768", (160, 144), (1024, 768)),
+            ("GB   ->  640x480", (160, 144), (640, 480)),
+            ("GBA  -> 1024x768", (240, 160), (1024, 768)),
+            ("GBA  ->  640x480", (240, 160), (640, 480)),
+        ],
     ),
     # --- iterations, kept verified so the archive cannot rot -------------------
     "crt-perfect-v1.glsl": Model(
