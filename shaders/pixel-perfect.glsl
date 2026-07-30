@@ -1,6 +1,5 @@
 // pixel-perfect - uniform pixel blocks with no shimmer, at minimal cost.
 // -----------------------------------------------------------------------------
-// Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy

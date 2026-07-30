@@ -1,6 +1,5 @@
 // crt-perfect - scanlines and an RGB mask over a pixel-perfect scale.
 // -----------------------------------------------------------------------------
-// Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy

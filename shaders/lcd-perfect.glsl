@@ -1,6 +1,5 @@
 // lcd-perfect - an LCD matrix and RGB stripes over a pixel-perfect scale.
 // -----------------------------------------------------------------------------
-// Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy

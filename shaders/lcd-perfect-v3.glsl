@@ -1,6 +1,5 @@
-// lcd-perfect-v3 - a sinusoidal LCD mesh over a pixel-perfect scale.
+// lcd-perfect-v3 - an LCD matrix and RGB stripes over a pixel-perfect scale.
 // -----------------------------------------------------------------------------
-// Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,12 +32,12 @@
 // Boy Color measures a 9% matrix down against 3.7% across - but lcd1x is the
 // reverse at about 4:1, which is a balance of 0.8.
 //
-// The mesh follows the source grid while there is room for it. Below
-// lp_min_pitch output pixels per cell it takes a fixed output-space pitch
-// instead, phase-aligned to the pixel grid. That is what keeps a 480x272 source
-// usable: at 640x480 it is 1.33 output pixels per cell, below the two per cycle
-// any pattern needs, and a source-locked mesh folds there to a wrong coarser
-// pitch at nearly full strength.
+// The mesh follows the source grid, one cycle per cell, while a cell is wide
+// enough to carry a line. Below lp_min_pitch output pixels per cell the period
+// grows to a whole number of cells rather than to a fixed size in output
+// pixels, so it keeps tracking the source and stays exactly periodic on it.
+// That is what keeps a 480x272 source usable: at 640x480 it is 1.33 output
+// pixels per cell, below the two per cycle any pattern needs.
 //
 // The stripes are three sinusoids 120 degrees apart, summing to a constant at
 // every pixel. They ride the mesh's pitch rules, so they band-limit with it.
@@ -48,12 +47,12 @@
 // - A column mesh and the stripes share a pitch, so they multiply into a
 //   per-channel cast. It is divided out in closed form.
 
-#pragma parameter lp_grid       "Grid visibility"          0.34 0.00 1.00 0.01
-#pragma parameter lp_balance    "Row/column balance"       0.79 0.00 1.00 0.01
+#pragma parameter lp_grid       "Grid visibility"          0.30 0.00 1.00 0.01
+#pragma parameter lp_balance    "Row/column balance"       0.50 0.00 1.00 0.01
 #pragma parameter lp_min_pitch  "Minimum pitch in px"      3.00 2.00 6.00 0.25
 #pragma parameter lp_subpixels  "RGB stripe visibility"    0.20 0.00 1.00 0.05
 #pragma parameter lp_layout     "Stripe order 0=RGB 1=BGR" 0.00 0.00 1.00 1.00
-#pragma parameter lp_brightness "Brightness"               1.00 0.25 4.00 0.05
+#pragma parameter lp_brightness "Brightness"               1.20 0.25 4.00 0.05
 #pragma parameter lp_gamma      "Gamma"                    1.00 0.50 2.00 0.05
 
 #if defined(VERTEX)
