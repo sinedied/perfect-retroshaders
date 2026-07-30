@@ -33,7 +33,8 @@ file when it wins. Both stay registered in `tools/shaders.py` either way.
 `tools/vendor/`: not part of the MIT grant, not edited, present purely to measure
 against. Currently `pixellate.glsl` (Fes) — **30 SFU slots**, ships on the target
 device and holds 60fps there, so it is the budget yardstick every cost figure here is
-quoted against.
+quoted against. Note it is the yardstick on *two* axes that disagree: it has the most
+SFU of anything here and is also the fastest on desktop. See the benchmark section.
 
 Tools resolve a bare shader filename against `shaders/`, then `tools/vendor/`, then
 `tools/iterations/` via `tools/paths.py`, so a new benchmark shader only needs dropping
@@ -114,9 +115,47 @@ To iterate on a shader:
 4. `measure.py` for pattern geometry (period, contrast, mask swing) when matching a
    reference look.
 
-`bench_glsl.py` exists but **GPU wall-clock timing on a dev Mac is not trustworthy** —
-`pixellate` swapped between slowest and fastest across runs with ~25% spread. Use the
-static SFU count and compare against `pixellate.glsl`'s 30.
+`bench_glsl.py` gives repeatable GPU timings now — worst per-case IQR **1.4%**, where
+it used to swing 25–50% and `pixellate` came out both fastest and slowest on different
+runs. Four things were wrong and all four matter for any timing harness:
+
+- **Uniforms not in the overrides were left at 0**, so "defaults" measured a shader
+  with `cp_scanlines = cp_rgb_mask = 0` (both pattern branches skipped), `cp_gamma = 0`
+  (forcing the `pow` branch that a default of 1.0 *skips*) and `cp_min_pitch = 0`
+  (dividing by zero). Every number the tool ever produced was of a shader nobody runs.
+  It now starts from `REGISTRY[fn].defaults` and applies overrides on top.
+- **Cases were measured one at a time to completion**, so the GPU's clock drift landed
+  entirely on whichever case was running. Interleave: one pass measures every case,
+  and the set repeats.
+- **The opening passes of a run are erratic** regardless of content, so the first
+  `WARMUP_PASSES` are discarded outright. This is what took the spread from ~45% to
+  ~1%; rotating the case order without discarding just spreads the damage around.
+- **Min-to-max is the wrong spread statistic** — one hiccup in a multi-minute run makes
+  everything look unmeasurable. Report the IQR.
+
+**The timings contradict the SFU budget, and that contradiction is unresolved.**
+`pixellate` has **30 SFU against crt-perfect's 14** and is still the fastest thing in
+the table; time tracks the op count instead, and all these shaders take 4 texture
+samples, which likely dominates:
+
+| | ops | SFU | vs `pixellate` |
+|---|---|---|---|
+| `pixellate` | 292 | **30** | 100% |
+| `crt-perfect` flat | 501 | 14 | 104% |
+| v6 (curvature, flat patterns) | 588 | 14 | 109% |
+| v8 (curvature, warped patterns) | 628 | 14 | 124% |
+
+So on an Apple GPU, SFU is *not* the bottleneck. A Mali G31 has far less ALU per
+transcendental and may rank them the other way round. **Use SFU as the device proxy
+and these timings as the desktop one, and do not assume either predicts the other** —
+only the Brick settles it.
+
+Measured cost of the two optional features, at 1024x768 from 320x240:
+
+- **curvature costs ~9%** (v6 108.6 → 117.9, v8 123.5 → 133.9). Clears the noise.
+- **gamma costs nothing measurable** (v6 108.6 → 108.5, v8 123.5 → 123.7, both inside
+  1.4%), even though the `pow` is 6 of the 14 SFU slots. Another sign this GPU is not
+  SFU-bound.
 
 The two independent implementations are the whole point of this setup: an error has to
 be made identically in GLSL and in numpy to slip through. It has happened once (see
