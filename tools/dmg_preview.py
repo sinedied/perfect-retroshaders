@@ -466,7 +466,7 @@ def render_dmg_v4(src_u8, out_w, out_h, p=None, quantise=True):
 #     the cost; it goes on the finished colour so the substrate is tinted too.
 #     Behind a uniform branch, so neutral is free - measured, the everything-off
 #     path is 291 ops, the same as v4's.
-SHADOW_OFFSET = (0.60, 0.85)
+SHADOW_OFFSET = (0.50, 0.85)
 SHADOW_BLUR = 0.20
 
 DEFAULTS_DMG_V5 = dict(
@@ -557,6 +557,277 @@ def render_dmg_v5(src_u8, out_w, out_h, p=None, quantise=True):
              for t, k in zip((t00, t10, t01, t11), ks)]
             + [np.full((out_h, out_w), PAPER_FLOOR)])
         opacity = np.clip(1.0 - (caster @ L) / paper, 0.0, 1.0)
+        shade = p["dp_shadow"] * opacity * (Sy[:, None] * Sx[None, :])
+        col = col * (1.0 - shade)[..., None]
+
+    trim = (abs(p["dp_red"] - 1.0) + abs(p["dp_green"] - 1.0)
+            + abs(p["dp_blue"] - 1.0))
+    if trim > 0.001:
+        col = col * np.array([p["dp_red"], p["dp_green"], p["dp_blue"]])
+
+    if abs(p["dp_gamma"] - 1.0) > 0.001:
+        col = np.power(np.maximum(col, 1e-8), p["dp_gamma"])
+    out = np.clip(col, 0.0, 1.0)
+    return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
+
+
+# v7 keeps v6's blur exactly and pays less for it.
+#
+# The blur itself is the point of both: the shadow's edge comes from a per-cell
+# opacity, so sampling that nearest leaves a hard cell-sized step no matter what
+# is done to the aperture - v5 widened the aperture's box filter alone and the
+# outer edge stayed one output pixel wide, which is no blur at all. Reading the
+# four surrounding cells and interpolating turns the step into a ramp across a
+# whole cell: measured on a block of dark cells, 1 output pixel becomes 20 at
+# 24x. v6 made the ramp width a parameter; full softness was the only setting
+# worth having, so here it is a constant and the weights are the plain
+# fractional position.
+#
+# The saving is in what that lets go of. paper now comes from the four cells
+# just read, which deletes v6's gated maximum over the *scaler's* taps - that
+# existed because the tap pair flips at an exact boundary and a bare max would
+# swap in a different neighbour, and it cost four smoothsteps. Measured on this
+# GPU: v6 142.6% of pixellate, v7 126.8%, and v5 - which had no real blur -
+# 131.5%. Removing that block bought more than four extra texture fetches cost.
+#
+# A three-tap triangle filter was tried, since that is the true minimum for a
+# continuous 2D interpolation. It measured 129.6%: the branchless corner
+# selection costs back more than the fetch saves. Do not re-try it.
+SHADOW_APERTURE_SOFT = 0.5
+
+DEFAULTS_DMG_V7 = dict(DEFAULTS_DMG_V5)
+
+
+def render_dmg_v7(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors dmg-perfect-v7.glsl."""
+    p = dict(DEFAULTS_DMG_V7, **(p or {}))
+    s = src_u8.astype(np.float64) / 255.0
+    in_h, in_w = s.shape[:2]
+
+    px = ((np.arange(out_w) + 0.5) / out_w) * in_w
+    py = ((np.arange(out_h) + 0.5) / out_h) * in_h
+    hx = max(0.4995 * in_w / out_w, 1e-6)
+    hy = max(0.4995 * in_h / out_h, 1e-6)
+    Bx = np.floor(px + 0.5)
+    By = np.floor(py + 0.5)
+
+    scx, scy = out_w / max(in_w, 1.0), out_h / max(in_h, 1.0)
+    N = fit_scale(in_w, in_h, out_w, out_h)
+    lit = np.clip(1.0 - p["dp_gap"] / N, 1e-3, 1.0)
+
+    Alox, Ahix = dot_integral(px - hx, lit), dot_integral(px + hx, lit)
+    Aloy, Ahiy = dot_integral(py - hy, lit), dot_integral(py + hy, lit)
+    Ix = np.maximum(Ahix - Alox, 1e-6)
+    Iy = np.maximum(Ahiy - Aloy, 1e-6)
+    covx_raw, covy_raw = Ix / (2 * hx), Iy / (2 * hy)
+
+    wxA = np.clip((Bx - px + hx) / (2 * hx), 0.0, 1.0)
+    wyA = np.clip((By - py + hy) / (2 * hy), 0.0, 1.0)
+    kx, ky = smoothstep(0.0, 0.01, covx_raw), smoothstep(0.0, 0.01, covy_raw)
+    wxL = wxA + (np.clip((Bx * lit - Alox) / Ix, 0.0, 1.0) - wxA) * kx
+    wyL = wyA + (np.clip((By * lit - Aloy) / Iy, 0.0, 1.0) - wyA) * ky
+
+    fx, fy = smoothstep(2.0, 2.9, scx), smoothstep(2.0, 2.9, scy)
+    covx = 1.0 + (covx_raw - 1.0) * fx
+    covy = 1.0 + (covy_raw - 1.0) * fy
+    dot2d = covy[:, None] * covx[None, :]
+
+    ixl = np.clip(Bx.astype(int) - 1, 0, in_w - 1)
+    ixh = np.clip(Bx.astype(int), 0, in_w - 1)
+    iyl = np.clip(By.astype(int) - 1, 0, in_h - 1)
+    iyh = np.clip(By.astype(int), 0, in_h - 1)
+    t00 = s[np.ix_(iyl, ixl)]; t10 = s[np.ix_(iyl, ixh)]
+    t01 = s[np.ix_(iyh, ixl)]; t11 = s[np.ix_(iyh, ixh)]
+
+    def blend(wx, wy):
+        WX = wx[None, :, None]; WY = wy[:, None, None]
+        hi = t11 + (t01 - t11) * WX
+        lo = t10 + (t00 - t10) * WX
+        return hi + (lo - hi) * WY
+
+    area = blend(wxA, wyA) * p["dp_brightness"]
+    dotm = blend(wxL, wyL) * p["dp_brightness"]
+
+    D = dot2d[..., None]
+    col = area + (DMG_SUBSTRATE + (dotm - DMG_SUBSTRATE) * D - area) * p["dp_grid"]
+
+    if p["dp_shadow"] > 0.0:
+        qx = px - SHADOW_OFFSET[0]
+        qy = py - SHADOW_OFFSET[1]
+        hsx = hx + SHADOW_APERTURE_SOFT
+        hsy = hy + SHADOW_APERTURE_SOFT
+        Sx = np.maximum(dot_integral(qx + hsx, lit)
+                        - dot_integral(qx - hsx, lit), 0.0) / (2 * hsx)
+        Sy = np.maximum(dot_integral(qy + hsy, lit)
+                        - dot_integral(qy - hsy, lit), 0.0) / (2 * hsy)
+        Sx = 1.0 + (Sx - 1.0) * fx
+        Sy = 1.0 + (Sy - 1.0) * fy
+
+        # the 2x2 of cells around the shifted point, and where in it we sit
+        # No epsilon: the pair and the weight must come from the same value,
+        # and the interpolated texcoord's float32 error is larger than any
+        # epsilon worth adding anyway. Harmless, because the weight is zero
+        # exactly where the pair changes - see the shader.
+        gx, gy = qx - 0.5, qy - 0.5
+        gix, giy = np.floor(gx), np.floor(gy)
+        gfx, gfy = gx - gix, gy - giy
+        ix0 = np.clip(gix.astype(int), 0, in_w - 1)
+        ix1 = np.clip(gix.astype(int) + 1, 0, in_w - 1)
+        iy0 = np.clip(giy.astype(int), 0, in_h - 1)
+        iy1 = np.clip(giy.astype(int) + 1, 0, in_h - 1)
+
+        L = np.array([0.299, 0.587, 0.114])
+        c00 = s[np.ix_(iy0, ix0)] @ L
+        c10 = s[np.ix_(iy0, ix1)] @ L
+        c01 = s[np.ix_(iy1, ix0)] @ L
+        c11 = s[np.ix_(iy1, ix1)] @ L
+
+        WX = gfx[None, :]; WY = gfy[:, None]
+        caster_lum = ((c00 + (c10 - c00) * WX)
+                      + ((c01 + (c11 - c01) * WX)
+                         - (c00 + (c10 - c00) * WX)) * WY)
+        # weighted before reducing: a max over a *set* of cells is unstable
+        # when floor() can pick a different set - see the shader
+        kb = [(1 - WX) * (1 - WY), WX * (1 - WY), (1 - WX) * WY, WX * WY]
+        paper = np.maximum.reduce(
+            [c * smoothstep(0.0, 0.02, k)
+             for c, k in zip((c00, c10, c01, c11), kb)]
+            + [np.full((out_h, out_w), PAPER_FLOOR)])
+        opacity = np.clip(1.0 - caster_lum / paper, 0.0, 1.0)
+        shade = p["dp_shadow"] * opacity * (Sy[:, None] * Sx[None, :])
+        col = col * (1.0 - shade)[..., None]
+
+    trim = (abs(p["dp_red"] - 1.0) + abs(p["dp_green"] - 1.0)
+            + abs(p["dp_blue"] - 1.0))
+    if trim > 0.001:
+        col = col * np.array([p["dp_red"], p["dp_green"], p["dp_blue"]])
+
+    if abs(p["dp_gamma"] - 1.0) > 0.001:
+        col = np.power(np.maximum(col, 1e-8), p["dp_gamma"])
+    out = np.clip(col, 0.0, 1.0)
+    return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
+
+
+# v6 is where the blur was found, and it keeps the softness as a parameter.
+#
+# v5 widened the box filter on the displaced aperture and called that a blur. It
+# is not: that only softens the aperture's own gaps, while the edge of the
+# shadow as a whole comes from the per-cell opacity, sampled nearest. Measured
+# on a block of dark cells at 24x, v5's outer edge fell from full to nothing in
+# one output pixel. Interpolating the opacity between the four surrounding cells
+# is what actually softens it - 1 output pixel becomes 8, 14 and 20 at
+# dp_shadow_blur 0.30, 0.60 and 1.00.
+#
+# At 0 the weights collapse to a nearest pick and this is exactly v5, so the
+# parameter spans the old look through to fully soft. v7 fixes it at 1.00 and
+# spends the saving elsewhere; this version is kept because the sweep is the
+# evidence for that choice.
+DEFAULTS_DMG_V6 = dict(DEFAULTS_DMG_V5, dp_shadow_blur=0.60)
+
+
+def render_dmg_v6(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors dmg-perfect-v6.glsl."""
+    p = dict(DEFAULTS_DMG_V6, **(p or {}))
+    s = src_u8.astype(np.float64) / 255.0
+    in_h, in_w = s.shape[:2]
+
+    px = ((np.arange(out_w) + 0.5) / out_w) * in_w
+    py = ((np.arange(out_h) + 0.5) / out_h) * in_h
+    hx = max(0.4995 * in_w / out_w, 1e-6)
+    hy = max(0.4995 * in_h / out_h, 1e-6)
+    Bx = np.floor(px + 0.5)
+    By = np.floor(py + 0.5)
+
+    scx, scy = out_w / max(in_w, 1.0), out_h / max(in_h, 1.0)
+    N = fit_scale(in_w, in_h, out_w, out_h)
+    lit = np.clip(1.0 - p["dp_gap"] / N, 1e-3, 1.0)
+
+    Alox, Ahix = dot_integral(px - hx, lit), dot_integral(px + hx, lit)
+    Aloy, Ahiy = dot_integral(py - hy, lit), dot_integral(py + hy, lit)
+    Ix = np.maximum(Ahix - Alox, 1e-6)
+    Iy = np.maximum(Ahiy - Aloy, 1e-6)
+    covx_raw, covy_raw = Ix / (2 * hx), Iy / (2 * hy)
+
+    wxA = np.clip((Bx - px + hx) / (2 * hx), 0.0, 1.0)
+    wyA = np.clip((By - py + hy) / (2 * hy), 0.0, 1.0)
+    kx, ky = smoothstep(0.0, 0.01, covx_raw), smoothstep(0.0, 0.01, covy_raw)
+    wxL = wxA + (np.clip((Bx * lit - Alox) / Ix, 0.0, 1.0) - wxA) * kx
+    wyL = wyA + (np.clip((By * lit - Aloy) / Iy, 0.0, 1.0) - wyA) * ky
+
+    fx, fy = smoothstep(2.0, 2.9, scx), smoothstep(2.0, 2.9, scy)
+    covx = 1.0 + (covx_raw - 1.0) * fx
+    covy = 1.0 + (covy_raw - 1.0) * fy
+    dot2d = covy[:, None] * covx[None, :]
+
+    ixl = np.clip(Bx.astype(int) - 1, 0, in_w - 1)
+    ixh = np.clip(Bx.astype(int), 0, in_w - 1)
+    iyl = np.clip(By.astype(int) - 1, 0, in_h - 1)
+    iyh = np.clip(By.astype(int), 0, in_h - 1)
+    t00 = s[np.ix_(iyl, ixl)]; t10 = s[np.ix_(iyl, ixh)]
+    t01 = s[np.ix_(iyh, ixl)]; t11 = s[np.ix_(iyh, ixh)]
+
+    def blend(wx, wy):
+        WX = wx[None, :, None]; WY = wy[:, None, None]
+        hi = t11 + (t01 - t11) * WX
+        lo = t10 + (t00 - t10) * WX
+        return hi + (lo - hi) * WY
+
+    area = blend(wxA, wyA) * p["dp_brightness"]
+    dotm = blend(wxL, wyL) * p["dp_brightness"]
+
+    D = dot2d[..., None]
+    col = area + (DMG_SUBSTRATE + (dotm - DMG_SUBSTRATE) * D - area) * p["dp_grid"]
+
+    if p["dp_shadow"] > 0.0:
+        qx = px - SHADOW_OFFSET[0]
+        qy = py - SHADOW_OFFSET[1]
+        # only half the parameter goes into the aperture's box; the rest sets
+        # the width of the opacity ramp below, which is the actual blur
+        hsx = hx + p["dp_shadow_blur"] * SHADOW_APERTURE_SOFT
+        hsy = hy + p["dp_shadow_blur"] * SHADOW_APERTURE_SOFT
+        Sx = np.maximum(dot_integral(qx + hsx, lit)
+                        - dot_integral(qx - hsx, lit), 0.0) / (2 * hsx)
+        Sy = np.maximum(dot_integral(qy + hsy, lit)
+                        - dot_integral(qy - hsy, lit), 0.0) / (2 * hsy)
+        Sx = 1.0 + (Sx - 1.0) * fx
+        Sy = 1.0 + (Sy - 1.0) * fy
+
+        # No epsilon: the pair and the weight must come from the same value,
+        # and the interpolated texcoord's float32 error is larger than any
+        # epsilon worth adding anyway. Harmless, because the weight is zero
+        # exactly where the pair changes - see the shader.
+        gx, gy = qx - 0.5, qy - 0.5
+        gix, giy = np.floor(gx), np.floor(gy)
+        gfx, gfy = gx - gix, gy - giy
+        blur = max(p["dp_shadow_blur"], 1e-4)
+        wbx = np.clip((gfx - 0.5) / blur + 0.5, 0.0, 1.0)
+        wby = np.clip((gfy - 0.5) / blur + 0.5, 0.0, 1.0)
+        ix0 = np.clip(gix.astype(int), 0, in_w - 1)
+        ix1 = np.clip(gix.astype(int) + 1, 0, in_w - 1)
+        iy0 = np.clip(giy.astype(int), 0, in_h - 1)
+        iy1 = np.clip(giy.astype(int) + 1, 0, in_h - 1)
+
+        L = np.array([0.299, 0.587, 0.114])
+        c00 = s[np.ix_(iy0, ix0)] @ L
+        c10 = s[np.ix_(iy0, ix1)] @ L
+        c01 = s[np.ix_(iy1, ix0)] @ L
+        c11 = s[np.ix_(iy1, ix1)] @ L
+        WX = wbx[None, :]; WY = wby[:, None]
+        lo_ = c00 + (c10 - c00) * WX
+        hi_ = c01 + (c11 - c01) * WX
+        caster_lum = lo_ + (hi_ - lo_) * WY
+
+        # v6 still takes paper from the scaler's own taps, gated by their blend
+        # weights so an exact-boundary flip cannot swap in a different
+        # neighbour. v7 drops all of that by reading it from the four cells the
+        # shadow already has.
+        WXa = wxA[None, :]; WYa = wyA[:, None]
+        ks = [WXa * WYa, (1 - WXa) * WYa, WXa * (1 - WYa), (1 - WXa) * (1 - WYa)]
+        paper = np.maximum.reduce(
+            [(t @ L) * smoothstep(0.0, 0.02, k)
+             for t, k in zip((t00, t10, t01, t11), ks)]
+            + [np.full((out_h, out_w), PAPER_FLOOR)])
+        opacity = np.clip(1.0 - caster_lum / paper, 0.0, 1.0)
         shade = p["dp_shadow"] * opacity * (Sy[:, None] * Sx[None, :])
         col = col * (1.0 - shade)[..., None]
 

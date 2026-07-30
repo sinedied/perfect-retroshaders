@@ -153,11 +153,11 @@ uniform COMPAT_PRECISION float dp_gamma;
 #define dp_grid 0.30
 #define dp_gap 1.0
 #define dp_shadow 0.0
+#define dp_brightness 1.0
+#define dp_gamma 1.0
 #define dp_red 1.0
 #define dp_green 1.0
 #define dp_blue 1.0
-#define dp_brightness 1.0
-#define dp_gamma 1.0
 #endif
 
 // The substrate a DMG's gaps show: undriven crystal at its lightest state.
@@ -189,12 +189,13 @@ uniform COMPAT_PRECISION float dp_gamma;
 // aimed anywhere is a way to make it look wrong.
 #define SHADOW_OFFSET vec2(0.50, 0.85)
 
-// Softening, as extra half-width on the box filter that samples the displaced
-// dot. The coverage is already the exact mean of the aperture over the output
-// pixel's footprint, so widening that footprint convolves it with a wider box -
-// a real blur, for no extra instructions at all. Checked against an explicit
-// convolution of the hard pulse train rather than assumed.
-#define SHADOW_BLUR 0.20
+// Extra half-width on the box filter that samples the displaced aperture. Free
+// - the coverage is already the exact mean of the aperture over the output
+// pixel's footprint, so a wider footprint is a wider box - but it only softens
+// the aperture's own gaps, NOT the edge of the shadow as a whole. That edge
+// comes from the per-cell opacity, and blurring it needs real taps. v5 widened
+// the box alone and the outer edge stayed exactly one output pixel wide.
+#define APERTURE_SOFT 0.5
 
 // Antiderivative of the dot profile, which is 1 across the lit part of a cell
 // and 0 across the gap at its trailing edge. Differencing it over an interval
@@ -299,8 +300,8 @@ void main()
 
         // The dot's own shape, displaced and softened. hs is the footprint the
         // aperture is averaged over, so widening it past the output pixel is a
-        // box blur of the shadow and costs nothing beyond the wider divide.
-        vec2 hs = h + SHADOW_BLUR;
+        // box blur of the aperture and costs nothing beyond the wider divide.
+        vec2 hs = h + APERTURE_SOFT;
         vec2 covS = max(dotInt(q + hs, lit) - dotInt(q - hs, lit), vec2(0.0))
                     / (2.0 * hs);
         covS = mix(vec2(1.0), covS, smoothstep(vec2(2.0), vec2(2.9), sc));
@@ -310,40 +311,80 @@ void main()
         // and opacity is a per-cell quantity anyway - a dot is either driven or
         // it is not, and the displaced aperture above already supplies the
         // edges. Sampling the cell centre keeps it stable.
-        // The casting cell. The epsilon is the recorded floor() trap: q lands
-        // exactly on a cell boundary whenever the offset is a whole number of
-        // source pixels plus the half-texel sample position, which at a whole
-        // scale factor is a great many pixels at once, and a few ULP either way
-        // picks a different cell. Biasing it forward resolves it toward the
-        // cell whose dot actually starts at that boundary, which is the one
-        // covering the fragment; where the bias picks the far side instead, the
-        // displaced aperture is in its gap and the shadow is zero anyway.
-        vec2 cell = (floor(q + 1e-3) + 0.5) / TextureSize;
-        vec3 caster = COMPAT_TEXTURE(Texture, cell).rgb;
+        // How driven the casting cells are, as a smooth field rather than a
+        // per-cell step.
+        //
+        // This is the whole of the blur. Opacity is what decides where the
+        // shadow ends, so sampling it nearest puts a hard cell-sized edge on
+        // the result no matter what is done to the aperture - measured on a
+        // block of dark cells, v5's outer edge fell from full to nothing in one
+        // output pixel. Interpolating between the four surrounding cells turns
+        // that step into a ramp, and dp_shadow_blur sets how wide the ramp is:
+        // at 0 the weights collapse to a nearest pick and this is exactly v5,
+        // at 1 they are plain bilinear and the gradient spans a whole cell.
+        //
+        // Four taps, which is the cost of the feature. They sit inside the
+        // uniform branch, so nothing is paid for them with the shadow off.
+        // No epsilon on this floor, and that is deliberate.
+        //
+        // The cell pair and the interpolation weight have to come from the same
+        // value or they disagree by a whole cell, which is what an epsilon on
+        // one of them does. Biasing both together does not help either: the
+        // float32 error already in the interpolated texcoord is larger than any
+        // epsilon worth adding, so wherever the shifted point lands near a
+        // boundary the GPU and a float64 model can pick different cells - and
+        // at a fractional scale that is a great many pixels, not a few.
+        //
+        // It is harmless here, unlike the scaler's own floor(). The weight goes
+        // to zero exactly where the pair changes, so both choices interpolate
+        // to the same value; only the two ends of the pair swap. That is the
+        // property to preserve if this is ever rewritten - not the epsilon.
+        vec2 g = q - 0.5;
+        vec2 gi = floor(g);
+        vec2 gf = g - gi;
+        vec2 c0 = (gi + 0.5) / TextureSize;
+        vec2 c1 = (gi + 1.5) / TextureSize;
+        vec4 cl = vec4(
+            dot(COMPAT_TEXTURE(Texture, vec2(c0.x, c0.y)).rgb, LUMA),
+            dot(COMPAT_TEXTURE(Texture, vec2(c1.x, c0.y)).rgb, LUMA),
+            dot(COMPAT_TEXTURE(Texture, vec2(c0.x, c1.y)).rgb, LUMA),
+            dot(COMPAT_TEXTURE(Texture, vec2(c1.x, c1.y)).rgb, LUMA));
+        float casterLum = mix(mix(cl.x, cl.y, gf.x),
+                              mix(cl.z, cl.w, gf.x), gf.y);
 
         // The undriven level to measure that opacity against. Not white: no
         // Game Boy palette is anywhere near it, and dividing by white judges
         // every shade to be most of the way opaque, which dims the whole
-        // picture instead of shadowing it. Taken as the brightest tap that
-        // actually feeds this pixel, floored - see PAPER_FLOOR.
+        // picture instead of shadowing it.
         //
-        // Gating on the blend weight is what keeps it stable: B = floor(p+0.5)
-        // picks the tap *pair*, and at an exact boundary - every other pixel at
-        // a whole scale factor - it can land either side. The blend does not
-        // care, since both choices carry the same texel at unit weight, but a
-        // plain max over the pair swaps in a different neighbour and moves the
-        // shadow by up to 29/255. Weighting first collapses both onto one tap.
-        vec4 k = vec4(wA.x * wA.y, (1.0 - wA.x) * wA.y,
-                      wA.x * (1.0 - wA.y), (1.0 - wA.x) * (1.0 - wA.y));
-        k = smoothstep(vec4(0.0), vec4(0.02), k);
-        vec4 lum = vec4(dot(t00, LUMA), dot(t10, LUMA),
-                        dot(t01, LUMA), dot(t11, LUMA)) * k;
-        float paper = max(max(max(lum.x, lum.y), max(lum.z, lum.w)),
-                          PAPER_FLOOR);
+        // Taken from the four cells just read, which is both cheaper and more
+        // to the point than v6's version - that one reduced over the scaler's
+        // own taps and had to gate each by its blend weight, because the pair
+        // those taps come from flips at an exact boundary and a bare max would
+        // swap in a different neighbour. These four are addressed by an
+        // epsilon-biased floor instead, so they do not move, and they sit where
+        // the shadow is actually cast rather than where it lands.
+        // Weighted before reducing, for the reason v6 had to do the same over
+        // the scaler's taps: a maximum over a *set* of cells is not stable when
+        // the set itself can change. floor() picks the 2x2, and at a boundary
+        // the GPU and a float64 model land on different pairs - the
+        // interpolation does not care, because the weight is zero exactly
+        // there, but a bare max swaps in a whole different neighbour. On a
+        // frame with a white block next to a dark one that moved paper from
+        // 0.38 to 1.00 and the shadow with it, measured 107/255.
+        //
+        // Gating each cell by its own bilinear weight collapses both choices
+        // onto the same contributing cells.
+        vec4 kb = vec4((1.0 - gf.x) * (1.0 - gf.y), gf.x * (1.0 - gf.y),
+                       (1.0 - gf.x) * gf.y,         gf.x * gf.y);
+        vec4 clw = cl * smoothstep(vec4(0.0), vec4(0.02), kb);
+        vec2 pm = max(clw.xy, clw.zw);
+        float paper = max(max(pm.x, pm.y), PAPER_FLOOR);
+
         // Both sides of this ratio are raw source values, deliberately.
         // Opacity is a property of the panel, so an output gain has to cancel
         // out of it rather than change how much light a dot appears to block.
-        float opacity = clamp(1.0 - dot(caster, LUMA) / paper, 0.0, 1.0);
+        float opacity = clamp(1.0 - casterLum / paper, 0.0, 1.0);
 
         col *= 1.0 - dp_shadow * opacity * covS.x * covS.y;
     }
