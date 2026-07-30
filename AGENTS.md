@@ -21,7 +21,8 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | `shaders/pixel-perfect-v2.glsl` | in flight: adds a post-blend `pp_gamma` |
 | `shaders/pixel-perfect-v3.glsl` | in flight: no `pp_sharpness`, adds a four-control grade |
 | `shaders/pixel-perfect-v4.glsl` | in flight: v3, but the grade costs nothing when off |
-| `shaders/dmg-perfect-v3.glsl` | Game Boy DMG: two-pass in one pass, plus a cast shadow. `dp_` params |
+| `shaders/dmg-perfect-v4.glsl` | Game Boy DMG: two-pass in one pass, shadow cast under the dots. `dp_` params |
+| `shaders/dmg-perfect-v3.glsl` | superseded: shadow subtracted from the gap colour only |
 | `shaders/dmg-perfect-v2.glsl` | superseded: same scaling, shadow measured opacity against white |
 | `shaders/dmg-perfect-v1.glsl` | superseded: gap as a share of a cell, forced to 2px |
 | `tools/` | the verification harness |
@@ -838,6 +839,58 @@ undriven dots cast a shadow, which is a deliberate look and the exact opposite
 of what is wanted here. No libretro Game Boy shader reconstructs a drive level
 from an already-palettised frame; there is no prior art for this.
 
+### A cast shadow goes under the panel, not into the gaps
+
+v3 subtracted the shadow from the gap colour and only from there, on the
+reasoning that the gap is the substrate and the substrate is what a shadow falls
+on. That is geometrically true and visually useless: the gap is **one output
+pixel wide**, so the shadow could only ever darken the grid lines. It read as a
+mesh drawn on top of the picture rather than as anything lying underneath, and
+at a whole scale factor it was very nearly invisible — 0.7 opacity on a 20x
+render shows almost nothing.
+
+The optics say otherwise. On a reflective panel the light crosses the liquid
+crystal, reflects off the substrate and crosses back, so a neighbour that shades
+the substrate scales **whatever that cell finally shows**. So the shadow is one
+multiply on the finished colour:
+
+    col *= 1.0 - dp_shadow * opacity(casting cell) * displacedAperture;
+
+and the "under" behaviour falls out for free — an undriven cell is transparent
+so the shadow reads through it clearly, a driven cell is already dark so it
+hides it. That is what makes the dots look raised instead of outlined.
+
+Three consequences worth keeping:
+
+- **It is cheaper in beat, not dearer.** Confining a pattern to the one-pixel
+  grid lines is the worst thing you can do to it: that is the highest frequency
+  in the frame. Measured on a DMG palette, v3's shadow costs 0.32 at 0.35 and
+  0.56 at 0.75, where v4 costs **0.19 and 0.29** — and at 0.15 to 0.30 v4
+  measures *below* its own shadow-off baseline. A shadow that lies under
+  everything is a low-frequency multiply; one that lives in the gaps is not.
+- **Offsets belong in source pixels.** v3 measured its offset in output pixels,
+  so "1.5" was three tenths of a cell at 5x and half a cell at 3x — the same
+  parameter meaning a different look at each resolution, which is the fault
+  `dp_gap` was fixed for two versions earlier. A shadow is thrown by a dot, so
+  it belongs a fraction of a *cell* away. Verified scale-invariant: a dot in
+  cell 16 throws a shadow spanning exactly +0.5 to +1.5 source pixels at 5x, 8x,
+  13x and 20x alike.
+- **The casting cell needs its own tap.** At a cell or more of offset it is
+  outside the four the scaler holds. One nearest sample is right rather than
+  merely cheap: opacity is a per-cell quantity, and the displaced aperture
+  already supplies the edges. It costs a fifth texture fetch, inside the uniform
+  branch, so nothing pays for it with the shadow off — the off path is 291 ops
+  and four taps, bit-identical to v3.
+
+And the same `floor()` trap once more, in a new place: the casting cell index is
+`floor(p - offset)`, which lands exactly on a boundary for a great many pixels
+at once whenever the offset is a whole number of source pixels away from the
+half-texel sample position. A few ULP then pick a different cell across what may
+be a hard edge in the content, which measured **102/255**. `floor(q + 1e-3)`
+resolves it toward the cell whose dot actually starts there; where the bias
+picks the far side instead, the displaced aperture is in its gap and the shadow
+is zero anyway.
+
 ### A weighted blend is stable where a max over the same taps is not
 
 The paper estimate reads the four taps and takes their maximum. That is not
@@ -1449,8 +1502,9 @@ already taken out, for the reason the metric section above gives:
 | `dmg_dot_matrix` | 1.23 | 6.7% / 7.6% | 0.0% / 12.2% | 1.00 | 80 | 6 |
 | `dmg-perfect-v1` | 0.12 | **0.0% / 0.0%** | **0.0% / 0.0%** | **1.98** | 265 | 6 |
 | `dmg-perfect-v2` | 0.13 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 295 | 6 |
-| **`dmg-perfect-v3`** | **0.13** | **0.1% / 0.3%** | **0.0% / 0.7%** | **1.05** | 295 | 6 |
-| `dmg-perfect-v3` + shadow 0.30 | 0.31 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 459 | 6 |
+| `dmg-perfect-v3` | 0.13 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 295 | 6 |
+| **`dmg-perfect-v4`** | **0.13** | **0.1% / 0.3%** | **0.0% / 0.7%** | **1.05** | 291 | 6 |
+| `dmg-perfect-v4` + shadow 0.35 | 0.19 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 463 | 6 |
 
 v2 and v3 differ only in the shadow, so their geometry rows are the same figures
 and the beat column, taken on a full-range checkerboard, cannot tell them apart
@@ -1463,9 +1517,10 @@ is why it was replaced. v2 is a tenth of a percent off an exact lattice and draw
 line the reference draws. **That is the whole lesson of the metric section — a column
 of zeroes was the worse shader.**
 
-Costs are the shadow-off path for v2; the shadow sits behind a uniform branch, so the
-400 is a static count rather than what a fragment pays with it off. SFU never moves
-off 6, a fifth of `pixellate`'s 30, which is the number to trust on the Mali.
+Costs are the shadow-off path except where the row says otherwise; the shadow sits
+behind a uniform branch, so the 463 is a static count and includes a fifth texture
+fetch that no fragment pays for with the shadow off. SFU never moves off 6, a fifth
+of `pixellate`'s 30, which is the number to trust on the Mali.
 
 Set `dp_brightness` 1.20 and `dp_gamma` 1.40 and v2 is bit-identical to the reference
 at every whole scale. Beat rises to 0.84 there, because most of what either shader
