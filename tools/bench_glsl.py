@@ -25,6 +25,7 @@ trust for the device.
 Run:  cd tools && PYTHONPATH=. ../.venv/bin/python bench_glsl.py
 """
 import os
+import re
 
 import numpy as np
 
@@ -61,7 +62,32 @@ CASES = [
      {"cp_curvature": 0.0, "cp_gamma": GAMMA_ON}),
     ("v8 curve on, gamma on", "crt-perfect-v8.glsl",
      {"cp_curvature": CURV_ON, "cp_gamma": GAMMA_ON}),
+
+    ("v9 defaults", "crt-perfect-v9.glsl", {}),
+    ("v9 curve on, gamma off", "crt-perfect-v9.glsl",
+     {"cp_curvature": CURV_ON, "cp_gamma": 1.0}),
+    ("v9 curve off, gamma on", "crt-perfect-v9.glsl",
+     {"cp_curvature": 0.0, "cp_gamma": GAMMA_ON}),
+    ("v9 curve on, gamma on", "crt-perfect-v9.glsl",
+     {"cp_curvature": CURV_ON, "cp_gamma": GAMMA_ON}),
 ]
+
+
+def pragma_defaults(fn):
+    """Defaults read straight out of the file, for shaders not in the registry.
+
+    Falling back to {} instead cost two wrong benchmark tables: an unset uniform
+    is 0, which for these shaders means both pattern branches skipped, the gamma
+    branch forced on, and a divide by zero in the pitch. Prototypes under a
+    scratch path are exactly the case that misses the registry, and exactly the
+    case being benchmarked against it.
+    """
+    out = {}
+    for line in open(shader_path(fn)):
+        m = re.match(r'#pragma parameter\s+(\w+)\s+"[^"]*"\s+(-?[\d.]+)', line)
+        if m:
+            out[m.group(1)] = float(m.group(2))
+    return out
 
 
 def build(ctx, fn, params):
@@ -74,7 +100,7 @@ def build(ctx, fn, params):
     # 0 both pattern branches are skipped, cp_gamma at 0 forces the pow branch
     # that a default of 1.0 skips, and cp_min_pitch at 0 divides by zero. Every
     # figure this tool produced before this line was measuring that.
-    full = dict(REGISTRY[fn].defaults) if fn in REGISTRY else {}
+    full = dict(REGISTRY[fn].defaults) if fn in REGISTRY else pragma_defaults(fn)
     full.update(params)
     for k, v in full.items():
         if k in p:

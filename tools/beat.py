@@ -467,18 +467,59 @@ def report_curvature_uniformity():
     print(f"\n  worst: v7 {worst_ok:.2f}  naive {worst_naive:.2f}   "
           f"{'OK' if worst_ok >= MIN_PITCH - 1e-6 else 'PATTERN GOES BELOW THE FLOOR'}")
 
-    print("\ncurvature: pattern strength across the frame, 16x16 windows\n")
-    print("  " + " " * 22 + "".join(f"{f'k={k:.2f}':>12s}" for k in [0.0] + ks[:2]))
+    # Only tiles wholly inside the tube. A tile straddling the curved edge is
+    # part black, so it carries almost no pattern energy and drags the minimum
+    # to nearly zero - the ratio then reads 13 to 38 for a shader that is
+    # actually flat to within 15%. v7 crops instead of leaving corners black,
+    # which is the only reason this ever worked without the mask, and it is why
+    # v8 shipped with this check silently not applying to it.
+    print("\ncurvature: pattern strength across the frame, 16x16 windows")
+    print("(tiles wholly inside the tube; a partly lit tile is not a measurement)\n")
+    from crt_preview import DEFAULTS_V8, DEFAULTS_V9, render_crt_v8, render_crt_v9
+    shaders = [("v7", render_crt_v7, DEFAULTS_V7),
+               ("v8", render_crt_v8, DEFAULTS_V8),
+               ("v9", render_crt_v9, DEFAULTS_V9)]
+    tile = 16
+
+    def lit_tiles(ow, oh, k, curved):
+        """Tiles that are fully lit AND clear of the tube's edge fade.
+
+        Clearing the fade matters as much as clearing the black. The mask ramps
+        over one output pixel, so a tile sitting on the boundary contains a hard
+        intensity gradient, and RMS-about-the-mean reads that gradient as pattern
+        energy: those tiles measure 29 against a frame-wide 14.4, which inverts
+        the ratio and reports a perfectly flat shader as collapsing. Excluding a
+        one-pixel margin is excluding the vignette, which was never pattern.
+        """
+        ys, xs = np.mgrid[0:oh, 0:ow]
+        u = (xs + 0.5) / ow * 2.0 - 1.0
+        v = (ys + 0.5) / oh * 2.0 - 1.0
+        n = 1.0 / (1.0 + k) if curved else 1.0 / (1.0 + 2.0 * k)
+        s = (1.0 + k * (u * u + v * v)) * n
+        su, sv = u * s * 0.5 + 0.5, v * s * 0.5 + 0.5
+        ex, ey = 1.0 / ow, 1.0 / oh
+        inside = ((su >= ex) & (su <= 1.0 - ex)
+                  & (sv >= ey) & (sv <= 1.0 - ey))
+        ny, nx = oh // tile, ow // tile
+        blk = inside[:ny * tile, :nx * tile].reshape(ny, tile, nx, tile)
+        return blk.transpose(0, 2, 1, 3).reshape(ny, nx, -1).all(axis=2)
+
+    print("  " + " " * 22 + "".join(f"{f'{n} k={k:.2f}':>12s}"
+                                    for n, _, _ in shaders for k in ks[:2]))
     worst = 1.0
     for (sw, sh), (ow, oh) in scales:
         src = np.full((sh, sw, 3), 128, np.uint8)
         row = []
-        for k in [0.0] + ks[:2]:
-            m = pattern_strength(render_crt_v7(src, ow, oh,
-                                               dict(DEFAULTS_V7, cp_curvature=k)))
-            ratio = float(m.max() / max(m.min(), 1e-6))
-            worst = max(worst, ratio)
-            row.append(f"{ratio:12.2f}")
+        for name, render, defaults in shaders:
+            for k in ks[:2]:
+                m = pattern_strength(render(src, ow, oh,
+                                            dict(defaults, cp_curvature=k)), tile)
+                keep = lit_tiles(ow, oh, k, name != "v7")
+                keep = keep[:m.shape[0], :m.shape[1]]
+                vals = m[keep]
+                ratio = float(vals.max() / max(vals.min(), 1e-6)) if vals.size else 1.0
+                worst = max(worst, ratio)
+                row.append(f"{ratio:12.2f}")
         print(f"  {sw}x{sh} -> {ow}x{oh}".ljust(24) + "".join(row))
     print(f"\n  worst max/min across the frame: {worst:.2f}   "
           f"{'OK' if worst <= UNIFORM else 'PATTERN COLLAPSING'}")

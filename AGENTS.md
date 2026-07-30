@@ -15,6 +15,7 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | `shaders/crt-perfect-v6.glsl` | in flight: curvature, patterns flat, black frame |
 | `shaders/crt-perfect-v7.glsl` | in flight: curvature, zoomed to fill — **crops the border** |
 | `shaders/crt-perfect-v8.glsl` | in flight: curvature, fills the screen and crops nothing |
+| `shaders/crt-perfect-v9.glsl` | in flight: v8, but curvature costs nothing when off |
 | `shaders/lcd-perfect.glsl` | LCD: sinusoidal mesh on whole-cell periods, 120-degree stripes. `lp_` params |
 | `shaders/pixel-perfect.glsl` | scaling only, no effect. `pp_` params |
 | `shaders/pixel-perfect-v2.glsl` | in flight: adds a post-blend `pp_gamma` |
@@ -301,24 +302,60 @@ Curvature is **pure ALU** — a radial polynomial warp is `dot(c,c)` and a few
 multiply-adds, with no `tan`/`atan` anywhere. That is what makes it affordable here
 where CRT-Geom-style curvature is not:
 
-| | ops | tex | SFU |
-|---|---|---|---|
-| `pixellate` (yardstick) | 292 | 4 | **30** |
-| `crt-perfect` flat | 501 | 4 | **14** |
-| v6 — patterns flat, black on all four sides | 588 | 4 | **14** |
-| v7 — patterns warped, border cropped away | 596 | 4 | **14** |
-| **v8 — patterns warped, nothing cropped** | **628** | 4 | **14** |
+| | ops | tex | SFU | curvature off | curvature on |
+|---|---|---|---|---|---|
+| `pixellate` (yardstick) | 292 | 4 | **30** | 100.0% | |
+| `crt-perfect` flat | 501 | 4 | **14** | 104.7% | |
+| v6 — patterns flat, black on all four sides | 588 | 4 | **14** | | |
+| v7 — patterns warped, border cropped away | 596 | 4 | **14** | | |
+| v8 — patterns warped, nothing cropped | 628 | 4 | **14** | 124.3% | 134.4% |
+| **v9 — v8 with the band-limit made uniform** | **626** | 4 | **14** | **108.2%** | **117.9%** |
 
-**SFU never moves.** v7 costs only 8 ops more than v6 despite warping the patterns
-too, because `boxSinc`'s `sin` and the pattern `cos` are *already* evaluated per
-fragment — their arguments come from uniforms and nothing hoists a uniform expression
-out of a fragment shader, so making those arguments vary per pixel feeds an
-instruction that was being paid for anyway. **Local band-limiting is free.** v8's +32
-over v7 is the tube mask returning. ALU is +25% over the flat shader, unvalidated on
-the Mali.
+**SFU never moves**, and it never predicted the time either — see the benchmark
+section. The figure that matters here is that **v8 cost 19.6 points over the flat
+shader even with curvature switched off**, and v9 gets that down to 3.5.
 
-At `cp_curvature = 0` all three are **bit-identical** to the flat shader (0/255,
-including 480x272 which exercises the locked regime). The guard is a uniform branch.
+### Do not make a band-limit argument per-fragment
+
+This is the single most expensive mistake made in this family, and the v7 notes
+asserted the opposite with confidence, so it is worth stating flatly:
+
+> `boxSinc` holds a `sin` and `nyquistFade` a `smoothstep`. While their argument
+> depends only on uniforms, **the driver hoists them out of the fragment shader** and
+> evaluates them once per draw. Multiply that argument by anything per-fragment and
+> you buy two `sin` and two `smoothstep` per pixel.
+
+v7 and v8 band-limited on `freq * jac`, where `jac` is the local magnification, and
+paid that on every frame whether or not curvature was on. Bisected by removing one
+piece of v8 at a time:
+
+| | vs `pixellate` | recovered |
+|---|---|---|
+| v8, curvature off | 124.0% | |
+| minus the per-fragment band-limiting | **107.5%** | **16.5 pts** |
+| minus `jac` on the scaler footprint | 122.4% | 1.6 pts |
+| minus `jmax` / `noWarp` on the pitch | 123.6% | 0.4 pts |
+| minus the tube mask multiply | 128.0% | none |
+
+v9 band-limits on `freq * jmax` instead. `jmax = (1+4k)/(1+k)` is the largest
+magnification anywhere in the frame and depends only on `cp_curvature`, so the
+expression stays uniform and stays hoisted **in both modes** — the curvature-on path
+gets 16 points faster as well. It band-limits as though every pixel sat at the most
+magnified corner, which can only understate the amplitude, and the pitch floor already
+held every local frequency at or under `1/cp_min_pitch`, so no aliasing margin was
+given away. The cost is about 6% flatter pattern contrast across the frame; measured,
+v9 is *more* uniform than v8 (1.08 against 1.13), which is the same fact stated kindly.
+
+**Branching is not the lever.** Three other shapes were measured and all were worse:
+computing the uniform form and overwriting it inside the branch (116.8%), a strict
+`if/else` (112.0% off but **136.2% on**, i.e. worse than v8 in the mode it was meant to
+help), and adding further uniform guards on the footprint and tube multiplies on top of
+the winner (109.7%, a 2.3-point regression). Removing the per-fragment dependency is
+the lever.
+
+At `cp_curvature = 0`, **v9 is bit-identical to the shipped flat shader** — 0/255 over
+three sources, four scale factors and both mask types. v8 measures 1/255 on the same
+sweep, so v9 is the stricter superset. The guard is a uniform branch either way.
 
 ### What the warp is divided by is the whole design
 
@@ -417,6 +454,13 @@ v7 sits exactly on the floor everywhere; naive falls through it.
 
 ### Two traps hit while measuring curvature
 
+- **A pattern-strength ratio is invalid on a shader with black corners.** Tiles at the
+  tube edge are part black, or contain the mask's one-pixel fade, and either way carry
+  a gradient that RMS-about-the-mean scores as pattern energy: 29 against a frame-wide
+  14.4, which inverts the ratio and reports a flat shader as collapsing. v7 crops
+  rather than leaving corners black, which is the only reason the check ever worked —
+  so **v8 shipped with it silently not applying**. `beat.py` now excludes tiles that
+  are not wholly inside the tube *and* clear of the fade.
 - **A row-mean profile is invalid on a warped image.** Measuring pattern contrast as
   the peak-to-peak of a tile's row-mean reported the corner collapsing from 34.7 to
   3.2 — a 10x falloff that looks exactly like catastrophic aliasing. The scanlines are
