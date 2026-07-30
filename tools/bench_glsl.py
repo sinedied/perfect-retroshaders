@@ -24,13 +24,10 @@ trust for the device.
 
 Run:  cd tools && PYTHONPATH=. ../.venv/bin/python bench_glsl.py
 """
-import os
-import re
-
 import numpy as np
 
 import moderngl
-from gl_check import stage_source
+from gl_check import stage_source, pragma_defaults, LINEAR_SAMPLED
 
 from paths import shader_path
 from shaders import REGISTRY
@@ -49,8 +46,22 @@ DRAWS = 200
 GAMMA_ON = 1.40
 CURV_ON = 0.10
 
+# The sampler is part of what a shader costs, and it is not a free choice: it is
+# whatever the shader's own .glslp declares, so it is read from LINEAR_SAMPLED
+# rather than set per case. Everything here takes four NEAREST taps and computes
+# its own average; the two sharp-shimmerless rows take one tap and ask the
+# texture unit for the blend. moderngl defaults every texture to LINEAR, so
+# before this the whole table was measured through the wrong sampler for every
+# row - it happens not to have moved the ratios, which is luck, not a reason.
 CASES = [
-    ("pixellate (vendor)", "pixellate.glsl", {"INTERPOLATE_IN_LINEAR_GAMMA": 1.0}),
+    ("pixellate (vendor)", "pixellate.glsl",
+     {"INTERPOLATE_IN_LINEAR_GAMMA": 1.0}),
+    # the two one-tap references: the same area average, delegated to the
+    # texture unit instead of computed, so they are the floor the four-tap
+    # approach here is paying against
+    ("sharp-shimmerless (vendor)", "sharp-shimmerless.glsl", {}),
+    ("sharp-shimmerless-grid (v)", "sharp-shimmerless-grid.glsl", {}),
+    ("pixel-perfect", "pixel-perfect.glsl", {}),
 
     ("crt-perfect defaults", "crt-perfect.glsl", {}),
     ("crt-perfect gamma on", "crt-perfect.glsl", {"cp_gamma": GAMMA_ON}),
@@ -72,22 +83,8 @@ CASES = [
      {"cp_curvature": CURV_ON, "cp_gamma": GAMMA_ON}),
 ]
 
-
-def pragma_defaults(fn):
-    """Defaults read straight out of the file, for shaders not in the registry.
-
-    Falling back to {} instead cost two wrong benchmark tables: an unset uniform
-    is 0, which for these shaders means both pattern branches skipped, the gamma
-    branch forced on, and a divide by zero in the pitch. Prototypes under a
-    scratch path are exactly the case that misses the registry, and exactly the
-    case being benchmarked against it.
-    """
-    out = {}
-    for line in open(shader_path(fn)):
-        m = re.match(r'#pragma parameter\s+(\w+)\s+"[^"]*"\s+(-?[\d.]+)', line)
-        if m:
-            out[m.group(1)] = float(m.group(2))
-    return out
+NEAR, LIN = "nearest", "linear"
+CASES = [(*c, LIN if c[1] in LINEAR_SAMPLED else NEAR) for c in CASES]
 
 
 def build(ctx, fn, params):
@@ -132,9 +129,15 @@ def main():
     ctx = moderngl.create_standalone_context()
     q = ctx.query(time=True)
     rng = np.random.default_rng(1)
-    tex = ctx.texture((IW, IH), 3,
-                      rng.integers(0, 255, (IH, IW, 3), dtype=np.uint8).tobytes())
-    tex.use(0)
+    pixels = rng.integers(0, 255, (IH, IW, 3), dtype=np.uint8).tobytes()
+    # Same content, two samplers, so a case can be bound to the one it ships
+    # with. Both are CLAMP_TO_EDGE, as the host sets.
+    texes = {}
+    for name, f in ((NEAR, moderngl.NEAREST), (LIN, moderngl.LINEAR)):
+        t = ctx.texture((IW, IH), 3, pixels)
+        t.filter = (f, f)
+        t.repeat_x = t.repeat_y = False
+        texes[name] = t
     verts = np.array([-1, 1, 0, 1, 0, 1, 0, 0, -1, -1, 0, 1, 0, 0, 0, 0,
                        1, 1, 0, 1, 1, 1, 0, 0,  1, -1, 0, 1, 1, 0, 0, 0], "f4")
     vbo = ctx.buffer(verts.tobytes())
@@ -143,13 +146,15 @@ def main():
     ctx.viewport = (0, 0, OW, OH)
 
     vaos = []
-    for label, fn, params in CASES:
+    for label, fn, params, filt in CASES:
         prog = build(ctx, fn, params)
         names = [n for n in ("VertexCoord", "TexCoord") if n in prog]
         vaos.append(ctx.vertex_array(
             prog, [(vbo, " ".join(["4f4"] * len(names)), *names)]))
+    filts = [c[3] for c in CASES]
 
-    for vao in vaos:                      # warm every program before timing any
+    for vao, filt in zip(vaos, filts):    # warm every program before timing any
+        texes[filt].use(0)
         for _ in range(50):
             vao.render(moderngl.TRIANGLE_STRIP)
     ctx.finish()
@@ -166,11 +171,13 @@ def main():
         # ramp. Without this the case in slot 0 reads a 40% spread against
         # 1-3% for everything else, purely from position.
         for _ in range(60):
+            texes[filts[0]].use(0)
             vaos[0].render(moderngl.TRIANGLE_STRIP)
         ctx.finish()
         rotated = order[n % len(order):] + order[:n % len(order)]
         for idx in rotated:
             vao = vaos[idx]
+            texes[filts[idx]].use(0)
             s = []
             for _ in range(DRAWS):
                 with q:
@@ -197,26 +204,30 @@ def main():
 
     from spirv_cost import analyse
     static = {}
-    for _, fn, _ in CASES:
+    for _, fn, _, _ in CASES:
         if fn not in static:
             a = analyse(fn)
-            static[fn] = (a["ops"], a["slots"]) if a else (0, 0)
+            static[fn] = (a["ops"], a["tex"], a["slots"]) if a else (0, 0, 0)
 
-    print(f"  {'case':<26s} {'ops':>5s} {'SFU':>4s} {'ms':>9s} "
+    print(f"  {'case':<28s} {'ops':>5s} {'tex':>4s} {'SFU':>4s} {'ms':>9s} "
           f"{'vs pixellate':>13s} {'IQR':>6s}")
-    for (label, fn, _), m, p in zip(CASES, med, passes):
+    for (label, fn, _, filt), m, p in zip(CASES, med, passes):
         spread = iqr(p) / m * 100
-        ops, sfu = static[fn]
-        print(f"  {label:<26s} {ops:5d} {sfu:4d} {m:9.4f} "
-              f"{m / base * 100:12.1f}% {spread:5.1f}%")
+        ops, tex, sfu = static[fn]
+        print(f"  {label:<28s} {ops:5d} {tex:3d}{filt[0].upper()} {sfu:4d} "
+              f"{m:9.4f} {m / base * 100:12.1f}% {spread:5.1f}%")
 
     print(f"\n  worst per-case IQR across passes: {noise:.1f}% - "
           f"differences smaller than that are noise, not shaders")
-    print("\n  Note the ops and SFU columns against the times: pixellate has the\n"
-          "  most SFU by far and is still the fastest thing here, so on this GPU\n"
-          "  SFU is not the bottleneck and time tracks ops instead. The device may\n"
-          "  well rank them the other way round - that is the open question these\n"
-          "  numbers cannot answer.")
+    print("\n  Read the ops/tex/SFU columns against the times. Among the\n"
+          "  four-tap rows, pixellate has by far the most SFU and is still the\n"
+          "  fastest, so on this GPU SFU is not the bottleneck and time tracks\n"
+          "  ops instead. The one-tap rows sit under all of them, which says\n"
+          "  the tap count matters too - sharp-shimmerless has a fifth of\n"
+          "  pixellate's ops AND a quarter of its taps, so this table cannot\n"
+          "  say how that saving splits. The device may rank all of it the\n"
+          "  other way round; that is the open question these numbers cannot\n"
+          "  answer.")
 
 
 if __name__ == "__main__":

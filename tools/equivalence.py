@@ -5,6 +5,13 @@ pixellate has two modes. INTERPOLATE_IN_LINEAR_GAMMA = 0 blends in the encoded
 domain; = 1 (its default) linearises each tap first. pixel-perfect targets the
 former, because the latter is itself a moire source - this script measures both.
 
+Section 6 answers the same question for the vendored sharp-shimmerless, which
+computes the identical area average with ONE tap by handing the blend to the
+texture unit. That is the one-tap LINEAR construction AGENTS.md records as
+prototyped and rejected here, so it is measured rather than argued about: it
+matches, it is the cheapest thing in the repo, and what it costs is a dependency
+on the GPU's subtexel filtering precision, which this section quantifies.
+
 Run:  cd tools && PYTHONPATH=. ../.venv/bin/python equivalence.py
 """
 import collections
@@ -13,7 +20,7 @@ import sys
 import numpy as np
 
 import moderngl
-from gl_check import stage_source, gl_render
+from gl_check import stage_source, gl_render, LINEAR_SAMPLED
 from lcd_preview import DEFAULTS_PP_V3
 from paths import shader_path
 
@@ -21,6 +28,10 @@ PIXELLATE = shader_path("pixellate.glsl")
 PIXEL_PERFECT = shader_path("pixel-perfect.glsl")
 PIXEL_PERFECT_V3 = shader_path("pixel-perfect-v3.glsl")
 PIXEL_PERFECT_V4 = shader_path("pixel-perfect-v4.glsl")
+SHIMMERLESS = shader_path("sharp-shimmerless.glsl")
+# read from the one declaration, so section 6 cannot drift from what preview.py
+# and bench_glsl.py render the same shader with
+SS_LINEAR = "sharp-shimmerless.glsl" in LINEAR_SAMPLED
 
 # v4 guards v3's affine block with an exact uniform test, so the two must agree
 # at EVERY setting, not merely at the one that skips the block. Near-neutral
@@ -64,6 +75,7 @@ def transition_mask(iw, ih, ow, oh):
     wy = np.clip((np.floor(v + 0.5) - v + hy) / (2 * hy), 0, 1)
     return ((wx > 0) & (wx < 1))[None, :] | ((wy > 0) & (wy < 1))[:, None]
 
+
 CASES = [(320, 240, 1024, 768), (256, 224, 1024, 768), (352, 240, 1024, 768),
          (368, 240, 1280, 720), (320, 240, 1280, 720), (160, 144, 1024, 768),
          (640, 480, 1024, 768), (512, 240, 1024, 768), (320, 240, 640, 480),
@@ -93,6 +105,57 @@ def beat(img):
     return max(out)
 
 
+PROBE_VERT = """#version 410 core
+in vec4 VertexCoord;
+void main() { gl_Position = VertexCoord; }
+"""
+
+# Sweeps one texel spacing of a two-texel LINEAR texture holding 0.0 and 1.0, so
+# the value read back IS the interpolator's blend weight. Rendered to float32,
+# because an 8-bit target quantises harder than any plausible ladder and would
+# report every GPU as exact.
+PROBE_FRAG = """#version 410 core
+uniform sampler2D Texture;
+uniform float Width;
+out vec4 FragColor;
+void main() {
+    float u = 0.25 + 0.5 * floor(gl_FragCoord.x) / (Width - 1.0);
+    FragColor = vec4(texture(Texture, vec2(u, 0.5)).r);
+}
+"""
+
+
+def subtexel_bits(ctx, n=4096):
+    """How many distinct weights this GPU's bilinear unit can produce.
+
+    There is no GL query for it - it is a fixed-point ladder whose width is a
+    hardware property - and it is exactly what a one-tap scaler's accuracy rests
+    on, so it has to be measured. n bounds what is resolvable: a result equal to
+    n means the ladder is finer than the probe, not that it is exact.
+    """
+    tex = ctx.texture((2, 1), 1, bytes([0, 255]))
+    tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
+    tex.repeat_x = tex.repeat_y = False
+    tex.use(0)
+    prog = ctx.program(vertex_shader=PROBE_VERT, fragment_shader=PROBE_FRAG)
+    prog["Texture"].value = 0
+    prog["Width"].value = float(n)
+    vbo = ctx.buffer(np.array([-1, 1, 0, 1, -1, -1, 0, 1,
+                                1, 1, 0, 1,  1, -1, 0, 1], "f4").tobytes())
+    vao = ctx.vertex_array(prog, [(vbo, "4f4", "VertexCoord")])
+    fbo = ctx.framebuffer(color_attachments=[ctx.texture((n, 1), 1, dtype="f4")])
+    fbo.use()
+    ctx.viewport = (0, 0, n, 1)
+    vao.render(moderngl.TRIANGLE_STRIP)
+    vals = np.frombuffer(fbo.read(components=1, dtype="f4"), "f4")
+    steps = int(len(np.unique(vals)))
+    for o in (tex, vbo, vao, fbo):
+        o.release()
+    if steps >= n:
+        return f">{int(np.log2(n))}", steps
+    return f"{np.log2(max(steps - 1, 1)):.1f}", steps
+
+
 def block_widths(img, row=None):
     r = img[row if row is not None else img.shape[0] // 2, :, 0]
     runs = []
@@ -112,7 +175,8 @@ def main():
     prog = {}
     for name, path in (("pixellate", PIXELLATE), ("pixel-perfect", PIXEL_PERFECT),
                        ("pixel-perfect-v3", PIXEL_PERFECT_V3),
-                       ("pixel-perfect-v4", PIXEL_PERFECT_V4)):
+                       ("pixel-perfect-v4", PIXEL_PERFECT_V4),
+                       ("sharp-shimmerless", SHIMMERLESS)):
         s = open(path).read()
         prog[name] = ctx.program(vertex_shader=stage_source(s, "vert"),
                                  fragment_shader=stage_source(s, "frag"))
@@ -191,6 +255,89 @@ def main():
         print(f"   {iw}x{ih:<6d} {ow}x{oh:<5d} {ow/iw:5.2f}x{oh/ih:<5.2f} {mx:4d}")
     verdict = "bit-identical" if worst_v3 == 0 else "NOT NEUTRAL AT DEFAULTS"
     print(f"\n   worst: {worst_v3}/255   {verdict}")
+
+    print("\n6. sharp-shimmerless (vendor): the same average from ONE tap\n")
+    print("   It computes the same box footprint, then instead of taking four"
+          "\n   NEAREST taps and weighting them, it solves for the one texcoord"
+          "\n   whose bilinear fetch already IS that weighted sum. Same maths,"
+          "\n   50 ops against 292, one tap against four, and it needs"
+          "\n   filter_linear0 = true - the opposite sampler to everything here.\n")
+    print(f"   {'source':>10s} {'output':>10s} {'scale':>12s} "
+          f"{'vs pixellate':>13s} {'vs pixel-perfect':>17s}")
+    worst_ss = 0
+    for iw, ih, ow, oh in CASES:
+        mx_px = mx_pp = 0
+        for _, s6 in sources(iw, ih, rng):
+            ss = gl_render(ctx, prog["sharp-shimmerless"], s6, ow, oh, {},
+                           filter_linear=SS_LINEAR).astype(int)
+            a = gl_render(ctx, prog["pixellate"], s6, ow, oh,
+                          {"INTERPOLATE_IN_LINEAR_GAMMA": 0.0}).astype(int)
+            b = gl_render(ctx, prog["pixel-perfect"], s6, ow, oh,
+                          {"pp_sharpness": 1.0}).astype(int)
+            mx_px = max(mx_px, int(np.abs(ss - a).max()))
+            mx_pp = max(mx_pp, int(np.abs(ss - b).max()))
+        worst_ss = max(worst_ss, mx_pp)
+        print(f"   {iw}x{ih:<6d} {ow}x{oh:<5d} {ow/iw:5.2f}x{oh/ih:<5.2f} "
+              f"{mx_px:10d}/255 {mx_pp:14d}/255")
+    print(f"\n   worst: {worst_ss}/255 - the same answer, by a different route")
+
+    print("\n   Block structure at 320x240 -> 1024x768 (3.2x)\n")
+    for name, params, lin in (("pixellate", {"INTERPOLATE_IN_LINEAR_GAMMA": 0.0}, False),
+                              ("pixel-perfect", {"pp_sharpness": 1.0}, False),
+                              ("sharp-shimmerless", {}, SS_LINEAR)):
+        w, blended = block_widths(
+            gl_render(ctx, prog[name], src, 1024, 768, params, filter_linear=lin), 400)
+        print(f"   {name:18s} widths {w}  transition px/row {blended}")
+
+    print("\n   Moire (checkerboard, lower is better)\n")
+    print(f"   {'scale':<22s} {'pixellate g=1':>14s} {'pixel-perfect':>14s} "
+          f"{'sharp-shimmerless':>18s}")
+    for iw, ih, ow, oh in CASES[:6]:
+        yy, xx = np.mgrid[0:ih, 0:iw]
+        chk = (((yy + xx) % 2) * 255).astype(np.uint8)[..., None].repeat(3, 2)
+        g1 = beat(gl_render(ctx, prog["pixellate"], chk, ow, oh,
+                            {"INTERPOLATE_IN_LINEAR_GAMMA": 1.0}))
+        pp = beat(gl_render(ctx, prog["pixel-perfect"], chk, ow, oh,
+                            {"pp_sharpness": 1.0}))
+        ss = beat(gl_render(ctx, prog["sharp-shimmerless"], chk, ow, oh, {},
+                            filter_linear=SS_LINEAR))
+        label = f"{iw}x{ih} -> {ow}x{oh}"
+        print(f"   {label:<22s} {g1:14.3f} {pp:14.3f} {ss:18.3f}")
+    print("\n   The g=1 column is pixellate's own DEFAULT, and it is the only"
+          "\n   thing separating these three: one tap or four does not decide"
+          "\n   moire, the gamma round-trip does. sharp-shimmerless has no such"
+          "\n   knob to get wrong - it has no parameters at all.")
+
+    bits, steps = subtexel_bits(ctx)
+    print("\n   What it trades away, 1: the blend weight is no longer computed"
+          "\n   in the shader, it is whatever the texture unit's subtexel"
+          "\n   interpolator produces. That is a fixed-point ladder, not a"
+          "\n   float, and its width is a hardware property with no GL query.\n")
+    print(f"   this GPU: {steps} distinct weights across one texel spacing "
+          f"= {bits} bits")
+    print("   8-bit output hides a ladder this fine, so the rows above cannot"
+          "\n   see it. A coarser interpolator would show up as banding on"
+          "\n   every soft transition pixel, and the only way to know what the"
+          "\n   Mali G31 does is to run it there.")
+
+    print("\n   What it trades away, 2: it fails SILENTLY under the wrong"
+          "\n   sampler. Everything this repo ships needs NEAREST and is merely"
+          "\n   filtered twice under LINEAR; a one-tap scaler under NEAREST"
+          "\n   loses the whole blend, because the tap it placed between two"
+          "\n   texel centres snaps back to one of them.\n")
+    print(f"   {'320x240 -> 1024x768':<28s} {'transition px/row':>17s} "
+          f"{'vs pixel-perfect':>17s}")
+    ref = gl_render(ctx, prog["pixel-perfect"], src, 1024, 768,
+                    {"pp_sharpness": 1.0}).astype(int)
+    for label, lin in (("with filter_linear0 = true", True),
+                       ("with a NEAREST sampler", False)):
+        img = gl_render(ctx, prog["sharp-shimmerless"], src, 1024, 768, {},
+                        filter_linear=lin)
+        _, blended = block_widths(img, 400)
+        print(f"   {label:<28s} {blended:17d} "
+              f"{int(np.abs(img.astype(int) - ref).max()):14d}/255")
+    print("\n   That is nearest-neighbour: the uneven, crawling blocks the"
+          "\n   shader exists to remove, with nothing in the output to say so.")
 
     print("\n7. pixel-perfect-v4 vs v3, over the whole parameter range\n")
     print("   v4 only guards v3's affine block behind an exact uniform test, so"

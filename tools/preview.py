@@ -14,6 +14,9 @@ Output goes to tools/preview/, which is gitignored.
 
 Run:  cd tools && PYTHONPATH=. ../.venv/bin/python preview.py
       ... preview.py --crop 240      crop to a 240px square instead of scaling
+      ... preview.py --zoom 4        magnify the tiles, nearest, after cropping
+      ... preview.py --diff          add a row of differences against the FIRST
+                                     shader named, amplified x8
       ... preview.py --only snes,psp  restrict the screenshots by name
       ... preview.py --samples DIR    where the screenshots live
       ... preview.py lcd1x.glsl lcd-perfect.glsl
@@ -28,7 +31,7 @@ from PIL import Image
 import moderngl
 
 from crt_preview import SOURCES
-from gl_check import gl_render, stage_source
+from gl_check import gl_render, stage_source, pragma_defaults, LINEAR_SAMPLED
 from paths import TOOLS, list_shaders, shader_path
 from shaders import REGISTRY
 
@@ -56,8 +59,10 @@ SAMPLES_DEFAULT = os.path.expanduser(
 
 OUTPUTS = [(1024, 768), (640, 480)]
 
-# Vendored references have no entry in the registry, so their parameters live
-# here. Anything not listed renders at whatever its #pragma defaults are.
+# Vendored references have no entry in the registry. Anything not listed renders
+# at its own #pragma defaults; these are deliberate departures from them, and
+# they LAYER ON TOP rather than replace - an empty dict here used to mean "no
+# uniforms set at all", which is not the defaults but zero for every parameter.
 VENDOR_PARAMS = {
     "lcd1x.glsl": dict(BRIGHTEN_SCANLINES=16.0, BRIGHTEN_LCD=4.0),
     "lcd3x.glsl": {},
@@ -70,6 +75,11 @@ VENDOR_PARAMS = {
 }
 
 LABEL_H = 14
+
+# Differences worth looking at here are 1-2/255, so an unamplified diff row is
+# a black rectangle. 8 puts 1/255 at 8/255 - visible, and still far from
+# saturating a real 30/255 disagreement.
+DIFF_GAIN = 8
 
 # Curvature defaults to 0, which is the right default for a shader and the wrong
 # one for a preview - a curvature variant rendered flat looks identical to every
@@ -84,7 +94,7 @@ PREVIEW_PARAMS = {
 def params_for(name):
     if name in REGISTRY:
         return dict(REGISTRY[name].defaults, **PREVIEW_PARAMS.get(name, {}))
-    return dict(VENDOR_PARAMS.get(name, {}))
+    return dict(pragma_defaults(name), **VENDOR_PARAMS.get(name, {}))
 
 
 def label(text, width):
@@ -151,11 +161,20 @@ def render_one(ctx, name, src, out_w, out_h):
     # mask are all symmetric and cannot show it; dmg-perfect's cast shadow can,
     # and it rendered up-and-right here while gl_check.py had it down-and-right
     # from the same shader. Judge a handed effect only in this convention.
-    return gl_render(ctx, prog, src, out_w, out_h, params_for(name))
+    return gl_render(ctx, prog, src, out_w, out_h, params_for(name),
+                     filter_linear=name in LINEAR_SAMPLED)
 
 
-def sheet_for(ctx, names, src, ow, oh, crop):
-    tiles = []
+def sheet_for(ctx, names, src, ow, oh, crop, zoom=1, diff=False):
+    """One row per requested view: the renders, optionally a difference row.
+
+    A side-by-side of two correct scalers is uninformative by construction -
+    they agree, so the eye sees one picture four times and learns nothing. The
+    difference row is what says *whether* they agree and by how much, and it is
+    the only view that separates "the same shader" from "close enough to fool
+    a screenshot". Amplified, because the interesting differences are 1/255.
+    """
+    imgs, tiles = [], []
     for name in names:
         try:
             img = render_one(ctx, name, src, ow, oh)
@@ -165,9 +184,25 @@ def sheet_for(ctx, names, src, ow, oh, crop):
         if crop:
             y0, x0 = (oh - crop) // 2, (ow - crop) // 2
             img = img[max(y0, 0):y0 + crop, max(x0, 0):x0 + crop]
+        img = img.repeat(zoom, 0).repeat(zoom, 1)
+        imgs.append((name, img))
         tiles.append(np.vstack([label(name.replace(".glsl", ""),
                                       img.shape[1]), img]))
-    return np.hstack(tiles) if tiles else None
+    if not tiles:
+        return None
+    rows = [np.hstack(tiles)]
+    if diff and len(imgs) > 1:
+        ref_name, ref = imgs[0]
+        drow = []
+        for name, img in imgs:
+            d = np.abs(img.astype(int) - ref.astype(int)).max(axis=2)
+            amp = np.clip(d * DIFF_GAIN, 0, 255).astype(np.uint8)
+            drow.append(np.vstack([
+                label(f"diff x{DIFF_GAIN} vs {ref_name.replace('.glsl','')}"
+                      f"  max {int(d.max())}/255", img.shape[1]),
+                amp[..., None].repeat(3, 2)]))
+        rows.append(np.hstack(drow))
+    return np.vstack(rows)
 
 
 def main(argv):
@@ -176,6 +211,16 @@ def main(argv):
         i = argv.index("--crop")
         crop = int(argv[i + 1])
         del argv[i:i + 2]
+
+    zoom = 1
+    if "--zoom" in argv:
+        i = argv.index("--zoom")
+        zoom = int(argv[i + 1])
+        del argv[i:i + 2]
+
+    diff = "--diff" in argv
+    if diff:
+        argv.remove("--diff")
 
     samples_dir = SAMPLES_DEFAULT
     if "--samples" in argv:
@@ -201,10 +246,14 @@ def main(argv):
 
     for sname in ("white", "scene", "bars"):
         for case, (sw, sh), (ow, oh) in CASES:
-            sheet = sheet_for(ctx, names, SOURCES[sname](sw, sh), ow, oh, crop)
+            sheet = sheet_for(ctx, names, SOURCES[sname](sw, sh), ow, oh,
+                              crop, zoom, diff)
             if sheet is None:
                 continue
-            tag = f"{sname}_{sw}x{sh}_to_{ow}x{oh}" + (f"_crop{crop}" if crop else "")
+            tag = (f"{sname}_{sw}x{sh}_to_{ow}x{oh}"
+                   + (f"_crop{crop}" if crop else "")
+                   + (f"_x{zoom}" if zoom > 1 else "")
+                   + ("_diff" if diff else ""))
             path = os.path.join(OUT, f"{tag}.png")
             Image.fromarray(sheet).save(path)
             print(f"wrote {path}   ({case} -> {ow}x{oh})")
@@ -216,10 +265,13 @@ def main(argv):
     for stem, src in samples:
         sh, sw = src.shape[:2]
         for ow, oh in OUTPUTS:
-            sheet = sheet_for(ctx, names, src, ow, oh, crop)
+            sheet = sheet_for(ctx, names, src, ow, oh, crop, zoom, diff)
             if sheet is None:
                 continue
-            tag = f"{stem}_to_{ow}x{oh}" + (f"_crop{crop}" if crop else "")
+            tag = (f"{stem}_to_{ow}x{oh}"
+                   + (f"_crop{crop}" if crop else "")
+                   + (f"_x{zoom}" if zoom > 1 else "")
+                   + ("_diff" if diff else ""))
             path = os.path.join(OUT, f"{tag}.png")
             Image.fromarray(sheet).save(path)
             print(f"wrote {path}   ({sw}x{sh} -> {ow}x{oh})")

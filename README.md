@@ -95,7 +95,7 @@ Measured against the shader it replaces, at 320×240 → 1024×768:
 |---|---|---|---|---|
 | `lcd1x` (defaults) | 1.87 | 75.3% | 24.0 | 96.0 |
 | `lcd3x` | 2.93 | 82.3% | 68.6 | 5.8 |
-| `sharp-shimmerless-grid` | 3.14 | 82.8% | 66.6 | 66.6 |
+| `sharp-shimmerless-grid` | 0.72 | 82.8% | 66.6 | 66.6 |
 | **`lcd-perfect` (defaults)** | **0.24** | **82.5%** | **57.6** | **36.2** |
 | `crt-perfect` (for scale) | 0.26 | 83.9% | 63.8 | 40.9 |
 

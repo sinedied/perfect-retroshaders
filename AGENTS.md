@@ -34,10 +34,17 @@ file when it wins. Both stay registered in `tools/shaders.py` either way.
 
 `shaders/` holds only the shaders this repo ships. Anything third-party lives in
 `tools/vendor/`: not part of the MIT grant, not edited, present purely to measure
-against. Currently `pixellate.glsl` (Fes) — **30 SFU slots**, ships on the target
-device and holds 60fps there, so it is the budget yardstick every cost figure here is
-quoted against. Note it is the yardstick on *two* axes that disagree: it has the most
-SFU of anything here and is also the fastest on desktop. See the benchmark section.
+against. `pixellate.glsl` (Fes) is the yardstick — **30 SFU slots**, ships on the
+target device and holds 60fps there, so it is what every cost figure here is quoted
+against. Note it is the yardstick on *two* axes that disagree: among the four-tap
+shaders it has the most SFU and is also the fastest on desktop. See the benchmark
+section, and `tools/vendor/README.md` for what else is in there and why.
+
+**A vendored shader may need a sampler and parameters declaring**, and neither can be
+inferred from the `.glsl`: `LINEAR_SAMPLED` in `tools/gl_check.py` for anything whose
+preset asks for `filter_linear0 = true`, and `VENDOR_PARAMS` in `tools/preview.py`
+only where a value should differ from the file's own `#pragma` default. Getting the
+first wrong put a wrong number in a comparison table; see Measurement traps.
 
 Tools resolve a bare shader filename against `shaders/`, then `tools/vendor/`, then
 `tools/iterations/` via `tools/paths.py`, so a new benchmark shader only needs dropping
@@ -93,6 +100,19 @@ with a differently coloured edge on each side, which is the only thing that show
 happened to the edges. A screenshot, a plain grid and a checkerboard all show the
 interior distortion and say nothing about the border.
 
+**`preview.py --diff` is for the opposite question: whether two shaders agree.** A
+side-by-side of two correct scalers is uninformative by construction — the eye sees one
+picture N times and learns nothing, which is exactly what happened comparing
+`sharp-shimmerless` against `pixellate`. `--diff` adds a row of differences against the
+**first** shader named, amplified ×8 with the true max printed, so 1/255 rounding and a
+67/255 disagreement cannot look alike. `--zoom N` magnifies (nearest, after `--crop`)
+when the thing in question is a transition pixel. Reproduce that comparison with:
+
+```sh
+cd tools && PYTHONPATH=. ../.venv/bin/python preview.py \
+  sharp-shimmerless.glsl pixellate.glsl pixel-perfect.glsl --crop 256 --diff
+```
+
 `gl_check.py` walks the registry in `tools/shaders.py`; add a shader there and it is
 checked with no further wiring. A `Model` may raise its `tolerance` above 1 only with
 a `reason` naming a mechanism that has been measured — the reason is printed next to
@@ -120,7 +140,7 @@ To iterate on a shader:
 
 `bench_glsl.py` gives repeatable GPU timings now — worst per-case IQR **1.4%**, where
 it used to swing 25–50% and `pixellate` came out both fastest and slowest on different
-runs. Four things were wrong and all four matter for any timing harness:
+runs. Five things were wrong and all five matter for any timing harness:
 
 - **Uniforms not in the overrides were left at 0**, so "defaults" measured a shader
   with `cp_scanlines = cp_rgb_mask = 0` (both pattern branches skipped), `cp_gamma = 0`
@@ -135,23 +155,36 @@ runs. Four things were wrong and all four matter for any timing harness:
   ~1%; rotating the case order without discarding just spreads the damage around.
 - **Min-to-max is the wrong spread statistic** — one hiccup in a multi-minute run makes
   everything look unmeasurable. Report the IQR.
+- **The sampler was left at moderngl's default, which is LINEAR**, so every four-tap
+  shader was timed with a bilinear fetch it never runs with. It happens not to have
+  moved the ratios here — they reproduce to a tenth of a point under NEAREST — but that
+  is luck, and a bilinear fetch is not free on every GPU. The filter now comes from
+  `gl_check.LINEAR_SAMPLED`, i.e. from what each shader's own preset declares.
 
 **The timings contradict the SFU budget, and that contradiction is unresolved.**
-`pixellate` has **30 SFU against crt-perfect's 14** and is still the fastest thing in
-the table; time tracks the op count instead, and all these shaders take 4 texture
-samples, which likely dominates:
+`pixellate` has **30 SFU against crt-perfect's 14** and is still the fastest of the
+four-tap shaders; time tracks the op count instead:
 
-| | ops | SFU | vs `pixellate` |
-|---|---|---|---|
-| `pixellate` | 292 | **30** | 100% |
-| `crt-perfect` (shipped) | 501 | 14 | 104% |
-| `crt-perfect-v8`, curvature off | 628 | 14 | 123% |
-| `crt-perfect-v8`, curvature on | 628 | 14 | 133% |
+| | ops | tex | SFU | vs `pixellate` |
+|---|---|---|---|---|
+| `sharp-shimmerless` (vendor, 1 tap) | **50** | **1** | **0** | **66%** |
+| `pixel-perfect` | 112 | 4 | 0 | 75% |
+| `sharp-shimmerless-grid` (vendor, 1 tap) | 161 | 1 | 0 | 83% |
+| `pixellate` | 292 | 4 | **30** | 100% |
+| `crt-perfect` (shipped) | 501 | 4 | 14 | 104% |
+| `crt-perfect-v8`, curvature off | 628 | 4 | 14 | 123% |
+| `crt-perfect-v8`, curvature on | 628 | 4 | 14 | 133% |
 
 So on an Apple GPU, SFU is *not* the bottleneck. A Mali G31 has far less ALU per
 transcendental and may rank them the other way round. **Use SFU as the device proxy
 and these timings as the desktop one, and do not assume either predicts the other** —
 only the Brick settles it.
+
+**The tap count is a confound that this table cannot resolve.** The one-tap rows sit
+below every four-tap row, but `sharp-shimmerless` has a fifth of `pixellate`'s ops
+*and* a quarter of its taps, so nothing here separates the two savings. Four taps is a
+fixed cost across everything this repo ships, which is why it was invisible until a
+one-tap shader was vendored to compare against.
 
 Measured cost of the two optional features, at 1024x768 from 320x240:
 
@@ -911,6 +944,48 @@ needs the opposite sampler setting to everything else here.
 transition-pixel counts, moire, the `pp_sharpness` response, and v3's bit-identity
 against the canonical shader at its defaults.
 
+### The one-tap scaler is not hypothetical — it ships, and it is vendored
+
+`sharp-shimmerless.glsl` (zadpos, public domain) **is** that rejected variant, shipped
+by someone else and running on NextUI, spruceOS, MustardOS and CrossMix today. It is
+now in `tools/vendor/`, so the trade is measured rather than remembered. It computes
+the same box footprint, then instead of weighting four NEAREST taps it solves for the
+one texcoord whose bilinear fetch already **is** that weighted sum.
+
+| | ops | tex | SFU | sampler | vs `pixellate` |
+|---|---|---|---|---|---|
+| `pixellate` | 292 | 4 | 30 | NEAREST | 100.0% |
+| **`sharp-shimmerless`** | **50** | **1** | **0** | **LINEAR** | **65.9%** |
+| `sharp-shimmerless-grid` | 161 | 1 | 0 | LINEAR | 83.0% |
+| `pixel-perfect` | 112 | 4 | 0 | NEAREST | 74.8% |
+
+1024x768 from 320x240, worst per-case IQR 0.5%. It is the cheapest thing in the repo
+on every axis at once, and **the output is the same picture**: 1/255 against both
+`pixellate` (g=0) and `pixel-perfect` over twelve scales and four sources, byte-equal
+block-width histograms (`{2: 95, 3: 63, 4: 159}` at 3.2x), the same 256 transition
+pixels per row, and the same beat.
+
+So the rejection stands on two things, and neither is speed:
+
+- **It leans on the texture unit's subtexel precision, which is a fixed-point ladder
+  with no GL query.** `equivalence.py:subtexel_bits()` measures it directly — sweep one
+  texel spacing of a two-texel LINEAR texture holding 0 and 1, into a **float32**
+  target, and count distinct values. This Apple GPU: **257 = exactly 8 bits**, which an
+  8-bit output cannot distinguish from exact. A coarser interpolator bands every soft
+  transition pixel and nothing here would see it; only the Mali settles it. Render the
+  probe to 8-bit and it reports every GPU as perfect, which is why it does not.
+- **It fails silently under the wrong sampler.** A four-tap shader under LINEAR is
+  merely filtered twice; a one-tap shader under NEAREST snaps its carefully placed tap
+  back to a texel centre and becomes **nearest-neighbour** — 256 transition pixels per
+  row to **0**, 102/255 against the correct output, with nothing in the frame to say
+  so. Beat goes 0.05 → 3.56 at 3.2x and 0.35 → 17.7 at 480x272 → 640x480.
+
+One thing the comparison settles that the SFU/ops argument does not: **taps and
+transcendentals do not decide moire, the gamma round-trip does.** One tap and four tap
+measure identically; `pixellate`'s own default mode is 3.5–5.7 against their 0.000.
+`sharp-shimmerless` has no knob to get that wrong because it has **no parameters at
+all** — which is also why it cannot be the shader this repo ships.
+
 ## An affine grade is free after the blend; only the clamp and the gamma cost
 
 `pixel-perfect-v3` drops `pp_sharpness` and spends the space on a colour grade. Both
@@ -1156,6 +1231,29 @@ construction is measuring something else and must not be trusted.
   chosen for maximum contrast is not neutral — it silently asserts that the
   content reaches white.**
 
+- **Sampler state, not shader code**: every tool here rendered through
+  `gl_render()`, which hardcoded NEAREST, because everything this repo *ships*
+  needs NEAREST. A vendored one-tap shader does not — `sharp-shimmerless` and
+  `sharp-shimmerless-grid` declare `filter_linear0 = true` in their own
+  `.glslp`, and under NEAREST they degrade to nearest-neighbour rather than
+  erroring. The `sharp-shimmerless-grid` row in the lcd comparison table was
+  measured that way: **3.14 beat through the wrong sampler, 0.72 through the
+  right one.** The number was not noise and not a bad metric, it was a correct
+  measurement of a shader nobody runs. The sampler is now declared once, in
+  `gl_check.LINEAR_SAMPLED`, and read by `preview.py`, `bench_glsl.py` and
+  `equivalence.py`. **A comparison is only fair if each shader gets the pass
+  state its own preset asks for; that state is part of the shader.**
+- **An empty parameter dict is not "the defaults"**: `PARAMETER_UNIFORM` is
+  defined, so a uniform nothing sets is 0. AGENTS.md already records this for
+  `beat.py`, and `preview.py` was still doing it for vendored shaders —
+  `VENDOR_PARAMS["pixellate.glsl"] = {}` silently selected
+  `INTERPOLATE_IN_LINEAR_GAMMA = 0`, the mode `pixellate` does **not** ship in
+  and the one without its gamma round-trip. Every preview was flattering the
+  baseline by removing the single thing wrong with it. `gl_check.pragma_defaults()`
+  now reads a shader's own declared defaults out of the file and `VENDOR_PARAMS`
+  layers on top. **The same bug will keep recurring per tool; fix it where the
+  file is read, not where the dict is written.**
+
 Also: **a flip that preserves the picture still reverses a handed effect.**
 `preview.py` fed the source flipped and flipped the result back. That pair is an
 identity for *content*, so every screenshot came out the right way up and it
@@ -1325,10 +1423,16 @@ On a 1px checkerboard, 320x240 → 1024x768, white field for the swings:
 |---|---|---|---|---|
 | `lcd1x` defaults | 1.87 | 75.3% | 24.0 | 96.0 |
 | `lcd3x` | 2.93 | 82.3% | 68.6 | 5.8 |
-| `sharp-shimmerless-grid` | 3.14 | 82.8% | 66.6 | 66.6 |
+| `sharp-shimmerless-grid` | 0.72 | 82.8% | 66.6 | 66.6 |
 | `lcd-perfect` defaults | **0.24** | 82.5% | 57.6 | 36.2 |
 | `crt-perfect` defaults | 0.26 | 83.9% | 63.8 | 40.9 |
 | `pixel-perfect` | 0.03 | 100% | 0 | 0 |
+
+The `sharp-shimmerless-grid` beat **was 3.14 here** and that figure was wrong: it was
+rendered through NEAREST, which turns a one-tap scaler into nearest-neighbour. Its
+three white-field columns are unaffected — a flat field blends to itself either way,
+which is precisely why the error survived. Corrected it is still three times
+`lcd-perfect`'s, on a grid that is column-and-row symmetric rather than shaped.
 
 `lcd-perfect` sits below crt-perfect's own beat. `lcd-grid-v2` was researched and not
 vendored: ~48 SFU slots against `pixellate`'s 30, so it is out of budget before any

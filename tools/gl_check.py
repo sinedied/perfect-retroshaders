@@ -30,6 +30,22 @@ HEADER = "#version 410 core\n"
 # rounding between float32 on the GPU and float64 in the model
 TOLERANCE = 1
 
+# Vendored shaders whose own .glslp asks for filter_linear0 = true. Both
+# sharp-shimmerless variants take a SINGLE tap and have the texture unit perform
+# the blend, so under NEAREST they are not a softer version of themselves - they
+# are nearest-neighbour, with the whole scaler gone and nothing in the output to
+# say so. Everything this repo ships wants the opposite: it computes its own
+# average from four taps, and a LINEAR sampler underneath filters it twice.
+#
+# This is declared once and read by every tool that renders. It did not used to
+# be, and the consequence is on the record: the sharp-shimmerless-grid row in
+# the lcd-perfect comparison table was measured through NEAREST, so it described
+# a shader nobody runs.
+LINEAR_SAMPLED = frozenset({
+    "sharp-shimmerless.glsl",
+    "sharp-shimmerless-grid.glsl",
+})
+
 
 def essl1_to_410(src, stage):
     """Translate an ESSL-1.00 shader well enough for a 4.1 core context.
@@ -65,11 +81,37 @@ def stage_source(src, stage):
     return HEADER + define + body
 
 
+def pragma_defaults(fn):
+    """A shader's own declared defaults, read straight out of the file.
 
-def gl_render(ctx, prog, src_u8, out_w, out_h, params):
+    For vendored references, which have no entry in the registry. Falling back
+    to {} instead is not "the defaults" - a uniform nothing sets is 0, and
+    PARAMETER_UNIFORM is defined, so an empty dict renders a shader at whatever
+    zero happens to mean for it. For pixellate that silently selects
+    INTERPOLATE_IN_LINEAR_GAMMA = 0, the mode it does NOT ship in and the one
+    without the gamma round-trip, so every preview flattered it.
+    """
+    out = {}
+    for line in open(shader_path(fn)):
+        m = re.match(r'#pragma parameter\s+(\w+)\s+"[^"]*"\s+(-?[\d.]+)', line)
+        if m:
+            out[m.group(1)] = float(m.group(2))
+    return out
+
+
+def gl_render(ctx, prog, src_u8, out_w, out_h, params, filter_linear=False):
+    """Render one pass and read it back, rows in the source's order.
+
+    filter_linear is for shaders whose own .glslp asks for it - the vendored
+    sharp-shimmerless takes a single tap and has the texture unit do the blend,
+    so measuring it through NEAREST measures a different shader. Everything this
+    repo ships needs the default: it computes its own average from four taps,
+    and a LINEAR sampler underneath filters the result twice.
+    """
     in_h, in_w = src_u8.shape[:2]
     tex = ctx.texture((in_w, in_h), 3, src_u8.tobytes())
-    tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    f = moderngl.LINEAR if filter_linear else moderngl.NEAREST
+    tex.filter = (f, f)
     tex.repeat_x = tex.repeat_y = False  # CLAMP_TO_EDGE
     tex.use(0)
 
