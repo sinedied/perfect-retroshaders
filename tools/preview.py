@@ -16,7 +16,7 @@ Run:  cd tools && PYTHONPATH=. ../.venv/bin/python preview.py
       ... preview.py --crop 240      crop to a 240px square instead of scaling
       ... preview.py --only snes,psp  restrict the screenshots by name
       ... preview.py --samples DIR    where the screenshots live
-      ... preview.py lcd1x.glsl lcd-perfect-v2a.glsl
+      ... preview.py lcd1x.glsl lcd-perfect.glsl
 """
 
 import os

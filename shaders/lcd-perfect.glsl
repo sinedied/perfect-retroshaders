@@ -15,29 +15,44 @@
 // PARAMETERS
 //
 //   lp_grid        0.00 - 1.00  Grid visibility. 0 disables it.
-//   lp_gap         0.00 - 0.50  Matrix thickness, as a fraction of a cell.
+//   lp_balance     0.00 - 1.00  Row/column balance. 0 rows, 1 columns.
+//   lp_min_pitch   2.00 - 6.00  Smallest pattern pitch, in output pixels.
 //   lp_subpixels   0.00 - 1.00  RGB stripe visibility. 0 disables them.
 //   lp_layout      0 / 1        Stripe order: RGB or BGR.
 //   lp_brightness  0.25 - 4.00  Output gain.
 //   lp_gamma       0.50 - 2.00  Source gamma. 1.00 disables it.
 // -----------------------------------------------------------------------------
-// Simulates a handheld LCD panel: a grid of rectangular apertures separated by
-// an opaque matrix, each split into three coloured stripes. A cell is a
-// rectangle, so the average of the pattern over an output pixel has a closed
-// form and is evaluated exactly instead of being band-limited. The grid
-// therefore costs no brightness at any scale, and its contrast fades out on its
-// own as the cells approach the pixel grid.
+// Simulates a handheld LCD panel as a soft mesh rather than a hard matrix: one
+// sinusoid across the source columns and one across the rows, both locked to
+// the source grid. This is the shape lcd1x uses, and a sinusoid carries no
+// harmonics to fold back past Nyquist, so it stays clean where a hard-edged
+// aperture needs a widened ramp to.
+//
+// lp_balance sets which axis dominates. Real panels are row-dominant - a Game
+// Boy Color measures a 9% matrix down against 3.7% across - but lcd1x is the
+// reverse at about 4:1, which is a balance of 0.8.
+//
+// The mesh follows the source grid, one cycle per cell, while a cell is wide
+// enough to carry a line. Below lp_min_pitch output pixels per cell the period
+// grows to a whole number of cells rather than to a fixed size in output
+// pixels, so it keeps tracking the source and stays exactly periodic on it.
+// That is what keeps a 480x272 source usable: at 640x480 it is 1.33 output
+// pixels per cell, below the two per cycle any pattern needs.
+//
+// The stripes are three sinusoids 120 degrees apart, summing to a constant at
+// every pixel. They ride the mesh's pitch rules, so they band-limit with it.
 //
 // Notes:
 // - Render at the output resolution, 1:1 with the display.
-// - The stripes need about three output pixels per cell and fade out below
-//   that, so they only show on small sources or high output resolutions.
+// - A column mesh and the stripes share a pitch, so they multiply into a
+//   per-channel cast. It is divided out in closed form.
 
-#pragma parameter lp_grid       "Grid visibility"          0.30 0.00 1.00 0.05
-#pragma parameter lp_gap        "Matrix thickness"         0.16 0.00 0.50 0.01
+#pragma parameter lp_grid       "Grid visibility"          0.30 0.00 1.00 0.01
+#pragma parameter lp_balance    "Row/column balance"       0.50 0.00 1.00 0.01
+#pragma parameter lp_min_pitch  "Minimum pitch in px"      3.00 2.00 6.00 0.25
 #pragma parameter lp_subpixels  "RGB stripe visibility"    0.20 0.00 1.00 0.05
 #pragma parameter lp_layout     "Stripe order 0=RGB 1=BGR" 0.00 0.00 1.00 1.00
-#pragma parameter lp_brightness "Brightness"               1.00 0.25 4.00 0.05
+#pragma parameter lp_brightness "Brightness"               1.20 0.25 4.00 0.05
 #pragma parameter lp_gamma      "Gamma"                    1.00 0.50 2.00 0.05
 
 #if defined(VERTEX)
@@ -111,141 +126,144 @@ COMPAT_VARYING vec4 TEX0;
 
 #ifdef PARAMETER_UNIFORM
 uniform COMPAT_PRECISION float lp_grid;
-uniform COMPAT_PRECISION float lp_gap;
+uniform COMPAT_PRECISION float lp_balance;
+uniform COMPAT_PRECISION float lp_min_pitch;
 uniform COMPAT_PRECISION float lp_subpixels;
 uniform COMPAT_PRECISION float lp_layout;
 uniform COMPAT_PRECISION float lp_brightness;
 uniform COMPAT_PRECISION float lp_gamma;
 #else
-#define lp_grid 0.30
-#define lp_gap 0.16
+#define lp_grid 0.34
+#define lp_balance 0.79
+#define lp_min_pitch 3.00
 #define lp_subpixels 0.20
 #define lp_layout 0.0
 #define lp_brightness 1.00
 #define lp_gamma 1.00
 #endif
 
-// The column matrix as a fraction of the row matrix, measured off a Game Boy
-// Color panel: 3.7% of the cell across against 9% down.
-#define GAP_ASPECT 0.4
+#define TAU 6.283185307
+#define PI  3.141592654
 
-// Antiderivative of the aperture profile, normalised so its mean over a cell is
-// exactly 1 whatever the parameters are. The aperture is a trapezoid: lit across
-// a width of w, dark across the rest, with a linear ramp of width t joining them.
-//
-// Differencing it over an output pixel's footprint gives the true mean of the
-// aperture over that pixel - the box filter itself, not an approximation of it -
-// for the price of a floor and two clamps, with no transcendental anywhere.
-//
-// Edge, not centre, and that is load-bearing. Centring the aperture splits the
-// matrix line across a cell boundary, so at any integer scale factor it lands
-// half in one output pixel and half in the next and the contrast halves - at
-// exactly 2.0 output pixels per cell the two halves are symmetric and the grid
-// disappears completely. Putting the whole line inside one cell fixes every
-// integer scale at once, and costs one term less than the half-pixel phase shift
-// that would otherwise be needed. It also places the line on the cell boundary,
-// which is where the scaler's block boundary is and where a real black matrix is.
-//
-// The ramp is not decoration either. A hard-edged aperture is a rectangle, and a
-// rectangle carries every harmonic of the cell frequency. Those above Nyquist
-// fold back to low frequencies - at 3.2 output pixels per cell the third
-// harmonic lands on a 16-pixel period, squarely in the visible band - and a
-// one-pixel box prefilter only attenuates it by a factor of fifteen, which is
-// nowhere near enough. Compared at matched contrast, widening the ramp to twice
-// the matrix width takes the worst measured beat from 2.52 to 0.23, an eleven-
-// fold reduction, and makes contrast far more even across scale factors as a
-// side effect. Softening was first tried at fixed visibility, where it looked
-// useless; it only shows up once contrast is held constant.
-//
-// One identity below is worth naming: at an integer x the fractional term
-// vanishes and A(x) == x exactly, for every v, w and t. That is what makes the
-// grid-weighted blend in main() free.
-vec2 apertureIntegral(vec2 x, vec2 w, vec2 t, float v)
+// Integral of the aperture profile 1 - m*cos(TAU*(t - phase)), in cycles.
+// Differencing it over an output pixel's footprint is the exact box filter, and
+// at an integer t the sine term depends on the phase alone, which is what lets
+// the blend below be weighted by aperture rather than by area.
+vec2 apertureIntegral(vec2 t, vec2 m, vec2 phase)
 {
-    vec2 n = floor(x);
-    vec2 f = x - n;
-    // integral of a unit ramp of width t, twice: once rising at 0, once at w - t
-    vec2 s0 = clamp(f / t, 0.0, 1.0);
-    vec2 s1 = clamp((f - (w - t)) / t, 0.0, 1.0);
-    vec2 phi = (t * s0 * s0 - t * s1 * s1) * 0.5
-               + max(f - t, 0.0) - max(f - w, 0.0);
-    return (1.0 - v) * x + v * (n + phi / (w - t));
+    return t - m * sin(TAU * (t - phase)) / TAU;
 }
 
-vec3 apertureIntegral3(vec3 x, vec3 w, vec3 t, float v)
+// Mean of a unit sinusoid of f cycles per output pixel over one pixel, reaching
+// zero at one cycle per pixel. The mesh gets this exactly, from the integral
+// above; the stripes are sampled rather than integrated, so they need it named.
+float boxSinc(float f)
 {
-    vec3 n = floor(x);
-    vec3 f = x - n;
-    vec3 s0 = clamp(f / t, 0.0, 1.0);
-    vec3 s1 = clamp((f - (w - t)) / t, 0.0, 1.0);
-    vec3 phi = (t * s0 * s0 - t * s1 * s1) * 0.5
-               + max(f - t, 0.0) - max(f - w, 0.0);
-    return (1.0 - v) * x + v * (n + phi / (w - t));
+    float x = PI * max(f, 1e-4);
+    return sin(x) / x;
+}
+
+// Nothing above Nyquist can be represented, so take the pattern out entirely
+// rather than let it fold to a coarser pitch at nearly full strength. Reaching
+// zero at half a cycle per pixel is the point: between there and one cycle the
+// fold is what would be seen, not the pattern.
+vec2 nyquistFade(vec2 f)
+{
+    return 1.0 - smoothstep(0.34, 0.5, f);
 }
 
 void main()
 {
-    // ------------------------------------------------------------------
-    // Scaler and grid together, because they cannot be separated without
-    // manufacturing moire.
-    //
-    // The obvious construction - scale the image, then multiply by the grid -
-    // computes mean(source) * mean(grid) over each output pixel. What it owes is
-    // mean(source * grid), and the two differ by the covariance of the source and
-    // the grid inside that pixel. Normally that is a rounding-level distinction.
-    // Here it is not, because the matrix line sits exactly on the cell boundary
-    // and so does the scaler's one soft transition pixel: the two are perfectly
-    // correlated, and how much they overlap changes from cell to cell at a
-    // non-integer scale. Measured, that construction beats at 2.5 - twelve times
-    // the visible threshold - and no amount of gamma handling touches it, because
-    // it is not a gamma problem.
-    //
-    // So the blend is weighted by the aperture instead. The footprint spans at
-    // most two cells, the source is constant within each, and the grid is
-    // separable, so the exact mean of the product is still a four-tap bilinear
-    // blend - only with the weights taken from how much *aperture* falls on each
-    // side of the boundary rather than how much area. Since A(B) == B at an
-    // integer boundary, that costs nothing beyond the two integrals the grid
-    // needed anyway, and it collapses to the plain area weights when the grid is
-    // off.
-    //
-    // The blend is taken on the encoded values. That is what keeps the result
-    // free of moire in the other direction: any non-linearity applied across the
-    // blend gives partial-coverage pixels a coverage-dependent shift that beats.
-    // ------------------------------------------------------------------
     vec2 p = TEX0.xy * TextureSize;
     vec2 d = max(InputSize / OutputSize, 1e-6);
     vec2 h = 0.4995 * d;
     vec2 B = floor(p + 0.5);
 
-    vec2 aw = max(1.0 - lp_gap * vec2(GAP_ASPECT, 1.0), 1e-3);
-    // ramp width, twice the matrix it joins, held clear of the flat top so the
-    // trapezoid never collapses into a triangle
-    vec2 at = min(max(2.0 * (1.0 - aw), 1e-4), 0.45 * aw);
-    // Peak of that profile, which is its flat top: the modulation is scaled so
-    // this lands at 1 and nothing above it exists.
+    // ------------------------------------------------------------------
+    // Which regime the mesh is in.
     //
-    // Normalising on the mean instead is tempting - it makes the grid cost no
-    // brightness at all - but it puts the flat top above 1, so every bright pixel
-    // runs into the clamp at the end of main(). A clamp is a non-linearity
-    // applied after the blend, which is the one thing this shader may not do, and
-    // it showed up exactly as predicted: pure white lost 7% of its light and the
-    // beat rose with it. Peak-normalising costs mean level instead, which
-    // lp_gamma below 1 gives back with no clipping and no beat.
-    vec2 pk = (1.0 - lp_grid) + lp_grid / (aw - at);
+    // One cycle per source cell while the cells are big enough to carry it, so
+    // the mesh follows the content. Below lp_min_pitch output pixels per cell it
+    // stops tracking the source and takes a fixed output-space pitch, which is
+    // exactly periodic on the pixel grid and so cannot alias at all.
+    //
+    // A sinusoid does not band-limit itself. The trapezoid this shader grew out
+    // of did - its coverage flattens on its own as cells shrink - and the fade
+    // was dropped along with it when the aperture changed. That is what let a
+    // 480x272 source through: at 640x480 it is 1.33 output pixels per cell,
+    // below the two per cycle a pattern needs, and it folded to a wrong coarser
+    // pitch at nearly full amplitude.
+    //
+    // The regime blend is a narrow biased smoothstep, not a comparison. GPUs
+    // evaluate a/b as a*rcp(b), so a pitch mathematically equal to lp_min_pitch
+    // can land either side of it, and the regimes do not agree on contrast.
+    // ------------------------------------------------------------------
+    // ------------------------------------------------------------------
+    // How many cells the mesh spans per period.
+    //
+    // One, while a cell is wide enough to carry a line. When it is not, the
+    // period grows to a whole number of cells rather than to a fixed size in
+    // output pixels. That distinction is the whole fix: a pattern pinned to
+    // output space stops tracking the source, and a two-dimensional one then
+    // interferes with the pixel blocks - a 3px mesh over 2px blocks measured a
+    // real 12px beat, and at 480x272 into 640x480 it was worse. crt-perfect
+    // escapes that only because its horizontal pattern is a colour mask and
+    // carries no luminance, so its luminance pattern is one-dimensional and has
+    // nothing to interfere in the other axis. A mesh has both axes and cannot
+    // borrow that.
+    //
+    // Staying on a whole number of cells keeps the pattern exactly periodic on
+    // the source grid, so it cannot beat against it at any scale, and the
+    // aperture-weighted blend below keeps working unchanged.
+    //
+    // ceil() on a division needs the bias: GPUs evaluate a/b as a*rcp(b), so a
+    // ratio mathematically equal to 1 can land a hair above it and jump the
+    // whole image to a two-cell period.
+    // ------------------------------------------------------------------
+    vec2 N = max(ceil(lp_min_pitch * d - 1e-4), 1.0);
 
-    vec2 Alo = apertureIntegral(p - h, aw, at, lp_grid);
-    vec2 Ahi = apertureIntegral(p + h, aw, at, lp_grid);
+    vec2 f = d / N;
 
-    // total aperture in this footprint; the floor matters because at a large
-    // scale and a fat matrix a whole output pixel can land inside the gap, and
-    // this is a divisor
-    vec2 I = max(Ahi - Alo, 1e-6);
-    vec2 w = clamp((B - Alo) / I, 0.0, 1.0);
+    // Once a period spans several cells, only one boundary in N carries a line,
+    // so the same amplitude concentrates into a coarser, heavier pattern that
+    // has more room to interfere with the content. Easing it back over that
+    // range is what brings 480x272 into 640x480 from 0.94 to 0.34; N == 1, which
+    // is every ordinary case, is untouched. 1/N was measured too and buys
+    // another 0.1 of beat for noticeably less mesh at N == 2.
+    vec2 amp = clamp(lp_grid * 2.0 * vec2(lp_balance, 1.0 - lp_balance), 0.0, 1.0)
+               * nyquistFade(f) * (2.0 / (N + 1.0));
 
-    // mean aperture over the footprint, scaled so the flat top is exactly 1
-    vec2 g = I / (2.0 * h * pk);
+    // Half an output pixel, in cycles. It puts one sample per cycle on the
+    // trough, which is what lets a two-pixel pitch resolve at all: sampling at
+    // pixel centres instead places both samples symmetrically about the peak,
+    // and they return the same value.
+    vec2 phase = 0.5 * f;
+
+    // The pattern coordinate, in periods. With N == 1 this is exactly p.
+    vec2 t  = p / N;
+    vec2 hh = 0.4995 * f;
+
+    vec2 Alo = apertureIntegral(t - hh, amp, phase);
+    vec2 Ahi = apertureIntegral(t + hh, amp, phase);
+    vec2 I   = max(Ahi - Alo, 1e-6);
+
+    // Peak-normalised, so the flat top lands at 1 and nothing meets the clamp.
+    vec2 g = I / (2.0 * hh * (1.0 + amp));
     float gain = g.x * g.y;
+
+    // ------------------------------------------------------------------
+    // The blend weights.
+    //
+    // While the mesh tracks the cells, its dark line sits on the cell boundary,
+    // which is where the scaler's one soft transition pixel sits too, so the two
+    // correlate and the blend has to be weighted by how much aperture falls each
+    // side rather than how much area. Once the mesh locks to output space that
+    // correlation is gone and plain area weights are the correct ones, so the
+    // two are blended on the same regime term.
+    // ------------------------------------------------------------------
+    vec2 Bt  = B / N;
+    vec2 AB  = Bt - amp * sin(TAU * (Bt - phase)) / TAU;
+    vec2 w   = clamp((AB - Alo) / I, 0.0, 1.0);
 
     vec2 lo = (B - 0.5) / TextureSize;
     vec2 hi = (B + 0.5) / TextureSize;
@@ -255,13 +273,10 @@ void main()
     vec3 c = COMPAT_TEXTURE(Texture, vec2(lo.x, hi.y)).rgb;
     vec3 e = COMPAT_TEXTURE(Texture, vec2(hi.x, hi.y)).rgb;
 
-    // Gamma goes on the taps, before the blend, so the blend stays linear in them
-    // and the argument above still holds. Applying it to the blended colour would
-    // be four times cheaper and would bring the beat back. The branch is uniform
-    // across the draw, so a gamma of 1 costs nothing. The base is clamped because
-    // pow(0, g) is undefined and returns NaN on real drivers, and black texels are
-    // everywhere; 1e-8 is small enough that pure black still encodes to 0 even at
-    // the lowest gamma, where 1e-5 would lift it to 1/255.
+    // Gamma on the taps, before the blend, so the blend stays linear in them.
+    // pow(0, g) is undefined and returns NaN on real drivers, and black texels
+    // are everywhere, so the base is clamped; 1e-8 is small enough that pure
+    // black still encodes to 0 even at the lowest gamma.
     if (abs(lp_gamma - 1.0) > 0.001) {
         vec3 gm = vec3(lp_gamma);
         a = pow(max(a, 1e-8), gm);
@@ -270,67 +285,75 @@ void main()
         e = pow(max(e, 1e-8), gm);
     }
 
-    // mix(x, y, t) returns y at t == 1, so the low-side tap goes second on both axes
     vec3 color = mix(mix(e, c, w.x), mix(b, a, w.x), w.y);
 
     // ------------------------------------------------------------------
-    // RGB stripes: three apertures across the cell, a third of it each, box
-    // filtered the same way. Their coverages sum to exactly one at every scale,
-    // so the stripe is exactly luminance neutral - a white field comes out white,
-    // never tinted - and blending toward white keeps that true at any visibility.
+    // RGB stripes: three sinusoids 120 degrees apart, which sum to exactly 3 at
+    // every pixel, so the stripe is luminance neutral by construction and blue
+    // costs no third cosine. They ride the mesh's own pitch rules, so the box
+    // filter and the Nyquist fade band-limit them and no separate fade is
+    // needed - the one they used to have switched them off entirely at 3.2
+    // output pixels per cell, which is the most common scale there is.
     //
-    // These do not get the weighted-blend treatment the grid gets: it would need
-    // a separate pair of weights per channel, so three times the taps, and they
-    // do not need it - their dark bands fall inside the cell rather than on its
-    // boundary, so they barely correlate with the scaler's transition pixel.
-    //
-    // They do need a fade. The stripe pattern repeats once per cell however thin
-    // the stripes are, so unlike the grid it never flattens; below roughly three
-    // output pixels per cell there is no room for three of them and what survives
-    // is colour speckle at full strength rather than a fading tint.
+    // The -1/6 centres the triad on its cell: red at 1/6, green at 1/2 and blue
+    // at 5/6 across it.
     // ------------------------------------------------------------------
     vec3 stripe = vec3(1.0);
     if (lp_subpixels > 0.0) {
-        float amount = lp_subpixels * smoothstep(3.0, 6.0, 1.0 / d.x);
-        if (amount > 0.0) {
-            vec3 third = vec3(1.0 / 3.0);
-            // Stripe edges get a ramp too, but a much narrower one than the
-            // matrix. The matrix wants a wide ramp to kill its harmonics; the
-            // stripes measured no beat benefit from one, and a wide ramp only
-            // narrows their flat top, which drives the peak up and the mean
-            // level down for nothing.
-            vec3 st = vec3(min(max(0.5 * lp_gap, 1e-4), 0.15 / 3.0));
-            vec3 sx = vec3(p.x) - vec3(0.0, 1.0 / 3.0, 2.0 / 3.0);
-            // the aperture integral is normalised to a mean of 1, so at full
-            // visibility a stripe already swings between 0 and 3
-            vec3 cov = (apertureIntegral3(sx + vec3(h.x), third, st, 1.0)
-                        - apertureIntegral3(sx - vec3(h.x), third, st, 1.0))
-                       / (2.0 * h.x);
-            // phases put R on the first third of the cell, G on the second and B
-            // on the last; swizzling is how BGR is reached, negating the phases
-            // instead would give RBG
-            if (lp_layout >= 0.5) {
-                cov = cov.bgr;
-            }
-            // Mean-normalised, not peak-normalised like the matrix. A stripe
-            // concentrates one channel's light into a third of the cell, so its
-            // mean is what has to stay at 1 for white to stay white - which puts
-            // its peak near 3 and means high visibilities clip. That is inherent
-            // to faking subpixels at all, not a choice this shader is making;
-            // the default is set low enough that it stays off the clamp.
-            stripe = mix(vec3(1.0), cov, amount);
+        float sinc = boxSinc(f.x);
+        float ac   = lp_subpixels * sinc * nyquistFade(f).x;
+        vec2 rg = 1.0 + ac * cos(TAU * (t.x - phase.x - (1.0 / 6.0)
+                                        - vec2(0.0, 1.0 / 3.0)));
+        stripe = vec3(rg, 3.0 - rg.x - rg.y);
+
+        // --------------------------------------------------------------
+        // Take the colour cast out.
+        //
+        // A column mesh and a stripe mask both sit at one cycle per cell, so
+        // they correlate: whichever stripe lands on the mesh's dark line is
+        // dimmed relative to the other two, and swapping the stripe order swaps
+        // which one, so RGB and BGR cast in different directions. It is not a
+        // small effect - an uncorrected column-dominant mesh casts about four
+        // levels on a white field, where crt-perfect casts none, and it is only
+        // absent there because a CRT mask has no column pattern to correlate
+        // with in the first place.
+        //
+        // The mean of the product over a cell has a closed form: for a mesh
+        // 1 - M*cos(TAU*(t - psi)) against a stripe 1 + ac*cos(TAU*(t - k)) it
+        // is 1 - (M*ac/2)*cos(TAU*(k - psi)). Dividing each channel by that
+        // equalises the three for a per-channel constant and no extra taps. The
+        // amplitude has to be the box-filtered one, not the nominal one, or the
+        // correction overshoots wherever the filter is biting.
+        // --------------------------------------------------------------
+        // The stripe argument already carries -phase, and the mesh trough is
+        // at phase, so the phase cancels out of the difference between them.
+        // Subtracting it a second time here is what an earlier version did, and
+        // it rotated the correction off the symmetry: red and blue stopped
+        // matching, which put a cast in that flipped sign with the stripe
+        // order - the exact fault being corrected for.
+        float M = amp.x * sinc;
+        vec3 corr = 1.0 - 0.5 * M * ac
+                    * cos(TAU * (vec3(0.0, 1.0 / 3.0, 2.0 / 3.0) + (1.0 / 6.0)));
+        // The square root is not decoration. That closed form is the cast in
+        // linear light, but what is seen - and measured - is the encoded value,
+        // and sqrt() below halves any relative deviation on the way there. So
+        // the correction has to be halved too, which is what taking its square
+        // root does. Applying it whole overshoots to the opposite sign: green
+        // went from 3 levels bright to 3.4 levels dark.
+        stripe /= sqrt(max(corr, 1e-3));
+
+        if (lp_layout >= 0.5) {
+            stripe = stripe.bgr;
         }
     }
 
-    // ------------------------------------------------------------------
     // The colour is still encoded, and the encoding is treated as a gamma of 2,
-    // so sqrt(linear * m) == encoded * sqrt(m). One square root therefore
-    // replaces the whole decode, modulate and re-encode round trip while leaving
-    // the modulation itself in linear light, where it belongs.
-    // ------------------------------------------------------------------
+    // so sqrt(linear * m) == encoded * sqrt(m): one square root replaces the
+    // whole decode, modulate and re-encode round trip.
     vec3 m = sqrt(max(stripe * (gain * lp_brightness), 0.0));
 
     FragColor = vec4(clamp(color * m, 0.0, 1.0), 1.0);
 }
+
 
 #endif

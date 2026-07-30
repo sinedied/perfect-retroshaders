@@ -12,7 +12,7 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | Path | What |
 |---|---|
 | `shaders/crt-perfect.glsl` | CRT: scanlines + RGB mask + pixel-perfect scaling. `cp_` params |
-| `shaders/lcd-perfect.glsl` | LCD: analytic aperture coverage. `lp_` params |
+| `shaders/lcd-perfect.glsl` | LCD: sinusoidal mesh on whole-cell periods, 120-degree stripes. `lp_` params |
 | `shaders/pixel-perfect.glsl` | scaling only, no effect. `pp_` params |
 | `tools/` | the verification harness |
 | `tools/vendor/` | **third-party shaders**, benchmark and comparison references only |

@@ -5,7 +5,9 @@ Independent numpy reimplementation of the fragment shader, so gl_check.py can
 diff the real shipped .glsl running on a GPU against it. An error has to be made
 identically in both to slip through.
 
-Mirrors the GLSL step for step; see render_lcd() for the correspondence.
+Mirrors the GLSL step for step. render_lcd_v3() is the shipped
+lcd-perfect.glsl; the rest are the superseded versions kept in
+tools/iterations/ and still verified.
 """
 
 import numpy as np
@@ -43,7 +45,7 @@ DEFAULTS_V2A = dict(
 )
 
 # Column matrix as a fraction of the row matrix, measured off a Game Boy Color
-# panel. Must match GAP_ASPECT in lcd-perfect.glsl. v2 replaces it with the
+# panel. Must match GAP_ASPECT in lcd-perfect-v1.glsl. v2 replaces it with the
 # lp_balance parameter, because it caps the column gap at 40% of the row gap and
 # so cannot reach lcd1x's 4:1 the other way round.
 GAP_ASPECT = 0.4
@@ -214,10 +216,10 @@ def render_pixel_perfect(src_u8, out_w, out_h, p=None):
 
 def render_lcd(src_u8, out_w, out_h, p=None, mode="edge", quantise=True,
                balance=None):
-    """src_u8: (H,W,3) uint8 source frame -> (out_h,out_w,3) uint8 output.
+    """Mirrors lcd-perfect-v1.glsl: the trapezoid aperture, GAP_ASPECT fixed.
 
-    balance given mirrors lcd-perfect-v2b.glsl, which splits the matrix between
-    the axes by lp_balance instead of by the fixed GAP_ASPECT constant.
+    balance given mirrors lcd-perfect-v2b.glsl instead, which splits the matrix
+    between the axes by lp_balance rather than by that constant.
     """
     p = dict(DEFAULTS_V2B if balance else DEFAULTS_LCD, **(p or {}))
     src = src_u8.astype(np.float64) / 255.0
@@ -311,7 +313,7 @@ def nyquist_fade(f):
 
 
 def render_lcd_v3(src_u8, out_w, out_h, p=None, quantise=True):
-    """Mirrors lcd-perfect-v3.glsl.
+    """Mirrors lcd-perfect.glsl.
 
     Written out rather than routed through area_average(): v3 puts the mesh on a
     whole number of cells per period, which that helper has no place for, and a

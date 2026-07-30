@@ -105,6 +105,17 @@ def measure(render, src_w=320, src_h=240, out_w=1024, out_h=768, pattern=None):
     return beat(render(src, out_w, out_h), src_w, src_h, pattern)
 
 
+# Which pitch rule each shader follows. Exact filenames, not prefixes: after v3
+# was promoted, the canonical shader is "lcd-perfect.glsl" and the superseded
+# ones are "lcd-perfect-v1/v2a/v2b.glsl", so any prefix test on "lcd-perfect"
+# matches all four and hands the archive a rule it does not use. Nothing fails
+# when that happens - the numbers just quietly become wrong. The same fault was
+# already here for "crt-perfect", which matched v1 to v3; those predate the
+# minimum-pitch regime and track the source like everything else.
+WHOLE_CELL_PERIOD = {"lcd-perfect.glsl"}
+OUTPUT_LOCKED = {"crt-perfect.glsl", "crt-perfect-v4.glsl", "crt-perfect-v5.glsl"}
+
+
 def pattern_freq(name, src_w, src_h, out_w, out_h, min_pitch=MIN_PITCH):
     """Where a shader puts its pattern, in cycles per output pixel.
 
@@ -113,11 +124,11 @@ def pattern_freq(name, src_w, src_h, out_w, out_h, min_pitch=MIN_PITCH):
     agree, which is exactly why guessing one does not work.
     """
     d = (src_w / out_w, src_h / out_h)
-    if name.startswith("lcd-perfect-v3"):
-        # a whole number of cells per period, never finer than min_pitch
+    if name in WHOLE_CELL_PERIOD:
+        # the period grows to a whole number of cells, never finer than min_pitch
         n = [max(math.ceil(min_pitch * x - 1e-4), 1) for x in d]
         return (d[0] / n[0], d[1] / n[1])
-    if name.startswith("crt-perfect"):
+    if name in OUTPUT_LOCKED:
         # locks to a fixed output-space pitch instead of growing the period
         return (min(d[0], 1.0 / min_pitch), min(d[1], 1.0 / min_pitch))
     # everything else tracks the source at one cycle per cell, always

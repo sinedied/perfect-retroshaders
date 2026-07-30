@@ -92,7 +92,7 @@ REGISTRY = {
             ("gamma 1.6", dict(cp_gamma=1.6)),
         ],
     ),
-    "lcd-perfect.glsl": Model(
+    "lcd-perfect-v1.glsl": Model(
         render=render_lcd,
         defaults=DEFAULTS_LCD,
         variants=[
@@ -139,7 +139,7 @@ REGISTRY = {
             ("bright", dict(lp_brightness=1.6)),
         ],
     ),
-    "lcd-perfect-v3.glsl": Model(
+    "lcd-perfect.glsl": Model(
         render=render_lcd_v3,
         defaults=DEFAULTS_LCD_V3,
         variants=[

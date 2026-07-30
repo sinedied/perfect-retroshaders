@@ -29,25 +29,19 @@ lcd-perfect
 pixel-perfect
 dmg-perfect
 
-budget: 8 params max per shader
 
 
-Note: all shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to be work at non-integer scaling factor without any visible moire patterns, though the image will still always be better at integer scales.
+> [!IMPORTANT]
+> All shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to work at non-integer scaling factors with almost no visible artifacts/patterns, though the image will still look better at integer scales.
 
 
-| File | |
+| Shader | Description |
 |---|---|
-| `shaders/pixel-perfect.glsl` | **scaling only.** Uniform pixel blocks, no shimmer, no blur |
-| `shaders/crt-perfect.glsl` | **CRT.** Scanlines, RGB mask, pixel-perfect scaling, gamma |
-| `shaders/lcd-perfect.glsl` | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling, gamma |
+| [`pixel-perfect.glsl`](shaders/pixel-perfect.glsl) | **Sharp pixel upscaling.** Uniform pixel blocks, no shimmer, fast |
+| [`crt-perfect.glsl`](shaders/crt-perfect.glsl) | **CRT.** Scanlines, RGB mask, pixel-perfect scaling |
+| [`lcd-perfect.glsl`](shaders/lcd-perfect.glsl) | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling |
 
-Earlier iterations live in [`tools/iterations/`](tools/iterations), kept so the
-trade-offs stay visible. They are still verified on every harness run.
-
-Third-party shaders used only as benchmark references live in
-[`tools/vendor/`](tools/vendor) and are not part of this project's licence.
-
-Include screenshots here and links to RetroShader Lab for each shader, so users can see the differences and tweak the parameters to their liking.
+<!-- Include screenshots here and links to RetroShader Lab for each shader, so users can see the differences and tweak the parameters to their liking. -->
 
 ### Parameters
 
