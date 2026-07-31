@@ -4,7 +4,7 @@ import numpy as np
 
 import common as c
 
-CURRENT = "lcd-perfect.glsl"
+CURRENT = "lcd-perfect-v3.glsl"
 
 
 def run(names, ctx, progs, report, cases=None):

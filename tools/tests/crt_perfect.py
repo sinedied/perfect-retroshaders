@@ -10,7 +10,7 @@ import numpy as np
 
 import common as c
 
-FLAT = "crt-perfect.glsl"
+FLAT = "crt-perfect-v5b.glsl"
 CURRENT = "crt-perfect-v10.glsl"
 CURVED = ["crt-perfect-v6.glsl", "crt-perfect-v8.glsl",
           "crt-perfect-v9.glsl", "crt-perfect-v10.glsl"]

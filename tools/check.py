@@ -8,7 +8,7 @@ the slider.
 
     python tools/check.py                  everything declared
     python tools/check.py crt-perfect      one family
-    python tools/check.py crt-perfect.glsl one shader
+    python tools/check.py crt-perfect-v5b.glsl one shader
 """
 
 import os

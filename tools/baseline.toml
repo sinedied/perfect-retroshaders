@@ -42,7 +42,10 @@ cases = [
     [320, 240, 1280,  720],
 ]
 
-# Moire above this reads as visible banding on a flat field.
+# Moire above this reads as visible banding on a flat field. Applied to what the
+# SHADER adds, not the raw figure: some scales alias the content no matter what
+# is drawn on it, and 480x272 -> 640x480 is 1.76 output pixels per source line,
+# where an exact box average alone leaves 0.349. See box_floor() in measure.py.
 moire = 0.40
 
 # The smallest pitch any shader here puts a pattern at, in output pixels. Both
@@ -64,7 +67,7 @@ cp_curvature = 0.10
 
 
 [[shader]]
-name = "pixel-perfect.glsl"
+name = "pixel-perfect-v1.glsl"
 family = "pixel-perfect"
 role = ["released"]
 # The scaler every other shader in this repo is built on, and the only one with
@@ -80,15 +83,18 @@ equivalent_to = "pixellate.glsl"
 neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
 
 [[shader]]
-name = "crt-perfect.glsl"
+name = "crt-perfect-v5b.glsl"
 family = "crt-perfect"
 role = ["released"]
 pattern = "output-locked"
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0 }
-# PSP into 640x480, pre-existing and unreviewed. Not a regression: it was
-# masked for a long time by a worse figure from a shader since archived.
-# Whether it is acceptable is a look decision.
-moire_allow = [{ case = [480, 272, 640, 480], value = 0.575 }]
+# PSP into 640x480, pre-existing and unreviewed. Not a regression: it has read
+# the same since v4, and it was masked for a long time by a worse figure from a
+# shader since archived. 0.448 is the shader's own share; the raw figure was
+# 0.568, of which 0.349 is the scale factor aliasing the checkerboard and
+# nothing to do with this shader. Whether the rest is acceptable is a look
+# decision nobody has made.
+moire_allow = [{ case = [480, 272, 640, 480], value = 0.448 }]
 
 [[shader]]
 name = "crt-perfect-v10.glsl"
@@ -97,18 +103,19 @@ role = ["current"]
 pattern = "output-locked"
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
 # v10 is bit-identical to the released shader at equal parameters - measured
-# both ways, 0.249 and 0.434 to three decimals. These two exceedances are
-# entirely its retuned defaults: scanlines 0.55 -> 0.60 and mask 0.40 -> 0.20
-# beat harder at a 4x scale. Neither was visible before, because the tool used
-# to pick a shader's pattern rule by filename prefix and never matched v6-v10.
-# Owner's tuning, so it is pinned and surfaced, not changed.
+# both ways, 0.249 and 0.434 to three decimals. Both exceedances are entirely
+# its retuned defaults: scanlines 0.55 -> 0.60 and mask 0.40 -> 0.20 beat harder.
+# Neither was visible before, because the tool used to pick a shader's pattern
+# rule by filename prefix and never matched v6-v10. The 256x224 case has a floor
+# of 0.000, so that one is all shader; the PSP case is the same pre-existing
+# fault the released shader has. Owner's tuning: pinned and surfaced, not changed.
 moire_allow = [
-    { case = [480, 272, 640, 480], value = 0.582 },
+    { case = [480, 272, 640, 480], value = 0.466 },
     { case = [256, 224, 1024, 768], value = 0.434 },
 ]
 
 [[shader]]
-name = "lcd-perfect.glsl"
+name = "lcd-perfect-v3.glsl"
 family = "lcd-perfect"
 role = ["released", "current"]
 pattern = "whole-cell"
@@ -413,7 +420,7 @@ sampler = "linear"
 "480x272->1024x768" = "0788e855a553f695"
 "480x272->640x480" = "03320d0d2abaae27"
 
-[golden."crt-perfect.glsl"]
+[golden."crt-perfect-v5b.glsl"]
 "160x144->1024x768" = "4b485a6e28e105dc"
 "240x160->1024x768" = "75d2019025afff5c"
 "256x192->1024x768" = "12a73ac0255b80d2"
@@ -557,7 +564,7 @@ sampler = "linear"
 "480x272->1024x768" = "f6aa9a7d60297a9f"
 "480x272->640x480" = "e1fe256a9f4564f5"
 
-[golden."lcd-perfect.glsl"]
+[golden."lcd-perfect-v3.glsl"]
 "160x144->1024x768" = "8f987105fd37f6dc"
 "240x160->1024x768" = "bbfcc48b7c0a1941"
 "256x192->1024x768" = "cf25d0b41d5cdacb"
@@ -629,7 +636,7 @@ sampler = "linear"
 "480x272->1024x768" = "ca81cdba01150f6e"
 "480x272->640x480" = "7cc33d9020ae59cc"
 
-[golden."pixel-perfect.glsl"]
+[golden."pixel-perfect-v1.glsl"]
 "160x144->1024x768" = "784dcd47f347a0dd"
 "240x160->1024x768" = "506f628fc855ea34"
 "256x192->1024x768" = "14fde0bf677a8ec7"
