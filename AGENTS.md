@@ -998,6 +998,115 @@ as the blend over them.** Any new term that reads the taps directly rather than
 through the blend has to be checked against the boundary case separately, and a
 whole scale factor is where to look, not a fractional one.
 
+### The gate that keeps a reduction stable is itself a visible artifact
+
+The weighting fix above is correct and it was applied four times — v3 over the
+scaler taps, v4 over the casting cell index, v7 over the 2x2 cell set — and the
+fourth time the fix was the bug.
+
+`smoothstep(0, 0.02, k)` is a **step**, so it matters enormously what `k` does
+across a cell. Over the scaler's `wA` it is safe: that weight is saturated at 0
+or 1 everywhere except the one transition pixel per block, so the gate is a
+stable *selection* and `paper` comes out piecewise constant. Over the shadow's
+bilinear weight it is not: `gf` sweeps the full 0..1 once per cell, so `kb`
+crosses 0.02 **inside every cell**, and `paper` jumped between `PAPER_FLOOR` and
+the palette's paper level along a contour that repeats per cell.
+
+Measured against v6, that is **22/255**, and it reads as a hard dark bar down
+the edge of every dark region with the soft gradient gone — which is exactly how
+it was described on sight.
+
+**v8 removes the reduction instead of gating it.** `paper` is the luma of the
+area blend, floored: continuous in position by construction, stable at the
+`floor()` boundary for the same reason the scaler is, and one dot product and
+one max against v7's four multiplies, a `smoothstep` on a `vec4` and three
+maxes. It is **7.2 points of the yardstick cheaper** and it is the version that
+looks right.
+
+| | ops | shadow off | shadow on |
+|---|---|---|---|
+| v6 — reduce over the scaler taps | 574 | 103.1% | 143.4% |
+| v7 — reduce over the shadow cells | 549 | 103.1% | 136.0% |
+| **v8 — no reduction, the blend's own luma** | **511** | 105.7% | **132.3%** |
+
+At a whole scale factor the blend returns the source texel exactly, so **v8 is
+bit-identical to v6** there — 0/255 over two sample frames at 3x, 4x and 5x and
+at three shadow strengths — and v6 is the version whose blur was judged right.
+
+**The general lesson, which supersedes the one above rather than replacing it:**
+a reduction over the taps is unstable, and gating it fixes the instability by
+introducing a discontinuity. Prefer not needing the reduction. Where a
+divisor, a reference level or any other per-pixel quantity can be taken from the
+blend instead, take it from the blend — it is continuous, it is already
+computed, and it cannot manufacture structure the content does not have.
+
+### Do not trust a smoothness metric to find a smoothness fault
+
+The seam this caused was hunted with the obvious metric — the largest
+single-output-pixel step in the shadow field — and that metric **ranked v7 as
+the smoothest of the three**: 0.15 against v6's 0.22 and v8's 0.20. It is
+dominated by the dot aperture's own edges, which all three share, so the term
+actually at fault contributes almost nothing to it.
+
+Nor did a paper-field roughness count help: v7's `paper` has *fewer* hard steps
+than v6's (1.14% of the frame against 1.49%), because most of v7's field really
+is flatter. What is wrong with it is one thin contour, not its average.
+
+Three metrics said v7 was fine or better. The render settled it in one look.
+This is the same lesson as `grid.py`'s CV shipping a shader nobody wanted, and
+as `crt-perfect-v7` passing all eight gates with the border cropped off:
+**anything that changes how the picture looks gets looked at.**
+
+### The Game Boy contrast wheel is affine, which is why it is affordable
+
+`dp_contrast` mimics the potentiometer on a DMG's LCD board. It is not digital:
+it sets the amplitude of the V0–V5 bias ladder the driver builds its four drive
+levels from, so it scales how hard every pixel is driven at once. Turned down
+the picture washes out into undriven panel; turned up, a real one darkens
+everything, background included.
+
+The true transfer is a **sigmoid** — the LC electro-optic curve, reparametrised
+by a common factor on V_rms — so it is strictly neither linear nor a power law.
+But the only shipped reference implementation, libretro's `gb-pass4`, reduces
+to `mix(paper, ink, alpha*contrast)` with `alpha` linear in source luminance,
+which is exactly `a*x + b`. Affine is what everyone actually uses, and affine is
+the one class that may sit after the blend.
+
+Three things fall out of the pivot, and they are worth stating because the pivot
+does all the work:
+
+- **Pivot on the substrate and the map costs one multiply-add.** The substrate
+  is then the map's fixed point, so applying it to the *finished* colour leaves
+  the gaps exactly where they are — which is required rather than merely
+  convenient, since a gap has no electrode over it and no bias voltage reaches
+  it. Applying it to `area` and `dotm` separately to protect the gaps would cost
+  twice as much and achieve the same thing.
+- **The range stops at 1.00 because of where the map sends its endpoints, not
+  because of any measurement.** It sends `[0,1]` to `[1-c, 1]`. At or below 1.00
+  nothing can leave the range for any source or any palette; above it the low
+  end is clipped by exactly `c-1`. Measured on a DMG palette, 1.15 reads **1.54
+  beat against a 0.19 floor** with 32% of the frame clipped, while every setting
+  inside the range clips **nothing** and measures at or below the floor. This is
+  the `pp_sharpness` rule again: a half-range that is a known fault is not a
+  tuning control. libretro ships the same `[0,1]`, very likely for this reason.
+- **Fold it, do not write it as a `mix`.** `col*ga + gb` with `ga = c` and
+  `gb = (1-c)*S` is `col*1.0 + 0.0` at the default, which is bit-exact.
+  `mix(S, col, 1.0)` is only exactly `col` if the driver spells `mix` as
+  `x*(1-a) + y*a`, and drivers ship the other form. Verified 0/255.
+
+**A uniform branch around it bought nothing and was removed.** Unbranched it
+measures 105.5% of the yardstick, branched-and-skipped 105.7%, and with the
+shadow on the branch was a full point *worse*. The control costs ~2.4 points
+whether it is enabled or not, so skipping the multiply-add is not what that pays
+for — and the fold, not the branch, is what makes "off" exact. Do not add a
+uniform branch to something this small without measuring; the idiom is not free
+just because it is the idiom used elsewhere in the file.
+
+Two things not to copy from libretro's version: it multiplies its shadow opacity
+by `contrast`, coupling two controls that users set for different reasons; and
+its Game Boy presets *replace* the palette, so its notion of "paper" is white in
+a way ours can never be.
+
 ### Bit-identity with a reference is reachable, and worth gating on
 
 At a whole scale factor a four-tap area average returns the source texel exactly, so a
@@ -1444,6 +1553,14 @@ threshold is 0.4 rather than 0.2; the original tool was not in the repo and had 
 rebuilt from its description. A metric whose ratio to the record *drifts* per
 construction is measuring something else and must not be trusted.
 
+- **An affinity test must not clip its own reference.** Checking that a
+  post-blend affine map equals the per-tap one, by pre-mapping the source and
+  rendering it back, reads **18/255** on a real Game Boy frame and looks like a
+  broken shader. It is the test: pre-mapping clips each texel *before* the
+  blend, while the shader blends and clips after, and a clip is exactly the
+  non-linearity that does not commute. Constrain the source so the map cannot
+  leave `[0,1]` - and assert it rather than hoping, since a DMG frame's darkest
+  texel is 0.063 and maps to -0.218 at a gain of 1.3. Then it reads 1/255.
 - **Beat metric, test source**: a full-range black-and-white checkerboard cannot
   see any fault that depends on the difference between white and *the panel's
   own undriven level*. dmg-perfect-v2's shadow dimmed three quarters of a real
@@ -1674,8 +1791,21 @@ already taken out, for the reason the metric section above gives:
 | `dmg-perfect-v2` | 0.13 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 295 | 6 |
 | `dmg-perfect-v3` | 0.13 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 295 | 6 |
 | `dmg-perfect-v4` | 0.13 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 291 | 6 |
-| **`dmg-perfect-v5`** | **0.13** | **0.1% / 0.3%** | **0.0% / 0.7%** | **1.05** | 291 | 6 |
+| `dmg-perfect-v5` | 0.13 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 291 | 6 |
 | `dmg-perfect-v5` + shadow 0.45 | 0.29 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 489 | 6 |
+| `dmg-perfect-v6` + shadow 0.45 | 0.20 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 574 | 6 |
+| `dmg-perfect-v7` + shadow 0.45 | 0.16 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 549 | 6 |
+| **`dmg-perfect-v8`** | **0.13** | **0.1% / 0.3%** | **0.0% / 0.7%** | **1.05** | **262** | 6 |
+| **`dmg-perfect-v8`** + shadow 0.45 | 0.23 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 511 | 6 |
+
+The geometry is identical from v2 on - every version since shares the same scaler
+and the same aperture - so the only columns that move are the beat, which is the
+shadow, and the cost. **The beat column cannot separate v6 from v7 from v8 by
+enough to matter, and it is not what distinguishes them**: v7's fault is a
+discontinuity in one term, which this metric is not built to see and which
+measured *better* than v6 on two other metrics as well. See the smoothness-metric
+section above. The ops column for v8 is the shadow-off path, which is what a
+default frame pays.
 
 v2 and v3 differ only in the shadow, so their geometry rows are the same figures
 and the beat column, taken on a full-range checkerboard, cannot tell them apart

@@ -30,7 +30,7 @@ All shaders provided here follow these principles, and were tested on a real dev
 | [`pixel-perfect.glsl`](shaders/pixel-perfect.glsl) | **Sharp pixel upscaling.** Uniform pixel blocks, no shimmer, fast |
 | [`crt-perfect.glsl`](shaders/crt-perfect.glsl) | **CRT.** Scanlines, RGB mask, pixel-perfect scaling |
 | [`lcd-perfect.glsl`](shaders/lcd-perfect.glsl) | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling |
-| [`dmg-perfect-v5.glsl`](shaders/dmg-perfect-v5.glsl) | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, pixel-perfect scaling |
+| [`dmg-perfect-v8.glsl`](shaders/dmg-perfect-v8.glsl) | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, contrast wheel, pixel-perfect scaling |
 
 <!-- Include screenshots here and links to RetroShader Lab for each shader, so users can see the differences and tweak the parameters to their liking. -->
 
@@ -122,6 +122,7 @@ reference to match rather than to improve on.
 | `dp_red` | 1.00 | 0.00–2.00 | red gain |
 | `dp_green` | 1.00 | 0.00–2.00 | green gain |
 | `dp_blue` | 1.00 | 0.00–2.00 | blue gain |
+| `dp_contrast` | 1.00 | 0.00–1.00 | the console's contrast wheel; 1.00 disables it |
 | `dp_brightness` | 1.00 | 0.25–4.00 | output gain |
 | `dp_gamma` | 1.00 | 0.50–2.00 | gamma |
 
@@ -184,9 +185,16 @@ one-pixel grid lines, where it reads as a mesh laid over the picture.
 
 Its distance and softness are fixed in **source** pixels, so they hold their
 proportions at every resolution instead of shrinking as the screen grows, and it falls
-further down than across as a panel lit from above would. The softening is free: the
-shadow's coverage is already a box filter over each output pixel, so widening that
-filter blurs it for no extra work.
+further down than across as a panel lit from above would.
+
+**The blur is on the opacity, not on the dot's outline.** Widening the box filter over
+the dot's own shape is free, and it was tried first, and it is not a blur at all — it
+softens the aperture's internal gaps while the edge of the shadow *as a whole* stays
+exactly one output pixel wide, because that edge comes from a per-cell opacity that was
+being sampled at the nearest cell. Interpolating that opacity between the four
+surrounding cells is what actually softens it, and it costs four taps, which is the
+price of the feature. They sit inside the uniform branch, so nothing is paid with the
+shadow off.
 
 Unlike most things here it is cheap in pattern terms — a shadow lying under everything
 is a low-frequency multiply. Worst measured on a Game Boy palette across 1024×768,
@@ -197,6 +205,40 @@ is a low-frequency multiply. Worst measured on a Game Boy palette across 1024×7
 | beat | 0.19 | 0.24 | **0.29** | 0.39 | 0.56 |
 
 So most of the range is usable and only the top of it is worth avoiding.
+
+`dp_contrast` is the wheel on the side of the console. On a real DMG that is a
+potentiometer on the LCD board setting the amplitude of the bias ladder the driver
+builds its four drive levels from, so it scales how hard every pixel is driven at once;
+turned down, the picture washes out towards blank undriven panel. 1.00 is the wheel at
+its correct setting and 0.00 is a blank screen.
+
+It is an **affine** map — a gain and an offset — and that is what makes it safe to
+apply to the finished colour rather than to the four taps. The scaler's weights sum to
+one, so `a·(Σwᵢxᵢ) + b` is exactly `Σwᵢ(a·xᵢ + b)`: post-blend and per-tap are the same
+number, at a quarter of the cost. This is the converse of the rule against post-blend
+non-linearity, not an exception to it.
+
+Pivoting on the substrate is what makes one multiply-add enough, and it is also what
+makes it correct: the substrate is the map's fixed point, so **the gaps do not move at
+any setting**, which is right, because a gap has no electrode over it and no bias
+voltage can reach it.
+
+**It stops at 1.00 deliberately.** The map sends `[0,1]` to `[1-c, 1]`, so at or below
+1.00 nothing can leave the range whatever the source or the palette, while above it the
+low end is clipped by exactly `c-1` — a property of the map, not of any content. A clip
+after the blend gives partial-coverage pixels a coverage-dependent shift, which is
+precisely the moire this family exists to avoid; on a Game Boy palette 1.15 already
+measures 1.54 against a floor of 0.19. Every setting it does accept clips nothing and
+measures at or below that floor:
+
+| `dp_contrast` | 1.00 | 0.95 | 0.85 | 0.65 | 0.45 | 0.15 |
+|---|---|---|---|---|---|---|
+| beat | 0.19 | 0.19 | 0.16 | 0.12 | 0.10 | 0.04 |
+| clipped | — | 0% | 0% | 0% | 0% | 0% |
+
+libretro's Game Boy shader, the only other one with this control, ships the same
+`[0, 1]` range, very likely for the same reason. For a darker picture use `dp_gamma`,
+which costs some evenness but never clips.
 
 `dp_red`, `dp_green` and `dp_blue` trim the colour balance, which is worth having
 because Game Boy palettes vary a lot between cores and none of them is neutral. They
