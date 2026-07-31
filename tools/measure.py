@@ -118,11 +118,54 @@ def beat(img, src_w, src_h, pattern=None):
     return float(np.sqrt((np.abs(F[band]) ** 2).sum()))
 
 
+_FLOORS = {}
+
+
+def box_floor(case):
+    """The beat an EXACT box average leaves at this scale, with no shader in it.
+
+    Not every beat is a shader's fault. A 1px checkerboard at 1.76 output pixels
+    per source line cannot be resampled without throwing energy into the low
+    band - that is the content aliasing, and it is there before any shader
+    exists. Written from scratch in box_scale(), it measures 0.349 at
+    480x272 -> 640x480 against 0.000 at an exact 2.00 or 4.00.
+
+    So a raw figure gated against a fixed limit partly scores the SCALE FACTOR.
+    crt-perfect carried a hand-written 0.575 exception at that scale while its
+    own contribution was 0.448, and the two numbers were never comparable to the
+    0.249 it reads elsewhere, because they sit on different floors.
+    """
+    if case not in _FLOORS:
+        sw, sh, ow, oh = case
+        _FLOORS[case] = beat(box_scale(c.checkerboard(sw, sh), ow, oh), sw, sh)
+    return _FLOORS[case]
+
+
 def moire(ctx, progs, name, case, source=None, **override):
+    """What the SHADER adds, over what the scale factor makes unavoidable.
+
+    IN QUADRATURE, NOT BY SUBTRACTION, and the difference is large enough to
+    change a verdict - 0.448 against 0.220 at PSP into 640x480. beat() is the
+    RMS over a frequency band, so two contributions that land in different bins
+    add in POWER: total = sqrt(floor^2 + shader^2).
+
+    Measured rather than assumed, by sweeping the pattern amplitude and asking
+    which model leaves the shader's share proportional to it, as it must be.
+    On the case with a big floor (0.349 at 480x272 -> 640x480):
+
+        amplitude   0.20   0.30   0.40   0.55   0.70
+        linear/amp  0.167  0.265  0.299  0.400  0.472   ramps 3x
+        quad/amp    0.781  0.829  0.781  0.817  0.832   flat
+
+    Cases with a small floor cannot tell the two apart, which is why the
+    discriminating case is the one that looked worst.
+    """
     sw, sh, ow, oh = case
     src = (source or c.checkerboard)(sw, sh)
     img = c.render(ctx, progs, name, src, ow, oh, **override)
-    return beat(img, sw, sh, pattern_freq(name, sw, sh, ow, oh))
+    raw = beat(img, sw, sh, pattern_freq(name, sw, sh, ow, oh))
+    floor = box_floor(case)
+    return float(np.sqrt(max(raw * raw - floor * floor, 0.0)))
 
 
 # --------------------------------------------------------------------------
@@ -512,6 +555,16 @@ def self_test(report):
     cv = float(gaps.std() / gaps.mean() * 100.0)
     report.check(cv < 2.0, "an exact lattice measures as exact",
                  f"cv {cv:.2f}%, softness only")
+
+    # The floor the moire figure is reported against. An exact scale leaves
+    # nothing in the low band; an awkward one leaves a lot, and none of it is
+    # any shader's doing. If these two ever read alike, the excess has stopped
+    # meaning anything.
+    awkward = box_floor((480, 272, 640, 480))
+    whole = box_floor((320, 240, 640, 480))
+    report.check(awkward > 0.3 and whole < 0.01,
+                 "the floor separates an awkward scale from a whole one",
+                 f"{awkward:.3f} at 1.76 px/line against {whole:.3f} at 2.00")
 
 
 # --------------------------------------------------------------------------
