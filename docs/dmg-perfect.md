@@ -4,6 +4,12 @@ Design record. Why this shader is built the way it is, what was
 measured, and what was tried and rejected. AGENTS.md carries only what an agent
 needs before touching anything; this is the detail behind it.
 
+> **Tool names in this record are historical.** These notes were written against
+> a harness of nine separate scripts, since consolidated into five entry points.
+> The measurements are unchanged; only where they live moved. See the table in
+> `docs/measurement.md`.
+
+
 ## The DMG is a negative display, and it changes the sign of everything
 
 A Game Boy DMG is a **reflective, normally-white STN panel with no backlight**.

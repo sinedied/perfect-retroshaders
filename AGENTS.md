@@ -15,18 +15,21 @@ does not read GLSL.
 
 | Path | What |
 |---|---|
-| `shaders/` | every version of every shader — roles are declared, not inferred from the filename |
-| `tools/core/` | manifest, paths, shader text, GPU |
-| `tools/models/` | numpy twin of each shader, plus `registry.py` pairing them |
-| `tools/tests/` | pytest: contracts and per-family properties |
+| `shaders/` | the working set: what ships, plus the current candidate per family |
+| `tools/baseline.toml` | **the one data file** — every shader's role, sampler and limits |
+| `tools/{check,measure,perf,test,preview}.py` | the five entry points |
+| `tools/common.py` | paths, shader text, GL, sources, reporting |
+| `tools/tests/` | per-family behavioural properties, each with its control |
 | `tools/vendor/` | third-party shaders, comparison only, not ours and not edited |
-| `tools/iterations/` | superseded versions kept for the record |
+| `tools/iterations/` | superseded versions, kept compiling as negative controls |
 | `docs/<shader>.md` | design record: what was measured, what was rejected, why |
 
-`tools/core/manifest.py` declares each shader's family, lifecycle role
-(`released`, `current`, `archive`, `vendor`) and sampler. **Never work out the
+`tools/baseline.toml` declares each shader's family, lifecycle role (`released`,
+`current`, `archive`, `vendor`), sampler and thresholds. **Never work out the
 current version from a filename** — `max(names)` returns `v8` over `v10`, which
-silently froze a gate two versions behind.
+silently froze a gate two versions behind. A shader on disk that nobody declares
+fails the check, because dropping out of the matrix silently is the same defect
+wearing different clothes.
 
 ## Setup
 
@@ -35,60 +38,69 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 brew install glslang          # glslangValidator + spirv-dis, not a Python package
 ```
 
-Versions are pinned. The gate is a 1/255 comparison between a GPU render and a
-numpy model, so a change in numpy's rounding is indistinguishable from a shader
-regression.
+Versions are pinned. Several gates are exact byte comparisons between two GPU
+renders, and the golden hashes are only meaningful against a fixed stack.
 
 ## Workflow
 
 ```sh
-.venv/bin/python -m tools.verify              # fast, everything shipping
-.venv/bin/python -m tools.verify crt-perfect  # fast, one family
-.venv/bin/python -m tools.verify --full       # archive + long sweeps
-.venv/bin/python -m tools.verify --visual     # comparison sheets to look at
-.venv/bin/python -m tools.verify --bench      # GPU timings
+.venv/bin/python tools/test.py                 # the gate: everything shipping
+.venv/bin/python tools/test.py crt-perfect     # one family
+.venv/bin/python tools/test.py --all           # golden the archive too
+.venv/bin/python tools/test.py --record        # accept a deliberate change
+.venv/bin/python tools/preview.py --diff       # look at it
+.venv/bin/python tools/perf.py                 # cost, when you want to compare
 ```
 
 To add or change a shader:
 
 1. Edit the `.glsl`.
-2. **Mirror the change in `tools/models/<family>.py`.** It is an independent
-   reimplementation; `gl_check` runs the real shader on a GPU and diffs it
-   against the model, so a mismatch means one of the two is wrong. Target is
-   worst ≤ 1/255.
-3. Add it to `tools/core/manifest.py` and `tools/models/registry.py`.
-4. `python -m tools.verify <family>`.
-5. `--visual` **if the change moves geometry.** Not optional: `crt-perfect-v7`
-   passed every number in the harness while having cropped its entire image
-   border off-screen, and was caught by a person looking at a screenshot.
+2. Declare it in `tools/baseline.toml` — family, role, and anything it needs a
+   limit or a preview override for.
+3. `tools/test.py <family>`.
+4. `tools/preview.py` **if the change moves geometry.** Not optional:
+   `crt-perfect-v7` passed every number in the harness while having cropped its
+   entire image border off-screen, and was caught by a person looking at a
+   screenshot.
+5. If the goldens moved and you meant it, `--record`.
 
 New behaviour that can be stated as a property belongs in
-`tools/tests/<family>_test.py`, with the version that got it wrong kept as a
-negative control. A property nobody can regress into is a property with no
-proof.
+`tools/tests/<family>.py`, with the version that got it wrong kept as a negative
+control. A property nobody can regress into is a property with no proof.
+
+**A numpy twin of a shader is a scratch tool, not a repo artifact.** Writing the
+same arithmetic twice is genuinely useful while working out what a shader should
+do — it caught the anisotropic footprint correction in v6 and a `float32`
+`floor()` knife edge twice. It stops earning its keep the moment the version
+freezes: across 67 commits, every twin-versus-shader disagreement that reached a
+commit was resolved by fixing the twin. Write one in `/tmp` while iterating.
+Do not commit it.
 
 ## Verification, and what it does not cover
 
-Three layers, deliberately:
+Four layers, deliberately:
 
-- **Differential** — GPU versus numpy, 1/255. Catches translation errors.
+- **The scaler anchor** — every family, with its effects set to the `neutral`
+  values in `baseline.toml`, must equal `pixel-perfect` within 1/255, and
+  `pixel-perfect` must equal the vendored `pixellate`. That chains all four
+  families to a third-party implementation, for one render each.
 - **Properties** — measured from the render, never computed from the formula
-  under test. Catches specification errors, which the differential layer cannot:
-  the model is edited alongside the shader, so a shared misunderstanding
-  survives it.
+  under test.
 - **Negative controls** — each property must *fail* on the archived version that
   had the defect.
-
-`Model(tolerance=N)` may exceed 1 only with a `reason` naming a mechanism that
-has been measured. `Model(outliers=N)` allows a counted number of knife-edge
-pixels while keeping tolerance at 1, which is the honest shape for a `floor()`
-that lands on a decision boundary.
+- **Goldens** — a hash per shader per case. Proves nothing about correctness,
+  only that nothing moved since somebody last looked at it. A mismatch is a
+  question, not a verdict.
 
 **Not covered: the device.** Everything here runs desktop GL 4.10 on an Apple
-GPU. `spirv_cost.py`'s SFU count is the proxy used for the Mali, and the two
-disagree — `pixellate` has the most SFU of anything here (30 against 14) and is
-still the fastest thing measured. Treat SFU as the device signal and timings as
-the desktop one, and assume neither predicts the other.
+GPU. `perf.py`'s SFU count is the proxy used for the Mali, and the two disagree —
+`pixellate` has the most SFU of anything here (30 against 14) and is still the
+fastest thing measured. Treat SFU as the device signal and timings as the
+desktop one, and assume neither predicts the other.
+
+**Perf is not a gate**, deliberately: GPU timing moves a few percent with laptop
+thermals. `baseline.toml` records op and SFU counts as unenforced reference
+figures.
 
 ## Hard contracts
 
@@ -96,7 +108,7 @@ Break one of these and the output is wrong, not merely different:
 
 - **NEAREST sampling.** Each shader computes its own area average from four
   taps; a LINEAR sampler filters underneath it and the result is filtered twice.
-  The sampler is declared per shader in the manifest — read it, don't assume.
+  The sampler is declared per shader in `baseline.toml` — read it, don't assume.
 - **Render at the output resolution, 1:1 with the display.** Masks, scanlines
   and grids are defined in output pixels; anything that rescales the result
   aliases them.
@@ -129,8 +141,7 @@ Then a blank line and the column-aligned `#pragma parameter` lines.
 - **Write the block out whole; never patch it incrementally.** Regex-editing
   these headers has produced stray fragments and a duplicated licence block.
 - The `#ifdef` fallback `#define`s must equal the `#pragma` defaults. A host
-  that does not parse pragmas renders the fallbacks. `check_headers.py` gates
-  this.
+  that does not parse pragmas renders the fallbacks. `check.py` gates this.
 
 ## GLSL traps that actually bit
 
@@ -150,8 +161,8 @@ Then a blank line and the column-aligned `#pragma parameter` lines.
 - **`mix(x, y, w)` returns `y` at `w == 1`.** If `w` means "weight on the low
   side", the low value must be the *second* argument.
 - **Reserved words that are not obvious**: `flat`, `smooth`, `sample`, `cast`,
-  `input`, `output`, `filter`. `validate_glsl.py` catches these; a desktop-only
-  compile may not.
+  `input`, `output`, `filter`. `check.py` catches these; a desktop-only compile
+  may not.
 - **Making a uniform-derived expression per-fragment is expensive.** The driver
   hoists `sin`/`smoothstep` out of the fragment shader while their argument is
   uniform-only. Multiplying that argument by anything varying cost 16.5% of
@@ -195,8 +206,8 @@ otherwise. `SHADOW_OFFSET` was hand-tuned to 0.50 and "corrected" back to 0.60
 in three shaders at once while chasing an unrelated bug.
 
 - Do not revert it and do not fix it to match something else. Ask.
-- When a shader and its model disagree on a constant, **the shader is the thing
-  that was looked at and judged** — change the model.
+- When a shader disagrees with anything written down about it, **the shader is
+  the thing that was looked at and judged** — change what is written down.
 - `git diff` before touching anything anomalous. A working tree that differs
   from HEAD is somebody's work, possibly another agent's mid-edit.
 

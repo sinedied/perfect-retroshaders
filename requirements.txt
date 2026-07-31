@@ -5,11 +5,10 @@
 # Python package:
 #   brew install glslang
 #
-# Pinned, not floated. The gate here is a 1/255 numeric comparison between a GPU
-# render and a numpy model, so a change in numpy's rounding or moderngl's
-# defaults is indistinguishable from a shader regression. Bump deliberately, and
-# re-run gl_check when you do.
+# Pinned, not floated. Several gates here are exact byte comparisons between two
+# GPU renders, and the golden hashes in tools/baseline.toml are only meaningful
+# against a fixed stack, so a change in moderngl's defaults is indistinguishable
+# from a shader regression. Bump deliberately, and re-record the goldens.
 numpy==2.5.1
 moderngl==5.12.0
 Pillow==12.3.0
-pytest==9.1.1

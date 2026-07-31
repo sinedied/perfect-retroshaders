@@ -4,6 +4,32 @@ Design record. Why this shader is built the way it is, what was
 measured, and what was tried and rejected. AGENTS.md carries only what an agent
 needs before touching anything; this is the detail behind it.
 
+> **Tool names in this record are historical.** These notes were written against
+> a harness of nine separate scripts, since consolidated into five entry points.
+> The measurements are unchanged; only where they live moved. See the table in
+> `docs/measurement.md`.
+
+
+## Where the tools went
+
+Nine scripts became five entry points. Nothing about how a thing is measured
+changed; a few things stopped being measured at all.
+
+| was | now |
+|---|---|
+| `beat.py`, `grid.py`, `measure.py` | `tools/measure.py` |
+| `equivalence.py` | one metric in `tools/measure.py`, `against_pixellate()` |
+| `bench_glsl.py`, `spirv_cost.py` | `tools/perf.py` |
+| `validate_glsl.py`, `check_headers.py` | `tools/check.py` |
+| `verify.py`, `tools/tests/*_test.py` | `tools/test.py`, `tools/tests/<family>.py` |
+| `core/{paths,gpu,shader_source}.py` | `tools/common.py` |
+| `core/manifest.py`, `models/registry.py` tables, `KNOWN_BEAT`, `LINEAR_SAMPLED` | `tools/baseline.toml` |
+| `models/*.py`, `gl_check.py` | **gone** — see AGENTS.md on numpy twins |
+| `twopass.py` | **gone** — a third DMG implementation; its conclusion is in `docs/dmg-perfect.md` |
+
+`gl_check`'s job — catching a shader that does not compute what you think — is
+now done by the scaler anchor (`tools/tests/contracts.py`) plus golden hashes.
+
 ## Measurement traps
 
 Three tooling bugs produced confident, wrong numbers before being caught. Sanity-check

@@ -1,0 +1,642 @@
+# What each shader is, and every number it has to meet.
+#
+# One file so a threshold is written once and read by every tool. Before this,
+# roles were inferred from filenames (which returned v8 as "newest" over v10),
+# samplers were guessed per tool (so a comparison table once described a shader
+# nobody runs), and limits were constants buried in whichever script used them.
+#
+#   role     released  what the README ships and a user installs
+#            current   the newest version of a family; a default run gates here
+#            archive   superseded, kept compiling and kept as a negative control
+#            vendor    third-party, for comparison only, not ours, not edited
+#
+#   sampler  how the shader is meant to be run. Almost everything takes four
+#            NEAREST taps and computes its own area average; the one-tap
+#            references hand that to the texture unit and are a different
+#            shader through NEAREST.
+#
+#   golden   a hash of the render at shipped defaults over the case matrix.
+#            Proves nothing changed by accident. It does not prove correctness,
+#            so a deliberate change means looking at a preview and re-recording.
+#
+# Perf is deliberately absent. GPU timing moves a few percent with laptop
+# thermals, so it is never a gate; run tools/perf.py when you want to compare.
+# The op and sfu figures below are recorded because they are deterministic, but
+# nothing enforces them.
+
+[settings]
+# Scales that matter on the target. 3.20, 4.00, 4.27 and 6.40 at 1024x768;
+# 2.00, 2.50 and 2.67 at 640x480, which are the awkward ones. PSP into 640x480
+# is the hardest in the set: 1.33 output pixels per source cell, below the two
+# per cycle a pattern needs, so every shader here is at its worst on it.
+cases = [
+    [320, 240, 1024, 768],
+    [256, 224, 1024, 768],
+    [256, 192, 1024, 768],
+    [240, 160, 1024, 768],
+    [160, 144, 1024, 768],
+    [480, 272, 1024, 768],
+    [480, 272,  640, 480],
+    [320, 240,  640, 480],
+    [256, 192,  640, 480],
+    [320, 240, 1280,  720],
+]
+
+# Moire above this reads as visible banding on a flat field.
+moire = 0.40
+
+# The smallest pitch any shader here puts a pattern at, in output pixels. Both
+# crt-perfect and lcd-perfect lock to this when source cells get too small to
+# carry the pattern, so it is the floor of what counts as signal.
+min_pitch = 3.0
+
+# 8-bit levels. Two GPU renders of the same arithmetic should be identical;
+# anything above 0 needs a mechanism, not a shrug.
+tolerance = 1
+
+# Parameters whose shipped default is right for a shader and wrong for a picture
+# of it: a curvature variant rendered flat is indistinguishable from every other
+# version and says nothing. Keyed by PARAMETER, never by filename - listing v6,
+# v7 and v8 by name is why v9 and v10 previewed flat the moment they existed,
+# and the sheet looked fine.
+[settings.preview]
+cp_curvature = 0.10
+
+
+[[shader]]
+name = "pixel-perfect.glsl"
+family = "pixel-perfect"
+role = ["released"]
+# The scaler every other shader in this repo is built on, and the only one with
+# a genuine third-party reference to check against.
+equivalent_to = "pixellate.glsl"
+
+[[shader]]
+name = "pixel-perfect-v6.glsl"
+family = "pixel-perfect"
+role = ["current"]
+equivalent_to = "pixellate.glsl"
+# At a neutral grade it must still be the plain scaler.
+neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
+
+[[shader]]
+name = "crt-perfect.glsl"
+family = "crt-perfect"
+role = ["released"]
+pattern = "output-locked"
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0 }
+# PSP into 640x480, pre-existing and unreviewed. Not a regression: it was
+# masked for a long time by a worse figure from a shader since archived.
+# Whether it is acceptable is a look decision.
+moire_allow = [{ case = [480, 272, 640, 480], value = 0.575 }]
+
+[[shader]]
+name = "crt-perfect-v10.glsl"
+family = "crt-perfect"
+role = ["current"]
+pattern = "output-locked"
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
+# v10 is bit-identical to the released shader at equal parameters - measured
+# both ways, 0.249 and 0.434 to three decimals. These two exceedances are
+# entirely its retuned defaults: scanlines 0.55 -> 0.60 and mask 0.40 -> 0.20
+# beat harder at a 4x scale. Neither was visible before, because the tool used
+# to pick a shader's pattern rule by filename prefix and never matched v6-v10.
+# Owner's tuning, so it is pinned and surfaced, not changed.
+moire_allow = [
+    { case = [480, 272, 640, 480], value = 0.582 },
+    { case = [256, 224, 1024, 768], value = 0.434 },
+]
+
+[[shader]]
+name = "lcd-perfect.glsl"
+family = "lcd-perfect"
+role = ["released", "current"]
+pattern = "whole-cell"
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
+name = "dmg-perfect-v8.glsl"
+family = "dmg-perfect"
+# No un-suffixed file exists; v8 is what the README links, so it is both what
+# ships and what a default run gates on.
+role = ["released", "current"]
+neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_contrast = 1.0, dp_brightness = 1.0, dp_gamma = 1.0 }
+
+
+# Superseded. Still compiled, still linted, and still rendered as negative
+# controls: a property with no version that fails it has no proof.
+[[shader]]
+name = "crt-perfect-v1.glsl"
+family = "crt-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "crt-perfect-v2.glsl"
+family = "crt-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "crt-perfect-v3.glsl"
+family = "crt-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "crt-perfect-v4.glsl"
+family = "crt-perfect"
+role = ["archive"]
+pattern = "output-locked"
+
+[[shader]]
+name = "crt-perfect-v5.glsl"
+family = "crt-perfect"
+role = ["archive"]
+pattern = "output-locked"
+
+[[shader]]
+name = "crt-perfect-v6.glsl"
+family = "crt-perfect"
+role = ["archive"]
+pattern = "output-locked"
+
+[[shader]]
+name = "crt-perfect-v7.glsl"
+family = "crt-perfect"
+role = ["archive"]
+pattern = "output-locked"
+# Kept as the control for the border check: it normalises the warp by the
+# corner value and crops the entire image border off-screen.
+
+[[shader]]
+name = "crt-perfect-v8.glsl"
+family = "crt-perfect"
+role = ["archive"]
+pattern = "output-locked"
+# Control for the source-lock check: scales the pattern pitch by the local
+# jacobian, so 240 source lines become 201 scanlines.
+
+[[shader]]
+name = "crt-perfect-v9.glsl"
+family = "crt-perfect"
+role = ["archive"]
+pattern = "output-locked"
+# Same lock fault as v8, with the band-limit moved to a uniform.
+
+[[shader]]
+name = "lcd-perfect-v1.glsl"
+family = "lcd-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "lcd-perfect-v2a.glsl"
+family = "lcd-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "lcd-perfect-v2b.glsl"
+family = "lcd-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "pixel-perfect-v2.glsl"
+family = "pixel-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "pixel-perfect-v3.glsl"
+family = "pixel-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "pixel-perfect-v4.glsl"
+family = "pixel-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "pixel-perfect-v5.glsl"
+family = "pixel-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "dmg-perfect-v1.glsl"
+family = "dmg-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "dmg-perfect-v2.glsl"
+family = "dmg-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "dmg-perfect-v3.glsl"
+family = "dmg-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "dmg-perfect-v4.glsl"
+family = "dmg-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "dmg-perfect-v5.glsl"
+family = "dmg-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "dmg-perfect-v6.glsl"
+family = "dmg-perfect"
+role = ["archive"]
+
+[[shader]]
+name = "dmg-perfect-v7.glsl"
+family = "dmg-perfect"
+role = ["archive"]
+
+
+# Third party. Comparison references only: not ours, not under this repo's
+# licence, never edited.
+[[shader]]
+name = "pixellate.glsl"
+family = "vendor"
+role = ["vendor"]
+
+[[shader]]
+name = "lcd1x.glsl"
+family = "vendor"
+role = ["vendor"]
+preview = { BRIGHTEN_SCANLINES = 16.0, BRIGHTEN_LCD = 4.0 }
+
+[[shader]]
+name = "lcd3x.glsl"
+family = "vendor"
+role = ["vendor"]
+
+[[shader]]
+name = "dmg_dot_matrix.glsl"
+family = "vendor"
+role = ["vendor"]
+preview = { dmg_edge_alpha = 0.3, dmg_brightness_correction = 1.2, dmg_grid_lightness = 1.0, dmg_gamma = 1.4 }
+
+[[shader]]
+name = "sharp-shimmerless.glsl"
+family = "vendor"
+role = ["vendor"]
+# One tap, with the texture unit doing the blend. Measuring it through NEAREST
+# measures a different shader.
+sampler = "linear"
+
+[[shader]]
+name = "sharp-shimmerless-grid.glsl"
+family = "vendor"
+role = ["vendor"]
+preview = { GRID_RATIO_X = 0.3, GRID_RATIO_Y = 0.3, GRID_OPACITY_X = 0.3, GRID_OPACITY_Y = 0.3 }
+sampler = "linear"
+
+# --- goldens, generated by tools/test.py --record ---
+
+[golden."crt-perfect-v1.glsl"]
+"160x144->1024x768" = "4e461ed50882670f"
+"240x160->1024x768" = "317333830cdd108d"
+"256x192->1024x768" = "867e74952bcb5ae9"
+"256x192->640x480" = "46eef493db203015"
+"256x224->1024x768" = "f9b77d1279f8e06b"
+"320x240->1024x768" = "45865802b17e7b39"
+"320x240->1280x720" = "cdb84c30db6b0d79"
+"320x240->640x480" = "d6a1d29e6ff94736"
+"480x272->1024x768" = "0640e5c983c7c244"
+"480x272->640x480" = "336d1d1f4ebb20b4"
+
+[golden."crt-perfect-v10.glsl"]
+"160x144->1024x768" = "2070509be3242835"
+"240x160->1024x768" = "08ced6bc8ca20f45"
+"256x192->1024x768" = "17e35cea4cbeaa08"
+"256x192->640x480" = "e7f4e5f23d140c4f"
+"256x224->1024x768" = "fc3e48b9cfec24fa"
+"320x240->1024x768" = "370516b207afc5c8"
+"320x240->1280x720" = "618ac0a5eca82f69"
+"320x240->640x480" = "3585a090a3e354f2"
+"480x272->1024x768" = "682de10fd3304f8e"
+"480x272->640x480" = "bf57cc916774758e"
+
+[golden."crt-perfect-v2.glsl"]
+"160x144->1024x768" = "716692d3ac007c25"
+"240x160->1024x768" = "c39fcf45395522aa"
+"256x192->1024x768" = "527e64d43fc09a16"
+"256x192->640x480" = "51e66aa45d6b0d8a"
+"256x224->1024x768" = "7b6e90d38b3b99ea"
+"320x240->1024x768" = "f7c1412d9731c5c0"
+"320x240->1280x720" = "bedc7161fc7faa5e"
+"320x240->640x480" = "9847fd642b6346dd"
+"480x272->1024x768" = "9d2a94526320c92f"
+"480x272->640x480" = "e8881ab2e649334e"
+
+[golden."crt-perfect-v3.glsl"]
+"160x144->1024x768" = "54544c6bd091088a"
+"240x160->1024x768" = "41a67b04cc464f4c"
+"256x192->1024x768" = "12a73ac0255b80d2"
+"256x192->640x480" = "a8b602e08566be87"
+"256x224->1024x768" = "7c45b6375c56284a"
+"320x240->1024x768" = "b6b44ea4942849d9"
+"320x240->1280x720" = "686ff1ea741602bf"
+"320x240->640x480" = "9847fd642b6346dd"
+"480x272->1024x768" = "aa4849ce0b892118"
+"480x272->640x480" = "5a696defc9c1d610"
+
+[golden."crt-perfect-v4.glsl"]
+"160x144->1024x768" = "4b485a6e28e105dc"
+"240x160->1024x768" = "75d2019025afff5c"
+"256x192->1024x768" = "12a73ac0255b80d2"
+"256x192->640x480" = "b9ea4b7c929f35fb"
+"256x224->1024x768" = "cfb552c29d239d87"
+"320x240->1024x768" = "1fcbdc89a3743df2"
+"320x240->1280x720" = "db3a5a6fdefbf707"
+"320x240->640x480" = "05a82c4e3a4ad050"
+"480x272->1024x768" = "2b3fcb88d5fd20b2"
+"480x272->640x480" = "6e92713af7b2ac89"
+
+[golden."crt-perfect-v5.glsl"]
+"160x144->1024x768" = "4b485a6e28e105dc"
+"240x160->1024x768" = "75d2019025afff5c"
+"256x192->1024x768" = "12a73ac0255b80d2"
+"256x192->640x480" = "b9ea4b7c929f35fb"
+"256x224->1024x768" = "cfb552c29d239d87"
+"320x240->1024x768" = "1fcbdc89a3743df2"
+"320x240->1280x720" = "db3a5a6fdefbf707"
+"320x240->640x480" = "05a82c4e3a4ad050"
+"480x272->1024x768" = "2b3fcb88d5fd20b2"
+"480x272->640x480" = "6e92713af7b2ac89"
+
+[golden."crt-perfect-v6.glsl"]
+"160x144->1024x768" = "6615bd204fef36e6"
+"240x160->1024x768" = "ef4b3288867c410d"
+"256x192->1024x768" = "6471857b169fb078"
+"256x192->640x480" = "fe6a60e9120b0b84"
+"256x224->1024x768" = "995829d897aaa977"
+"320x240->1024x768" = "f44d12458136148e"
+"320x240->1280x720" = "995fc3f9f67f2dab"
+"320x240->640x480" = "d2a00b8f9104d654"
+"480x272->1024x768" = "dd592c535d38fbf2"
+"480x272->640x480" = "ffc1e8d47b22595b"
+
+[golden."crt-perfect-v7.glsl"]
+"160x144->1024x768" = "ca56f15d3b5e440a"
+"240x160->1024x768" = "28ecc8dc437ef4fe"
+"256x192->1024x768" = "47b92b3504344123"
+"256x192->640x480" = "8c3ac0bbad83b2ba"
+"256x224->1024x768" = "8ca62ae4623ce720"
+"320x240->1024x768" = "8014004652b97040"
+"320x240->1280x720" = "5f0df8e1185e4e70"
+"320x240->640x480" = "89f619afef378b0b"
+"480x272->1024x768" = "8da95cfaf61381e5"
+"480x272->640x480" = "ef967fbe1c0e94c2"
+
+[golden."crt-perfect-v8.glsl"]
+"160x144->1024x768" = "4bc79210e636a7b3"
+"240x160->1024x768" = "0652886ac9fede3f"
+"256x192->1024x768" = "b6d6fbbec0efea76"
+"256x192->640x480" = "dee9f475838cfcde"
+"256x224->1024x768" = "b09aa072963b1e7c"
+"320x240->1024x768" = "56ae3b7d684d4c34"
+"320x240->1280x720" = "d28e00fb7e856824"
+"320x240->640x480" = "feb0c6697c230da1"
+"480x272->1024x768" = "46f73c208ec7dd1e"
+"480x272->640x480" = "1eeb9947fe28a13d"
+
+[golden."crt-perfect-v9.glsl"]
+"160x144->1024x768" = "0df9413133b13927"
+"240x160->1024x768" = "42c59d758c4a8fc8"
+"256x192->1024x768" = "d42b1f1d6f805f35"
+"256x192->640x480" = "fa70fe43c551dd91"
+"256x224->1024x768" = "8b1810a61f8446b7"
+"320x240->1024x768" = "521e1762d7f02221"
+"320x240->1280x720" = "ac708eec5be6c5d8"
+"320x240->640x480" = "428f88d0f765a922"
+"480x272->1024x768" = "0788e855a553f695"
+"480x272->640x480" = "03320d0d2abaae27"
+
+[golden."crt-perfect.glsl"]
+"160x144->1024x768" = "4b485a6e28e105dc"
+"240x160->1024x768" = "75d2019025afff5c"
+"256x192->1024x768" = "12a73ac0255b80d2"
+"256x192->640x480" = "b9ea4b7c929f35fb"
+"256x224->1024x768" = "cfb552c29d239d87"
+"320x240->1024x768" = "1fcbdc89a3743df2"
+"320x240->1280x720" = "db3a5a6fdefbf707"
+"320x240->640x480" = "05a82c4e3a4ad050"
+"480x272->1024x768" = "2b3fcb88d5fd20b2"
+"480x272->640x480" = "6e92713af7b2ac89"
+
+[golden."dmg-perfect-v1.glsl"]
+"160x144->1024x768" = "e22ec3f3352ac64e"
+"240x160->1024x768" = "e62bdef64b9c20fa"
+"256x192->1024x768" = "f5cff46e47698484"
+"256x192->640x480" = "5111c81e4b8b5e8e"
+"256x224->1024x768" = "684add96a1f299cb"
+"320x240->1024x768" = "fc5ddbfd4a266e3f"
+"320x240->1280x720" = "2a24bb289e27852b"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "deeb063e81ad0f2f"
+"480x272->640x480" = "7cc33d9020ae59cc"
+
+[golden."dmg-perfect-v2.glsl"]
+"160x144->1024x768" = "d2262d4faade7d59"
+"240x160->1024x768" = "8609b03d6741721f"
+"256x192->1024x768" = "be000e1ce5ed5309"
+"256x192->640x480" = "d5c2bc450ff633e2"
+"256x224->1024x768" = "b981363138a500d7"
+"320x240->1024x768" = "7c080f39327a636b"
+"320x240->1280x720" = "4521f7be355ee00c"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "4f620d8b4648c5b8"
+"480x272->640x480" = "d9f7069ed5495378"
+
+[golden."dmg-perfect-v3.glsl"]
+"160x144->1024x768" = "d2262d4faade7d59"
+"240x160->1024x768" = "8609b03d6741721f"
+"256x192->1024x768" = "be000e1ce5ed5309"
+"256x192->640x480" = "d5c2bc450ff633e2"
+"256x224->1024x768" = "b981363138a500d7"
+"320x240->1024x768" = "7c080f39327a636b"
+"320x240->1280x720" = "4521f7be355ee00c"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "4f620d8b4648c5b8"
+"480x272->640x480" = "d9f7069ed5495378"
+
+[golden."dmg-perfect-v4.glsl"]
+"160x144->1024x768" = "d2262d4faade7d59"
+"240x160->1024x768" = "8609b03d6741721f"
+"256x192->1024x768" = "be000e1ce5ed5309"
+"256x192->640x480" = "d5c2bc450ff633e2"
+"256x224->1024x768" = "b981363138a500d7"
+"320x240->1024x768" = "7c080f39327a636b"
+"320x240->1280x720" = "4521f7be355ee00c"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "4f620d8b4648c5b8"
+"480x272->640x480" = "d9f7069ed5495378"
+
+[golden."dmg-perfect-v5.glsl"]
+"160x144->1024x768" = "d2262d4faade7d59"
+"240x160->1024x768" = "8609b03d6741721f"
+"256x192->1024x768" = "be000e1ce5ed5309"
+"256x192->640x480" = "d5c2bc450ff633e2"
+"256x224->1024x768" = "b981363138a500d7"
+"320x240->1024x768" = "7c080f39327a636b"
+"320x240->1280x720" = "4521f7be355ee00c"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "4f620d8b4648c5b8"
+"480x272->640x480" = "d9f7069ed5495378"
+
+[golden."dmg-perfect-v6.glsl"]
+"160x144->1024x768" = "d2262d4faade7d59"
+"240x160->1024x768" = "8609b03d6741721f"
+"256x192->1024x768" = "be000e1ce5ed5309"
+"256x192->640x480" = "d5c2bc450ff633e2"
+"256x224->1024x768" = "b981363138a500d7"
+"320x240->1024x768" = "7c080f39327a636b"
+"320x240->1280x720" = "4521f7be355ee00c"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "4f620d8b4648c5b8"
+"480x272->640x480" = "d9f7069ed5495378"
+
+[golden."dmg-perfect-v7.glsl"]
+"160x144->1024x768" = "d2262d4faade7d59"
+"240x160->1024x768" = "8609b03d6741721f"
+"256x192->1024x768" = "be000e1ce5ed5309"
+"256x192->640x480" = "d5c2bc450ff633e2"
+"256x224->1024x768" = "b981363138a500d7"
+"320x240->1024x768" = "7c080f39327a636b"
+"320x240->1280x720" = "4521f7be355ee00c"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "4f620d8b4648c5b8"
+"480x272->640x480" = "d9f7069ed5495378"
+
+[golden."dmg-perfect-v8.glsl"]
+"160x144->1024x768" = "d2262d4faade7d59"
+"240x160->1024x768" = "8609b03d6741721f"
+"256x192->1024x768" = "be000e1ce5ed5309"
+"256x192->640x480" = "d5c2bc450ff633e2"
+"256x224->1024x768" = "b981363138a500d7"
+"320x240->1024x768" = "7c080f39327a636b"
+"320x240->1280x720" = "4521f7be355ee00c"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "4f620d8b4648c5b8"
+"480x272->640x480" = "d9f7069ed5495378"
+
+[golden."lcd-perfect-v1.glsl"]
+"160x144->1024x768" = "9c4d71137a4c1aff"
+"240x160->1024x768" = "46c202d6f53c97f3"
+"256x192->1024x768" = "db0311d389f38c4c"
+"256x192->640x480" = "582c84e03075decc"
+"256x224->1024x768" = "b4b28c1ecb8ac13b"
+"320x240->1024x768" = "2df4d158d6c7e5bd"
+"320x240->1280x720" = "b11f752c60ff61dd"
+"320x240->640x480" = "009dd078809c4f93"
+"480x272->1024x768" = "d458a92ef24b0b78"
+"480x272->640x480" = "2c2c614ca459ef30"
+
+[golden."lcd-perfect-v2a.glsl"]
+"160x144->1024x768" = "db52baf2f62874a7"
+"240x160->1024x768" = "60d3f803d24a5188"
+"256x192->1024x768" = "f226aef34d90ca86"
+"256x192->640x480" = "a67e64020546e763"
+"256x224->1024x768" = "7916176ae1fa9459"
+"320x240->1024x768" = "7ff0c3b6c77817ad"
+"320x240->1280x720" = "2f943d80b0ae40f2"
+"320x240->640x480" = "3bc9b517e4fab036"
+"480x272->1024x768" = "12f81ddfb848b41f"
+"480x272->640x480" = "71d6dccf1051addb"
+
+[golden."lcd-perfect-v2b.glsl"]
+"160x144->1024x768" = "6e8bb170943372dd"
+"240x160->1024x768" = "a7483fb583f2280c"
+"256x192->1024x768" = "8df98cd8a51a0846"
+"256x192->640x480" = "1d8740864c0a114e"
+"256x224->1024x768" = "059d5f18f3e5c414"
+"320x240->1024x768" = "a63099c0058f21ba"
+"320x240->1280x720" = "b4e0662ea5dcba73"
+"320x240->640x480" = "385eba89967e6c22"
+"480x272->1024x768" = "f6aa9a7d60297a9f"
+"480x272->640x480" = "e1fe256a9f4564f5"
+
+[golden."lcd-perfect.glsl"]
+"160x144->1024x768" = "8f987105fd37f6dc"
+"240x160->1024x768" = "bbfcc48b7c0a1941"
+"256x192->1024x768" = "cf25d0b41d5cdacb"
+"256x192->640x480" = "b5da7b43c93391a5"
+"256x224->1024x768" = "105179f3b98afb89"
+"320x240->1024x768" = "1224d4560088151a"
+"320x240->1280x720" = "48c20a85f98182f7"
+"320x240->640x480" = "1b97ca4d27a644d3"
+"480x272->1024x768" = "526e45a826d1c056"
+"480x272->640x480" = "a91083d8ba907300"
+
+[golden."pixel-perfect-v2.glsl"]
+"160x144->1024x768" = "784dcd47f347a0dd"
+"240x160->1024x768" = "506f628fc855ea34"
+"256x192->1024x768" = "14fde0bf677a8ec7"
+"256x192->640x480" = "435a03347861931f"
+"256x224->1024x768" = "8682ee72a1627db5"
+"320x240->1024x768" = "4cebb7b5a1867444"
+"320x240->1280x720" = "6ef196867a147d60"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "b3308d6058ae9885"
+"480x272->640x480" = "30b570163edc962d"
+
+[golden."pixel-perfect-v3.glsl"]
+"160x144->1024x768" = "784dcd47f347a0dd"
+"240x160->1024x768" = "506f628fc855ea34"
+"256x192->1024x768" = "14fde0bf677a8ec7"
+"256x192->640x480" = "435a03347861931f"
+"256x224->1024x768" = "8682ee72a1627db5"
+"320x240->1024x768" = "4cebb7b5a1867444"
+"320x240->1280x720" = "6ef196867a147d60"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "b3308d6058ae9885"
+"480x272->640x480" = "30b570163edc962d"
+
+[golden."pixel-perfect-v4.glsl"]
+"160x144->1024x768" = "1d186993662c8500"
+"240x160->1024x768" = "12a482322d4c7095"
+"256x192->1024x768" = "14fde0bf677a8ec7"
+"256x192->640x480" = "ccae2edd908513ee"
+"256x224->1024x768" = "8682ee72a1627db5"
+"320x240->1024x768" = "fe80c6c6000e8fd1"
+"320x240->1280x720" = "6ef196867a147d60"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "ca81cdba01150f6e"
+"480x272->640x480" = "7cc33d9020ae59cc"
+
+[golden."pixel-perfect-v5.glsl"]
+"160x144->1024x768" = "1d186993662c8500"
+"240x160->1024x768" = "12a482322d4c7095"
+"256x192->1024x768" = "14fde0bf677a8ec7"
+"256x192->640x480" = "ccae2edd908513ee"
+"256x224->1024x768" = "8682ee72a1627db5"
+"320x240->1024x768" = "fe80c6c6000e8fd1"
+"320x240->1280x720" = "6ef196867a147d60"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "ca81cdba01150f6e"
+"480x272->640x480" = "7cc33d9020ae59cc"
+
+[golden."pixel-perfect-v6.glsl"]
+"160x144->1024x768" = "1d186993662c8500"
+"240x160->1024x768" = "12a482322d4c7095"
+"256x192->1024x768" = "14fde0bf677a8ec7"
+"256x192->640x480" = "ccae2edd908513ee"
+"256x224->1024x768" = "8682ee72a1627db5"
+"320x240->1024x768" = "fe80c6c6000e8fd1"
+"320x240->1280x720" = "6ef196867a147d60"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "ca81cdba01150f6e"
+"480x272->640x480" = "7cc33d9020ae59cc"
+
+[golden."pixel-perfect.glsl"]
+"160x144->1024x768" = "784dcd47f347a0dd"
+"240x160->1024x768" = "506f628fc855ea34"
+"256x192->1024x768" = "14fde0bf677a8ec7"
+"256x192->640x480" = "435a03347861931f"
+"256x224->1024x768" = "8682ee72a1627db5"
+"320x240->1024x768" = "4cebb7b5a1867444"
+"320x240->1280x720" = "6ef196867a147d60"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "b3308d6058ae9885"
+"480x272->640x480" = "30b570163edc962d"

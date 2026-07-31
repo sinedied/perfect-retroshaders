@@ -1,0 +1,484 @@
+#!/usr/bin/env python3
+"""Shared plumbing: where shaders are, what is declared about them, and how to
+compile and run one.
+
+Everything in tools/ needs some of this, and when two tools answered the same
+question differently the result was never an error - it was a number that looked
+fine and described the wrong shader. So it is answered once, here.
+"""
+
+import hashlib
+import os
+import re
+import sys
+import tomllib
+
+TOOLS = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(TOOLS)
+SHADERS = os.path.join(REPO, "shaders")
+VENDOR = os.path.join(TOOLS, "vendor")
+ITERATIONS = os.path.join(TOOLS, "iterations")
+BASELINE = os.path.join(TOOLS, "baseline.toml")
+PREVIEW = os.path.join(TOOLS, "preview")
+
+RELEASED, CURRENT, ARCHIVE, VENDOR_ROLE = "released", "current", "archive", "vendor"
+
+
+# --------------------------------------------------------------------------
+# paths
+
+def shader_path(name):
+    """Resolve a bare filename against shaders/, then vendor/, then iterations/.
+
+    A shader can be moved between those three without rewriting any caller.
+    """
+    for folder in (SHADERS, VENDOR, ITERATIONS):
+        path = os.path.join(folder, name)
+        if os.path.isfile(path):
+            return path
+    raise FileNotFoundError(f"{name} is in none of shaders/, vendor/, iterations/")
+
+
+def files_on_disk():
+    names = []
+    for folder in (SHADERS, VENDOR, ITERATIONS):
+        if os.path.isdir(folder):
+            names += sorted(f for f in os.listdir(folder) if f.endswith(".glsl"))
+    return names
+
+
+# --------------------------------------------------------------------------
+# baseline.toml
+
+with open(BASELINE, "rb") as _f:
+    _DOC = tomllib.load(_f)
+
+SETTINGS = _DOC["settings"]
+CASES = [tuple(c) for c in SETTINGS["cases"]]
+MOIRE = SETTINGS["moire"]
+MIN_PITCH = SETTINGS["min_pitch"]
+TOLERANCE = SETTINGS["tolerance"]
+
+SHADERS_DECLARED = {s["name"]: s for s in _DOC["shader"]}
+GOLDEN = _DOC.get("golden", {})
+
+
+def declared(name):
+    if name not in SHADERS_DECLARED:
+        raise KeyError(f"{name} is not declared in tools/baseline.toml")
+    return SHADERS_DECLARED[name]
+
+
+def family(name):
+    return declared(name)["family"]
+
+
+def roles(name):
+    return set(declared(name)["role"])
+
+
+def sampler_is_linear(name):
+    return SHADERS_DECLARED.get(name, {}).get("sampler") == "linear"
+
+
+def by_role(*want):
+    want = set(want)
+    return [n for n, s in SHADERS_DECLARED.items() if want & set(s["role"])]
+
+
+def families():
+    out = []
+    for s in _DOC["shader"]:
+        if s["family"] != "vendor" and s["family"] not in out:
+            out.append(s["family"])
+    return out
+
+
+def current(fam):
+    """The version of a family a default run gates on.
+
+    Never derive this by sorting names: "v8" sorts above "v10", so the newest
+    version silently stops being tested the moment a family reaches two digits.
+    That happened.
+    """
+    for name, s in SHADERS_DECLARED.items():
+        if s["family"] == fam and CURRENT in s["role"]:
+            return name
+    raise KeyError(f"no current version declared for {fam}")
+
+
+def released(fam):
+    for name, s in SHADERS_DECLARED.items():
+        if s["family"] == fam and RELEASED in s["role"]:
+            return name
+    raise KeyError(f"no released version declared for {fam}")
+
+
+def working_set():
+    """What a default run covers: everything a user could actually be running."""
+    return by_role(RELEASED, CURRENT)
+
+
+def resolve(args):
+    """Turn command-line arguments into shader names.
+
+    Nothing given means the working set. A family name means that family's
+    released and current versions. A filename means itself.
+    """
+    if not args:
+        return working_set()
+    out = []
+    for a in args:
+        if a in SHADERS_DECLARED:
+            out.append(a)
+        elif a in families():
+            for n in (released(a), current(a)):
+                if n not in out:
+                    out.append(n)
+        elif a + ".glsl" in SHADERS_DECLARED:
+            out.append(a + ".glsl")
+        else:
+            raise SystemExit(f"unknown shader or family: {a}")
+    return out
+
+
+def moire_allowance(name, case):
+    """A recorded exception to the moire limit, if one was granted for this case."""
+    for entry in declared(name).get("moire_allow", []):
+        if tuple(entry["case"]) == tuple(case):
+            return entry["value"]
+    return None
+
+
+def check_baseline():
+    """Every declared shader is on disk, every shader on disk is declared, and
+    every family has both roles filled.
+
+    The disk-to-baseline direction matters as much as the other one. A new
+    version nobody declares would simply not be tested, and dropping out of the
+    matrix silently is the failure this whole harness exists to stop.
+    """
+    errors = []
+    for name in SHADERS_DECLARED:
+        try:
+            shader_path(name)
+        except FileNotFoundError:
+            errors.append(f"{name}: declared in baseline.toml but not on disk")
+    for name in files_on_disk():
+        if name not in SHADERS_DECLARED:
+            errors.append(f"{name}: on disk but not declared in baseline.toml")
+    for fam in families():
+        for role, fn in ((CURRENT, current), (RELEASED, released)):
+            try:
+                fn(fam)
+            except KeyError:
+                errors.append(f"{fam}: no {role} version declared")
+    return errors
+
+
+# --------------------------------------------------------------------------
+# shader text
+
+VERSION_HEADER = "#version 410 core\n"
+
+
+def read(name):
+    with open(shader_path(name)) as f:
+        return f.read()
+
+
+def essl1_to_410(src, stage):
+    """Translate an ESSL-1.00 shader well enough for a 4.1 core context.
+
+    The shaders here carry the COMPAT_* macro block and compile at either
+    version, so they come back untouched. Vendored references often do not -
+    dmg_dot_matrix.glsl is written straight against ESSL 1.00 - and macOS offers
+    no context old enough to take them as they are. Only the keywords that
+    changed are rewritten, per stage, and the vendor file is never touched on
+    disk. The #ifdef VERTEX / #else pair needs no help: the fragment stage
+    leaves VERTEX undefined and falls into the else.
+    """
+    if "COMPAT_VARYING" in src:
+        return src
+    out = re.sub(r"\battribute\b", "in", src)
+    out = re.sub(r"\bvarying\b", "out" if stage == "vert" else "in", out)
+    out = re.sub(r"\btexture2D\b", "texture", out)
+    if stage == "frag" and "gl_FragColor" in out:
+        # gl_ is a reserved prefix, so this cannot be done with a #define
+        out = "out vec4 FragColor;\n" + re.sub(r"\bgl_FragColor\b", "FragColor", out)
+    return out
+
+
+def stage_source(src, stage, version=VERSION_HEADER):
+    """A single stage of a shader, preprocessed the way the frontend's loader does."""
+    src = essl1_to_410(src, stage) if version == VERSION_HEADER else src
+    body = "".join(l + "\n" for l in src.split("\n")
+                   if not l.startswith("#pragma parameter"))
+    define = ("#define VERTEX\n" if stage == "vert"
+              else "#define FRAGMENT\n#define PARAMETER_UNIFORM\n")
+    return version + define + body
+
+
+PRAGMA = re.compile(
+    r'#pragma parameter\s+(\w+)\s+"([^"]*)"\s+'
+    r'(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)')
+
+
+def parameters(name):
+    """Every #pragma parameter a shader declares: name -> (label, default, lo, hi, step)."""
+    out = {}
+    for line in read(name).split("\n"):
+        m = PRAGMA.match(line.strip())
+        if m:
+            out[m.group(1)] = (m.group(2),) + tuple(float(g) for g in m.groups()[2:])
+    return out
+
+
+def defaults(name, **override):
+    """A shader's shipped defaults, read out of its own #pragma lines.
+
+    Always pass these. An unset uniform is 0, PARAMETER_UNIFORM is defined, and
+    0 is a legal-looking value, so an empty dict does not fail - it renders a
+    different shader. That has caused three separate rounds of wrong numbers,
+    including a whole benchmark table.
+    """
+    p = {k: v[1] for k, v in parameters(name).items()}
+    p.update(override)
+    return p
+
+
+# --------------------------------------------------------------------------
+# GL
+
+def context():
+    import moderngl
+    return moderngl.create_standalone_context(require=410)
+
+
+def program(ctx, name):
+    src = read(name)
+    return ctx.program(vertex_shader=stage_source(src, "vert"),
+                       fragment_shader=stage_source(src, "frag"))
+
+
+class Programs(dict):
+    """Compiled programs, cached. Compiling dominates the runtime otherwise."""
+
+    def __init__(self, ctx):
+        super().__init__()
+        self.ctx = ctx
+
+    def __missing__(self, name):
+        self[name] = program(self.ctx, name)
+        return self[name]
+
+
+def draw(ctx, prog, src_u8, out_w, out_h, params, linear=False):
+    """One pass, read back, rows in the source's order."""
+    import numpy as np
+    import moderngl
+
+    in_h, in_w = src_u8.shape[:2]
+    tex = ctx.texture((in_w, in_h), 3, src_u8.tobytes())
+    f = moderngl.LINEAR if linear else moderngl.NEAREST
+    tex.filter = (f, f)
+    tex.repeat_x = tex.repeat_y = False  # CLAMP_TO_EDGE
+    tex.use(0)
+
+    for k, v in params.items():
+        if k in prog:
+            prog[k].value = float(v)
+    # a uniform a shader does not use is optimised out of the program, so every
+    # one of these has to be guarded rather than just the optional ones
+    for k, v in (("Texture", 0),
+                 ("OutputSize", (float(out_w), float(out_h))),
+                 ("TextureSize", (float(in_w), float(in_h))),
+                 ("InputSize", (float(in_w), float(in_h))),
+                 ("OrigInputSize", (float(in_w), float(in_h)))):
+        if k in prog:
+            prog[k].value = v
+    if "MVPMatrix" in prog:
+        prog["MVPMatrix"].write(np.identity(4, "f4").tobytes())
+
+    # the same quad the frontend's runShaderPass uploads: x,y,z,w, u,v,s,t
+    verts = np.array([
+        -1.0,  1.0, 0.0, 1.0,  0.0, 1.0, 0.0, 0.0,
+        -1.0, -1.0, 0.0, 1.0,  0.0, 0.0, 0.0, 0.0,
+         1.0,  1.0, 0.0, 1.0,  1.0, 1.0, 0.0, 0.0,
+         1.0, -1.0, 0.0, 1.0,  1.0, 0.0, 0.0, 0.0,
+    ], "f4")
+    vbo = ctx.buffer(verts.tobytes())
+    names = [n for n in ("VertexCoord", "TexCoord") if n in prog]
+    vao = ctx.vertex_array(prog, [(vbo, " ".join("4f4" for _ in names), *names)])
+
+    fbo = ctx.framebuffer(color_attachments=[ctx.texture((out_w, out_h), 3)])
+    fbo.use()
+    ctx.viewport = (0, 0, out_w, out_h)
+    fbo.clear(0.0, 0.0, 0.0, 1.0)
+    vao.render(moderngl.TRIANGLE_STRIP)
+
+    data = np.frombuffer(fbo.read(components=3), np.uint8).reshape(out_h, out_w, 3)
+    for o in (tex, vbo, vao, fbo):
+        o.release()
+    return data
+
+
+def render(ctx, progs, name, src_u8, out_w, out_h, params=None, **override):
+    """Render a named shader at its shipped defaults, sampled as it declares.
+
+    Taking both the defaults and the sampler from the declaration rather than
+    from the caller is the point: a caller that forgets either gets the shader's
+    real behaviour instead of whatever zero happens to mean for it.
+    """
+    p = defaults(name) if params is None else dict(params)
+    p.update(override)
+    return draw(ctx, progs[name], src_u8, out_w, out_h, p,
+                linear=sampler_is_linear(name))
+
+
+# --------------------------------------------------------------------------
+# sources
+
+def flat(w=320, h=240, level=128):
+    import numpy as np
+    return np.full((h, w, 3), level, np.uint8)
+
+
+def checkerboard(w=320, h=240):
+    """Maximum energy at the source pixel grid - the worst case for moire."""
+    import numpy as np
+    yy, xx = np.mgrid[0:h, 0:w]
+    return (((yy + xx) % 2) * 255).astype(np.uint8)[..., None].repeat(3, axis=2)
+
+
+def rows(w=320, h=240, on=200):
+    import numpy as np
+    img = np.zeros((h, w, 3), np.uint8)
+    img[::2] = on
+    return img
+
+
+def bars(w=320, h=240):
+    """Vertical colour bars: catches a channel swap or a stripe phase error."""
+    import numpy as np
+    img = np.zeros((h, w, 3), np.uint8)
+    palette = [(255, 255, 255), (255, 255, 0), (0, 255, 255), (0, 255, 0),
+               (255, 0, 255), (255, 0, 0), (0, 0, 255), (16, 16, 16)]
+    for i, c in enumerate(palette):
+        img[:, i * w // len(palette):(i + 1) * w // len(palette)] = c
+    return img
+
+
+def border_grid(w=320, h=240, step=20):
+    """A grid with a differently coloured edge on each side.
+
+    The only pattern that shows what a geometric change did to the *borders*,
+    and the two colours are load-bearing: the retention check counts red- and
+    blue-dominant pixels separately, so a single-colour border makes one of the
+    two counts zero and the measurement collapses to zero for every shader.
+    crt-perfect-v7 shipped having cropped its entire border off-screen while
+    every number in the harness read perfect.
+    """
+    import numpy as np
+    img = np.full((h, w, 3), 20, np.uint8)
+    img[::step, :] = 255
+    img[:, ::step] = 255
+    img[0:3, :] = img[-3:, :] = (255, 60, 60)
+    img[:, 0:3] = img[:, -3:] = (60, 160, 255)
+    return img
+
+
+def scene(w=320, h=240):
+    """A gradient with hard edges: gradients show banding, edges show ringing."""
+    import numpy as np
+    yy, xx = np.mgrid[0:h, 0:w]
+    img = np.zeros((h, w, 3), np.float64)
+    img[..., 0] = 255.0 * xx / max(w - 1, 1)
+    img[..., 1] = 255.0 * yy / max(h - 1, 1)
+    img[..., 2] = 128.0
+    block = ((xx // 16) + (yy // 16)) % 2 == 0
+    img[block & (xx > w // 2)] = (255, 255, 255)
+    img[block & (xx <= w // 2)] = (0, 0, 0)
+    return img.astype(np.uint8)
+
+
+SOURCES = {"flat": flat, "checkerboard": checkerboard, "rows": rows,
+           "bars": bars, "border-grid": border_grid, "scene": scene}
+
+
+# --------------------------------------------------------------------------
+# goldens
+
+GOLDEN_MARK = "# --- goldens, generated by tools/test.py --record ---"
+
+
+def golden_key(case):
+    sw, sh, ow, oh = case
+    return f"{sw}x{sh}->{ow}x{oh}"
+
+
+def golden_hash(img):
+    return hashlib.sha256(img.tobytes()).hexdigest()[:16]
+
+
+def write_goldens(table):
+    """Rewrite the generated golden block at the end of baseline.toml.
+
+    Everything above the marker is hand-written and is never touched.
+    """
+    with open(BASELINE) as f:
+        text = f.read()
+    head = text.split(GOLDEN_MARK)[0].rstrip() + "\n\n"
+    body = [GOLDEN_MARK]
+    for name in sorted(table):
+        body.append(f'\n[golden."{name}"]')
+        for key in sorted(table[name]):
+            body.append(f'"{key}" = "{table[name][key]}"')
+    with open(BASELINE, "w") as f:
+        f.write(head + "\n".join(body) + "\n")
+
+
+# --------------------------------------------------------------------------
+# reporting
+
+class Report:
+    """Pass/fail accumulation, so every tool prints and exits the same way."""
+
+    def __init__(self, title):
+        self.title = title
+        self.failures = []
+        self.notes = []
+        self.checked = 0
+
+    def ok(self, label, detail=""):
+        self.checked += 1
+        print(f"  \033[32mok\033[0m   {label}" + (f"  {detail}" if detail else ""))
+
+    def fail(self, label, detail=""):
+        self.checked += 1
+        self.failures.append(f"{label}  {detail}".strip())
+        print(f"  \033[31mFAIL\033[0m {label}" + (f"  {detail}" if detail else ""))
+
+    def note(self, text):
+        self.notes.append(text)
+
+    def check(self, cond, label, detail=""):
+        (self.ok if cond else self.fail)(label, detail)
+        return cond
+
+    def done(self):
+        print()
+        for n in self.notes:
+            print(f"  note: {n}")
+        if self.failures:
+            print(f"\n{self.title}: \033[31m{len(self.failures)} of "
+                  f"{self.checked} failed\033[0m")
+            return 1
+        print(f"{self.title}: \033[32m{self.checked} ok\033[0m")
+        return 0
+
+
+def main_guard():
+    """Make tools/ importable when a tool is run directly as a script."""
+    if TOOLS not in sys.path:
+        sys.path.insert(0, TOOLS)
