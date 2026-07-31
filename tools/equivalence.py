@@ -130,16 +130,19 @@ def sources(w, h, rng):
     yield "ramp", (xx * 255 // max(w - 1, 1)).astype(np.uint8)[..., None].repeat(3, 2)
 
 
-def beat(img):
-    """Low-frequency energy: what the eye reads as moire."""
-    out = []
-    for prof in (img.astype(float).mean(axis=(1, 2)), img.astype(float).mean(axis=(0, 2))):
-        p = prof - prof.mean()
-        f = np.abs(np.fft.rfft(p * np.hanning(len(p)))) / len(p) * 2
-        fr = np.fft.rfftfreq(len(p))
-        band = (fr > 1 / 64) & (fr < 1 / 6)
-        out.append(f[band].max())
-    return max(out)
+def beat(img, src_w, src_h):
+    """Low-frequency energy: what the eye reads as moire.
+
+    Delegates to beat.py rather than carrying its own band. This used to select
+    a fixed 1/64 to 1/6 window, which is precisely the mistake beat.py documents
+    at length: a band that does not exclude the effect under test measures the
+    effect, so the moment a shader's own pattern pitch enters the window it is
+    scored as the artifact. These scalers paint no pattern, so the fixed band
+    happened to be harmless here - but it was one pattern away from lying, and
+    two copies of a metric drift.
+    """
+    from beat import beat as derived
+    return derived(img, src_w, src_h)
 
 
 PROBE_VERT = """#version 410 core
@@ -258,10 +261,12 @@ def main():
         yy, xx = np.mgrid[0:ih, 0:iw]
         chk = (((yy + xx) % 2) * 255).astype(np.uint8)[..., None].repeat(3, 2)
         g1 = beat(gl_render(ctx, prog["pixellate"], chk, ow, oh,
-                            {"INTERPOLATE_IN_LINEAR_GAMMA": 1.0}))
+                            {"INTERPOLATE_IN_LINEAR_GAMMA": 1.0}),
+                                 iw, ih)
         g0 = beat(gl_render(ctx, prog["pixellate"], chk, ow, oh,
-                            {"INTERPOLATE_IN_LINEAR_GAMMA": 0.0}))
-        pp = beat(gl_render(ctx, prog["pixel-perfect"], chk, ow, oh, {"pp_sharpness": 1.0}))
+                            {"INTERPOLATE_IN_LINEAR_GAMMA": 0.0}),
+                                 iw, ih)
+        pp = beat(gl_render(ctx, prog["pixel-perfect"], chk, ow, oh, {"pp_sharpness": 1.0}), iw, ih)
         label = f"{iw}x{ih} -> {ow}x{oh}"
         print(f"   {label:<22s} {g1:14.3f} {g0:14.3f} {pp:14.3f}")
 
@@ -335,11 +340,13 @@ def main():
         yy, xx = np.mgrid[0:ih, 0:iw]
         chk = (((yy + xx) % 2) * 255).astype(np.uint8)[..., None].repeat(3, 2)
         g1 = beat(gl_render(ctx, prog["pixellate"], chk, ow, oh,
-                            {"INTERPOLATE_IN_LINEAR_GAMMA": 1.0}))
+                            {"INTERPOLATE_IN_LINEAR_GAMMA": 1.0}),
+                                 iw, ih)
         pp = beat(gl_render(ctx, prog["pixel-perfect"], chk, ow, oh,
-                            {"pp_sharpness": 1.0}))
+                            {"pp_sharpness": 1.0}),
+                                 iw, ih)
         ss = beat(gl_render(ctx, prog["sharp-shimmerless"], chk, ow, oh, {},
-                            filter_linear=SS_LINEAR))
+                            filter_linear=SS_LINEAR), iw, ih)
         label = f"{iw}x{ih} -> {ow}x{oh}"
         print(f"   {label:<22s} {g1:14.3f} {pp:14.3f} {ss:18.3f}")
     print("\n   The g=1 column is pixellate's own DEFAULT, and it is the only"
