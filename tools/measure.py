@@ -40,13 +40,6 @@ import common as c
 # fault that depends on the difference between white and the panel's own paper.
 DMG_PALETTE = [(87, 130, 0), (49, 116, 0), (0, 81, 33), (0, 66, 12)]
 
-# A grid that really is even still measures ~2e-13 here: the centroids are sums
-# of float64 products and the spacings are differences of those. Real unevenness
-# is 7 to 18 percent, so anything between the two separates them by nine orders
-# of magnitude. An exact == 0.0 does not, and called three good cases failures.
-EVEN = 1e-4
-
-
 def dmg_checkerboard(w, h):
     yy, xx = np.mgrid[0:h, 0:w]
     a = np.empty((h, w, 3), np.uint8)

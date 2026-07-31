@@ -139,8 +139,9 @@ the matrix at a whole scale and resampling filters the image and the grid *toget
 multiplying a scaled image by a grid does not, and the difference shows up as cells
 that break into a pattern at a fractional scale. Both passes are linear, so the
 composite has a closed form, and this evaluates it directly: **no intermediate buffer,
-no second pass, no preset change.** `tools/twopass.py` builds the two-pass pipeline
-literally and gates the match, which comes out at 1/255.
+no second pass, no preset change.** That claim was checked by building the two-pass
+pipeline literally and diffing it, which came out at 1/255 — see
+[`docs/dmg-perfect.md`](docs/dmg-perfect.md).
 
 Measured on a flat field against the reference:
 

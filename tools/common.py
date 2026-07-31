@@ -10,7 +10,6 @@ fine and described the wrong shader. So it is answered once, here.
 import hashlib
 import os
 import re
-import sys
 import tomllib
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
@@ -476,9 +475,3 @@ class Report:
             return 1
         print(f"{self.title}: \033[32m{self.checked} ok\033[0m")
         return 0
-
-
-def main_guard():
-    """Make tools/ importable when a tool is run directly as a script."""
-    if TOOLS not in sys.path:
-        sys.path.insert(0, TOOLS)

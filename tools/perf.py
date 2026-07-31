@@ -173,7 +173,6 @@ def static(name, at_defaults=False, optimise=False):
 # the starting point each pass, and discard a run-in.
 
 def _bind(ctx, name, params):
-    import moderngl
     prog = c.program(ctx, name)
     full = c.defaults(name)
     full.update(params)
