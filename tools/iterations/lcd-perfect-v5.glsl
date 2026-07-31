@@ -37,7 +37,7 @@
 #pragma parameter lp_min_pitch  "Minimum pitch in px"      3.00 2.00 6.00 0.25
 #pragma parameter lp_subpixels  "RGB stripe visibility"    0.20 0.00 1.00 0.05
 #pragma parameter lp_layout     "Stripe order 0=RGB 1=BGR" 0.00 0.00 1.00 1.00
-#pragma parameter lp_brightness "Brightness"               1.20 0.25 4.00 0.05
+#pragma parameter lp_brightness "Brightness"               1.25 0.25 4.00 0.05
 #pragma parameter lp_gamma      "Gamma"                    1.00 0.50 2.00 0.05
 
 #if defined(VERTEX)
@@ -123,7 +123,7 @@ uniform COMPAT_PRECISION float lp_gamma;
 #define lp_min_pitch 3.00
 #define lp_subpixels 0.20
 #define lp_layout 0.0
-#define lp_brightness 1.20
+#define lp_brightness 1.25
 #define lp_gamma 1.00
 #endif
 

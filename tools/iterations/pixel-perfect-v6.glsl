@@ -27,17 +27,13 @@
 //
 // Notes:
 // - Render at the output resolution, 1:1 with the display.
-// - Useful white balance trims are small, roughly within 0.20; the rest of the
-//   range is there for effect.
-// - Gamma is the most expensive control and the only one that can paint moire
-//   on dense content. Reach for it last.
 
 #pragma parameter pp_brightness  "Brightness"               1.00  0.50 2.00 0.05
 #pragma parameter pp_contrast    "Contrast"                 1.00  0.00 2.00 0.05
 #pragma parameter pp_saturation  "Saturation"               1.00  0.00 2.00 0.05
 #pragma parameter pp_gamma       "Gamma"                    1.00  0.50 2.00 0.05
-#pragma parameter pp_temperature "Warm / cool balance"      0.00 -1.00 1.00 0.01
-#pragma parameter pp_tint        "Green / magenta balance"  0.00 -1.00 1.00 0.01
+#pragma parameter pp_temperature "Cool / warm balance"      0.00 -1.00 1.00 0.01
+#pragma parameter pp_tint        "Magenta / green balance"  0.00 -1.00 1.00 0.01
 
 #if defined(VERTEX)
 

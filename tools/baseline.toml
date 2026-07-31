@@ -149,6 +149,20 @@ neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1
 [[shader]]
 name = "dmg-perfect-v9.glsl"
 family = "dmg-perfect"
+# dp_gamma ships at 1.20 and this shader applies gamma after the blend, so it
+# beats out of the box. An owner decision, taken by eye: the alternative is
+# gamma on the four taps, which measures 0.388 flat at every setting and costs
+# 18 more SFU. Pinned per case so it cannot get worse without failing, and
+# printed on every run so it cannot be forgotten. At dp_gamma 1.00 all six drop
+# to 0.388 or below.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 1.443 },
+    { case = [256, 224, 1024, 768], value = 1.264 },
+    { case = [240, 160, 1024, 768], value = 0.948 },
+    { case = [160, 144, 1024, 768], value = 1.018 },
+    { case = [480, 272, 1024, 768], value = 1.413 },
+    { case = [480, 272,  640, 480], value = 4.621 },
+]
 # No un-suffixed file exists; v9 is what the README links, so it is both what
 # ships and what a default run gates on.
 role = ["current"]
@@ -635,16 +649,16 @@ sampler = "linear"
 "480x272->640x480" = "dcd80a445b2465ee"
 
 [golden."lcd-perfect-v5.glsl"]
-"160x144->1024x768" = "8807879e17fbd3f5"
-"240x160->1024x768" = "d24004fd4f084777"
-"256x192->1024x768" = "61d393dba6177082"
-"256x192->640x480" = "2edfd0046764e450"
-"256x224->1024x768" = "52523fa60b5f728f"
-"320x240->1024x768" = "7fd8b83297b68f56"
-"320x240->1280x720" = "ef7debaa1ba30c1a"
-"320x240->640x480" = "9a23fa00c26beea6"
-"480x272->1024x768" = "b132d512bc3c3c75"
-"480x272->640x480" = "96a482e077a065d6"
+"160x144->1024x768" = "e8cf6ba813c3e5c6"
+"240x160->1024x768" = "69d7c76f815605f9"
+"256x192->1024x768" = "7b96413b6ee69152"
+"256x192->640x480" = "3df0e90e1ff82a33"
+"256x224->1024x768" = "cac2af6e2aa0896c"
+"320x240->1024x768" = "30c0a5abc53d2cd2"
+"320x240->1280x720" = "e4c43a45a670f81a"
+"320x240->640x480" = "f6f32026137f33cf"
+"480x272->1024x768" = "b0f4be2b22354556"
+"480x272->640x480" = "365e76f3886eff7d"
 
 [golden."pixel-perfect-v1.glsl"]
 "160x144->1024x768" = "784dcd47f347a0dd"

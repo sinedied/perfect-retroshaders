@@ -36,8 +36,8 @@
 #pragma parameter dp_shadow      "Dot shadow"               0.00  0.00 1.00 0.01
 #pragma parameter dp_brightness  "Brightness"               1.00  0.25 4.00 0.05
 #pragma parameter dp_gamma       "Gamma"                    1.20  0.50 2.00 0.05
-#pragma parameter dp_temperature "Warm / cool balance"      0.00 -1.00 1.00 0.01
-#pragma parameter dp_tint        "Green / magenta balance"  0.00 -1.00 1.00 0.01
+#pragma parameter dp_temperature "Cool / warm balance"      0.00 -1.00 1.00 0.01
+#pragma parameter dp_tint        "Magenta / green balance"  0.00 -1.00 1.00 0.01
 
 #if defined(VERTEX)
 
@@ -136,7 +136,7 @@ uniform COMPAT_PRECISION float dp_tint;
 #define PAPER_FLOOR 0.35
 
 // In source pixels, so the shadow holds its proportions at every scale.
-#define SHADOW_OFFSET vec2(0.50, 0.85)
+#define SHADOW_OFFSET vec2(0.45, 0.85)
 
 // Extra half-width on the box that samples the displaced aperture. Softens the
 // aperture's gaps only; the shadow's outer edge comes from the opacity field.
