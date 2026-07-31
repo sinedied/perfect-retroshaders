@@ -4,7 +4,16 @@ import numpy as np
 
 import common as c
 
-CURRENT = "dmg-perfect-v8.glsl"
+CURRENT = "dmg-perfect-v9.glsl"
+
+
+def _palette(w=64, h=48):
+    """A balance has nothing to shift on a neutral grey, so the source has to
+    carry colour. This is roughly a DMG green: dark, and nowhere near neutral,
+    which is the case the control exists for."""
+    src = np.zeros((h, w, 3), np.uint8)
+    src[..., 0], src[..., 1], src[..., 2] = 100, 130, 60
+    return src
 
 
 def run(names, ctx, progs, report, cases=None):
@@ -36,10 +45,28 @@ def run(names, ctx, progs, report, cases=None):
     d = int(np.abs(a.astype(int) - b.astype(int)).max())
     report.check(d <= c.TOLERANCE, "dmg undriven cells cast nothing", f"{d}/255")
 
-    src = c.flat(32, 24, 200)
+    src = _palette()
     a = c.render(ctx, progs, CURRENT, src, 256, 192)
     b = c.render(ctx, progs, CURRENT, src, 256, 192,
-                 dp_red=1.0, dp_green=1.0, dp_blue=1.0)
+                 dp_temperature=0.0, dp_tint=0.0)
     d = int(np.abs(a.astype(int) - b.astype(int)).max())
-    report.check(d == 0, "dmg neutral channel gains change nothing", f"{d}/255")
+    report.check(d == 0, "dmg neutral balance changes nothing", f"{d}/255")
+
+    # A control that never moved anything would pass the check above, so both
+    # axes have to be shown to do something - and to do the RIGHT thing. A
+    # balance wired to the wrong channel still reads as "different".
+    for param, moved in (("dp_temperature", 0.5), ("dp_tint", 0.5)):
+        b = c.render(ctx, progs, CURRENT, src, 256, 192, **{param: moved})
+        d = int(np.abs(a.astype(int) - b.astype(int)).max())
+        report.check(d > 1, f"dmg {param} actually does something",
+                     f"{d}/255 between 0 and {moved:g}")
+
+    warm = c.render(ctx, progs, CURRENT, src, 256, 192, dp_temperature=0.5)
+    dr, db = (warm.astype(float) - a).mean(axis=(0, 1))[[0, 2]]
+    report.check(dr > 1 and db < -1, "dmg warm raises red and lowers blue",
+                 f"red {dr:+.1f}, blue {db:+.1f}")
+
+    magenta = c.render(ctx, progs, CURRENT, src, 256, 192, dp_tint=0.5)
+    dg = (magenta.astype(float) - a).mean(axis=(0, 1))[1]
+    report.check(dg > 1, "dmg tint raises green", f"green {dg:+.1f}")
     return report

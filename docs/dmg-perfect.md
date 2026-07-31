@@ -295,11 +295,12 @@ Two things to know before reaching for it elsewhere:
 
 ### An affine trim is free after the blend, and free again when it is neutral
 
-`dp_red`, `dp_green` and `dp_blue` are plain per-channel gains. A gain is affine
-and the blend weights sum to one, so applying it to the finished colour is
-*identical* to applying it to the four taps at a quarter of the cost - the same
-argument that lets `pixel-perfect-v3` grade after the blend, and not an
-exception to the design rule but its converse.
+`dp_temperature` and `dp_tint` are a two-axis white balance, and up to `v8` the
+same slot held three per-channel gains, `dp_red`/`dp_green`/`dp_blue`. Both are
+a plain multiply. A multiply is affine and the blend weights sum to one, so
+applying it to the finished colour is *identical* to applying it to the four
+taps at a quarter of the cost - the same argument that lets `pixel-perfect-v3`
+grade after the blend, and not an exception to the design rule but its converse.
 
 It goes on the finished colour rather than on the taps for a second reason: the
 substrate is part of the panel, so it should take the same tint as the picture.
@@ -310,6 +311,41 @@ present and neutral, the same as the version that had no trim.** Measured on a
 DMG palette it adds no beat at any setting tested, including gains above 1,
 because a Game Boy palette peaks at 0.455 and a 1.4x gain still does not reach
 the clamp - which is the thing that would have cost beat.
+
+**Two axes beat three gains, and `v9` swapped them.** The RGB form is the more
+general control and the worse one. Its own header had to tell the reader that
+"the usual way to warm or cool a picture is to pull the other two channels down
+instead", which is an admission that the thing people want - a colour
+*direction* - is not what the control offers: reaching it needs two slider
+moves, and the one-slider version of it warms the picture by clipping a channel
+above 1. The balance pair, copied from `pixel-perfect-v6`, is the same
+arithmetic reparametrised onto the two axes people actually reach for:
+
+```glsl
+col *= 1.0 + dp_temperature * vec3(1.0, 0.0, -1.0)
+           + dp_tint        * vec3(-0.5, 1.0, -0.5);
+```
+
+Three things worth keeping if this is ever rewritten:
+
+- **The guard is exact and per-control.** `dp_temperature != 0.0 || dp_tint !=
+  0.0`, not an epsilon and not a sum. Both are true no-ops at 0.0, so there is
+  nothing an epsilon protects against, and a sum would let a warm temperature
+  cancel a cool tint into a false "neutral" that skips a branch it should have
+  taken. `v8`'s RGB guard was an `abs()` sum, which was safe only because
+  absolute values cannot cancel.
+- **It is not normalised on luma**, so it shifts the overall level a little as
+  well as the colour. That is documented rather than fixed: normalising costs
+  a dot product on every fragment, and `dp_brightness` already takes the level
+  back out for free.
+- **The sign of `dp_tint` is green-positive, and the label says so.**
+  `pixel-perfect-v6` ships the same coefficients under the label "Magenta /
+  green balance" and the note "Magenta above 0, green below", which is
+  backwards: `vec3(-0.5, 1.0, -0.5)` raises green at positive values. Measured
+  on a DMG scene at `dp_tint = 0.5`, green moves **+73.3/255**. `dmg-perfect-v9`
+  therefore ships "Green / magenta balance"; `pixel-perfect` has not been
+  touched, and the two disagree until somebody decides which way round it
+  should read.
 
 ### A weighted blend is stable where a max over the same taps is not
 
@@ -394,9 +430,23 @@ This is the same lesson as `grid.py`'s CV shipping a shader nobody wanted, and
 as `crt-perfect-v7` passing all eight gates with the border cropped off:
 **anything that changes how the picture looks gets looked at.**
 
-### The Game Boy contrast wheel is affine, which is why it is affordable
+### The Game Boy contrast wheel was affine and affordable, and still went
 
-`dp_contrast` mimics the potentiometer on a DMG's LCD board. It is not digital:
+**Shipped in `v8` as `dp_contrast`, removed in `v9`.** The owner's verdict is
+the whole reason: it did not read like the real thing, and in the state it
+reached it was not worth more time - it was an experiment, not a control. The
+analysis below is kept because the *argument* is still load-bearing (it is what
+licenses the white balance to sit after the blend), not because the control is
+coming back.
+
+Two things the removal cost nothing on. Its default was `1.00`, where the fold
+evaluates to `col * 1.0 + 0.0` exactly - which is why it was written as a fold -
+so **`v9` is bit-identical to `v8` at shipped defaults**: the same golden hash on
+all ten cases of the matrix, cross-checked before the new hashes were recorded.
+And on the static count it was worth 3 ops on the default path and 13 on the
+full one, 262 to 259 and 511 to 498.
+
+`dp_contrast` mimicked the potentiometer on a DMG's LCD board. It is not digital:
 it sets the amplitude of the V0–V5 bias ladder the driver builds its four drive
 levels from, so it scales how hard every pixel is driven at once. Turned down
 the picture washes out into undriven panel; turned up, a real one darkens
@@ -407,10 +457,12 @@ by a common factor on V_rms — so it is strictly neither linear nor a power law
 But the only shipped reference implementation, libretro's `gb-pass4`, reduces
 to `mix(paper, ink, alpha*contrast)` with `alpha` linear in source luminance,
 which is exactly `a*x + b`. Affine is what everyone actually uses, and affine is
-the one class that may sit after the blend.
+the one class that may sit after the blend. **That approximation is the likeliest
+reason it never read right**: a linear scaling of drive is not what turning the
+wheel looks like, and no amount of tuning inside an affine map fixes the shape.
 
-Three things fall out of the pivot, and they are worth stating because the pivot
-does all the work:
+Three things fell out of the pivot, and they are worth stating because the pivot
+did all the work:
 
 - **Pivot on the substrate and the map costs one multiply-add.** The substrate
   is then the map's fixed point, so applying it to the *finished* colour leaves
@@ -418,7 +470,7 @@ does all the work:
   convenient, since a gap has no electrode over it and no bias voltage reaches
   it. Applying it to `area` and `dotm` separately to protect the gaps would cost
   twice as much and achieve the same thing.
-- **The range stops at 1.00 because of where the map sends its endpoints, not
+- **The range stopped at 1.00 because of where the map sends its endpoints, not
   because of any measurement.** It sends `[0,1]` to `[1-c, 1]`. At or below 1.00
   nothing can leave the range for any source or any palette; above it the low
   end is clipped by exactly `c-1`. Measured on a DMG palette, 1.15 reads **1.54
@@ -426,18 +478,24 @@ does all the work:
   inside the range clips **nothing** and measures at or below the floor. This is
   the `pp_sharpness` rule again: a half-range that is a known fault is not a
   tuning control. libretro ships the same `[0,1]`, very likely for this reason.
+  **A control whose useful half is missing is a control that will disappoint**,
+  and that is the second half of why this one went.
 - **Fold it, do not write it as a `mix`.** `col*ga + gb` with `ga = c` and
   `gb = (1-c)*S` is `col*1.0 + 0.0` at the default, which is bit-exact.
   `mix(S, col, 1.0)` is only exactly `col` if the driver spells `mix` as
-  `x*(1-a) + y*a`, and drivers ship the other form. Verified 0/255.
+  `x*(1-a) + y*a`, and drivers ship the other form. Verified 0/255. This is the
+  property that made the removal free to verify — see above.
 
 **A uniform branch around it bought nothing and was removed.** Unbranched it
-measures 105.5% of the yardstick, branched-and-skipped 105.7%, and with the
-shadow on the branch was a full point *worse*. The control costs ~2.4 points
-whether it is enabled or not, so skipping the multiply-add is not what that pays
-for — and the fold, not the branch, is what makes "off" exact. Do not add a
+measured 105.5% of the yardstick, branched-and-skipped 105.7%, and with the
+shadow on the branch was a full point *worse*. The control cost ~2.4 points
+whether it was enabled or not, so skipping the multiply-add is not what that
+pays for — and the fold, not the branch, is what made "off" exact. Do not add a
 uniform branch to something this small without measuring; the idiom is not free
-just because it is the idiom used elsewhere in the file.
+just because it is the idiom used elsewhere in the file. **It is also the third
+reason this one went**: an experiment that charges rent on every frame whether
+or not anybody uses it is a worse deal than one that is free when neutral, which
+is the bar the shadow and the white balance both clear and it did not.
 
 Two things not to copy from libretro's version: it multiplies its shadow opacity
 by `contrast`, coupling two controls that users set for different reasons; and

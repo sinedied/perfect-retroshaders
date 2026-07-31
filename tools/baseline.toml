@@ -122,12 +122,12 @@ pattern = "whole-cell"
 neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
 
 [[shader]]
-name = "dmg-perfect-v8.glsl"
+name = "dmg-perfect-v9.glsl"
 family = "dmg-perfect"
-# No un-suffixed file exists; v8 is what the README links, so it is both what
+# No un-suffixed file exists; v9 is what the README links, so it is both what
 # ships and what a default run gates on.
 role = ["released", "current"]
-neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_contrast = 1.0, dp_brightness = 1.0, dp_gamma = 1.0 }
+neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
 
 
 # Superseded. Still compiled, still linted, and still rendered as negative
@@ -258,6 +258,15 @@ name = "dmg-perfect-v7.glsl"
 family = "dmg-perfect"
 role = ["archive"]
 
+[[shader]]
+name = "dmg-perfect-v8.glsl"
+family = "dmg-perfect"
+role = ["archive"]
+# Carried dp_contrast, the console's contrast wheel, and three per-channel
+# gains. v9 drops both for a temperature/tint pair. Kept as the control that
+# both were exact no-ops at their defaults: v9's goldens match these hash for
+# hash across the whole case matrix.
+
 
 # Third party. Comparison references only: not ours, not under this repo's
 # licence, never edited.
@@ -372,6 +381,18 @@ sampler = "linear"
 "480x272->1024x768" = "2b3fcb88d5fd20b2"
 "480x272->640x480" = "6e92713af7b2ac89"
 
+[golden."crt-perfect-v5b.glsl"]
+"160x144->1024x768" = "4b485a6e28e105dc"
+"240x160->1024x768" = "75d2019025afff5c"
+"256x192->1024x768" = "12a73ac0255b80d2"
+"256x192->640x480" = "b9ea4b7c929f35fb"
+"256x224->1024x768" = "cfb552c29d239d87"
+"320x240->1024x768" = "1fcbdc89a3743df2"
+"320x240->1280x720" = "db3a5a6fdefbf707"
+"320x240->640x480" = "05a82c4e3a4ad050"
+"480x272->1024x768" = "2b3fcb88d5fd20b2"
+"480x272->640x480" = "6e92713af7b2ac89"
+
 [golden."crt-perfect-v6.glsl"]
 "160x144->1024x768" = "6615bd204fef36e6"
 "240x160->1024x768" = "ef4b3288867c410d"
@@ -419,18 +440,6 @@ sampler = "linear"
 "320x240->640x480" = "428f88d0f765a922"
 "480x272->1024x768" = "0788e855a553f695"
 "480x272->640x480" = "03320d0d2abaae27"
-
-[golden."crt-perfect-v5b.glsl"]
-"160x144->1024x768" = "4b485a6e28e105dc"
-"240x160->1024x768" = "75d2019025afff5c"
-"256x192->1024x768" = "12a73ac0255b80d2"
-"256x192->640x480" = "b9ea4b7c929f35fb"
-"256x224->1024x768" = "cfb552c29d239d87"
-"320x240->1024x768" = "1fcbdc89a3743df2"
-"320x240->1280x720" = "db3a5a6fdefbf707"
-"320x240->640x480" = "05a82c4e3a4ad050"
-"480x272->1024x768" = "2b3fcb88d5fd20b2"
-"480x272->640x480" = "6e92713af7b2ac89"
 
 [golden."dmg-perfect-v1.glsl"]
 "160x144->1024x768" = "e22ec3f3352ac64e"
@@ -528,6 +537,18 @@ sampler = "linear"
 "480x272->1024x768" = "4f620d8b4648c5b8"
 "480x272->640x480" = "d9f7069ed5495378"
 
+[golden."dmg-perfect-v9.glsl"]
+"160x144->1024x768" = "d2262d4faade7d59"
+"240x160->1024x768" = "8609b03d6741721f"
+"256x192->1024x768" = "be000e1ce5ed5309"
+"256x192->640x480" = "d5c2bc450ff633e2"
+"256x224->1024x768" = "b981363138a500d7"
+"320x240->1024x768" = "7c080f39327a636b"
+"320x240->1280x720" = "4521f7be355ee00c"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "4f620d8b4648c5b8"
+"480x272->640x480" = "d9f7069ed5495378"
+
 [golden."lcd-perfect-v1.glsl"]
 "160x144->1024x768" = "9c4d71137a4c1aff"
 "240x160->1024x768" = "46c202d6f53c97f3"
@@ -575,6 +596,18 @@ sampler = "linear"
 "320x240->640x480" = "1b97ca4d27a644d3"
 "480x272->1024x768" = "526e45a826d1c056"
 "480x272->640x480" = "a91083d8ba907300"
+
+[golden."pixel-perfect-v1.glsl"]
+"160x144->1024x768" = "784dcd47f347a0dd"
+"240x160->1024x768" = "506f628fc855ea34"
+"256x192->1024x768" = "14fde0bf677a8ec7"
+"256x192->640x480" = "435a03347861931f"
+"256x224->1024x768" = "8682ee72a1627db5"
+"320x240->1024x768" = "4cebb7b5a1867444"
+"320x240->1280x720" = "6ef196867a147d60"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "b3308d6058ae9885"
+"480x272->640x480" = "30b570163edc962d"
 
 [golden."pixel-perfect-v2.glsl"]
 "160x144->1024x768" = "784dcd47f347a0dd"
@@ -635,15 +668,3 @@ sampler = "linear"
 "320x240->640x480" = "4f3e542cb493ab79"
 "480x272->1024x768" = "ca81cdba01150f6e"
 "480x272->640x480" = "7cc33d9020ae59cc"
-
-[golden."pixel-perfect-v1.glsl"]
-"160x144->1024x768" = "784dcd47f347a0dd"
-"240x160->1024x768" = "506f628fc855ea34"
-"256x192->1024x768" = "14fde0bf677a8ec7"
-"256x192->640x480" = "435a03347861931f"
-"256x224->1024x768" = "8682ee72a1627db5"
-"320x240->1024x768" = "4cebb7b5a1867444"
-"320x240->1280x720" = "6ef196867a147d60"
-"320x240->640x480" = "4f3e542cb493ab79"
-"480x272->1024x768" = "b3308d6058ae9885"
-"480x272->640x480" = "30b570163edc962d"

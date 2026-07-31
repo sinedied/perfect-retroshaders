@@ -284,6 +284,8 @@ already taken out, for the reason the metric section above gives:
 | `dmg-perfect-v7` + shadow 0.45 | 0.16 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 549 | 6 |
 | **`dmg-perfect-v8`** | **0.13** | **0.1% / 0.3%** | **0.0% / 0.7%** | **1.05** | **262** | 6 |
 | **`dmg-perfect-v8`** + shadow 0.45 | 0.23 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 511 | 6 |
+| **`dmg-perfect-v9`** | **0.13** | **0.1% / 0.3%** | **0.0% / 0.7%** | **1.05** | **259** | 6 |
+| **`dmg-perfect-v9`** + shadow 0.45 | 0.23 | 0.1% / 0.3% | 0.0% / 0.7% | 1.05 | 498 | 6 |
 
 The geometry is identical from v2 on - every version since shares the same scaler
 and the same aperture - so the only columns that move are the beat, which is the
@@ -293,6 +295,13 @@ discontinuity in one term, which this metric is not built to see and which
 measured *better* than v6 on two other metrics as well. See the smoothness-metric
 section above. The ops column for v8 is the shadow-off path, which is what a
 default frame pays.
+
+v9 drops v8's contrast wheel and swaps three per-channel gains for a
+temperature/tint pair, and **no measured column moves except the cost**: both
+removed controls were exact no-ops at their defaults, so v9 hashes identically to
+v8 on all ten golden cases. The 3 ops between them on the default path are the
+contrast wheel's unbranched multiply-add, which was the one control here that
+charged whether or not it was used.
 
 v2 and v3 differ only in the shadow, so their geometry rows are the same figures
 and the beat column, taken on a full-range checkerboard, cannot tell them apart
