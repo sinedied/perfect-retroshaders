@@ -5,7 +5,7 @@
 **My take on the "perfect" retro shaders: a convincing retro look that doesn't cost you
 performance, brightness, or your sanity.**
 
-![Retro](https://img.shields.io/badge/%F0%9F%95%B9%EF%B8%8F-retro%20%7C%20pixels-C64A8F?style=flat-square)
+![Retro look](https://img.shields.io/badge/%F0%9F%95%B9%EF%B8%8F%20retro-look-C64A8F?style=flat-square)
 ![GLSL](https://img.shields.io/badge/GLSL-ES%201.00-5586A4?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-3DA639?style=flat-square)
 
@@ -31,7 +31,7 @@ All shaders provided here follow these principles, and were tested on a real dev
 | [`dmg-perfect.glsl`](shaders/dmg-perfect.glsl) | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, white balance, pixel-perfect scaling |
 
 > [!IMPORTANT]
-> All shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to work at non-integer scaling factors with almost no visible artifacts/patterns, though the image will still look better at integer scales. 
+> All shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to work at non-integer scaling factors with almost no visible artifacts/patterns, though the image will still look better at integer scales.
 
 ### Screenshots
 
@@ -43,93 +43,99 @@ Every shader ships ready to use, so the defaults are the recommendation: only re
 
 #### pixel-perfect
 
-Clean upscaling and nothing else, plus a few colour controls for tuning the picture to your screen.
+A clean upscale: every source pixel becomes an even block, with no shimmer and no blur. The plain, fast default when you want the picture and nothing else, plus simple colour controls for tuning it to a screen.
 
 | Parameter | Range | Default | |
 |---|---|---|---|
-| Brightness | 0.50 – 2.00 | 1.00 | Overall gain |
-| Contrast | 0.00 – 2.00 | 1.00 | |
-| Saturation | 0.00 – 2.00 | 1.00 | 0 is black and white |
-| Gamma | 0.50 – 2.00 | 1.00 | Below 1 lifts the mid-tones |
-| Cool / warm balance | −1.00 – 1.00 | 0.00 | Above 0 is warmer |
-| Magenta / green balance | −1.00 – 1.00 | 0.00 | Above 0 is greener |
+| Brightness | 0.50 – 2.00 | 1.00 | Output gain. |
+| Contrast | 0.00 – 2.00 | 1.00 |  |
+| Saturation | 0.00 – 2.00 | 1.00 | Colour intensity. |
+| Gamma | 0.50 – 2.00 | 1.00 | Output gamma. |
+| Cool / warm balance | −1.00 – 1.00 | 0.00 | Warm above 0, cool below. |
+| Magenta / green balance | −1.00 – 1.00 | 0.00 | Green above 0, magenta below. |
 
 > [!NOTE]
 > Output is identical to the well-known `pixellate` shader with default params, but with a better performance.
 
 #### crt-perfect
 
+A CRT look: soft scanlines and an RGB shadow mask over a clean pixel scale, with optional screen curvature. Reads like a small tube TV, sharp rather than blurry, and neither pattern beats against the pixel grid at any scale.
+
 | Parameter | Range | Default | |
 |---|---|---|---|
-| Scanline visibility | 0.00 – 1.00 | 0.60 | |
-| RGB mask visibility | 0.00 – 1.00 | 0.20 | The subpixel pattern |
-| Mask type | 0 / 1 / 2 | 1 | Off, aperture grille, slot mask |
-| Mask triads per pixel | 0.25 – 2.00 | 1.00 | Lower is a coarser mask |
-| Min. pitch in px | 2.00 – 6.00 | 3.00 | How fine the patterns may get |
-| Screen curvature | 0.00 – 0.15 | 0.00 | Off by default |
-| Brightness | 0.25 – 4.00 | 1.25 | Compensates the scanlines |
-| Gamma | 0.50 – 2.00 | 1.00 | |
+| Scanline visibility | 0.00 – 1.00 | 0.60 |  |
+| RGB mask visibility | 0.00 – 1.00 | 0.20 |  |
+| Mask | 0 / 1 / 2 | 1 | Off, aperture grille, slot grille. |
+| Mask triads per pixel | 0.25 – 2.00 | 1.00 | Mask triads per source pixel. |
+| Min. pitch in px | 2.00 – 6.00 | 3.00 | Smallest pattern pitch, in output pixels. |
+| Screen curvature | 0.00 – 0.15 | 0.00 |  |
+| Brightness | 0.25 – 4.00 | 1.25 | Output gain. |
+| Gamma | 0.50 – 2.00 | 1.00 | Output gamma. |
 
-**Tips**
-
-- Keep **min. pitch** at 2.50 or above. Below that a triad has fewer than three output pixels to sit in, and the mask falls back to two colours.
-- **Curvature** is off by default and costs a little when on. It bends the image onto a tube without cropping anything: the corners round off, the edges still reach the screen.
+> [!TIP]
+> - Keep **min. pitch** at 2.50 or above. Below that a triad has fewer than three output pixels to sit in, and the mask falls back to two colours.
+>
+> - **Curvature** is off by default. It bends the image onto a tube without cropping anything: the corners round off, the edges still reach the screen.
 
 #### lcd-perfect
 
+A handheld LCD look: a soft backlit mesh with RGB subpixel stripes, over a clean pixel scale. Reads like a Game Boy Color or GBA screen in good light — a gentle grid rather than a hard black matrix, and it stays even at every scale instead of breaking into a pattern.
+
 | Parameter | Range | Default | |
 |---|---|---|---|
-| Grid visibility | 0.00 – 1.00 | 0.30 | |
-| Row/column balance | 0.00 – 1.00 | 0.50 | 0 is all rows, 1 all columns |
-| Minimum pitch in px | 2.00 – 6.00 | 3.00 | How fine the grid may get |
-| RGB stripe visibility | 0.00 – 1.00 | 0.20 | The subpixel stripes |
-| Stripe order | 0 / 1 | 0 | RGB or BGR |
-| Brightness | 0.25 – 4.00 | 1.25 | Compensates the grid |
-| Gamma | 0.50 – 2.00 | 1.00 | |
+| Grid visibility | 0.00 – 1.00 | 0.30 |  |
+| Row/column balance | 0.00 – 1.00 | 0.50 | 0 rows, 1 columns. |
+| Minimum pitch in px | 2.00 – 6.00 | 3.00 | Smallest pattern pitch, in output pixels. |
+| RGB stripe visibility | 0.00 – 1.00 | 0.20 |  |
+| Stripe order | 0 / 1 | 0 | RGB or BGR. |
+| Brightness | 0.25 – 4.00 | 1.25 | Output gain. |
+| Gamma | 0.50 – 2.00 | 1.00 | Output gamma. |
 
-**Tips**
-
-- **Set stripe order to BGR (1) for Game Boy Advance content.** The GBA panel really is laid out blue-green-red, so RGB puts the colour fringes on the wrong side.
-- **Row/column balance** decides which way the grid leans. Real panels are row-dominant; around 0.80 matches the look of `lcd1x` if that is what you are used to.
+> [!TIP]
+> - **Set stripe order to BGR (1) for Game Boy Advance content.** The GBA panel really is laid out blue-green-red, so RGB puts the colour fringes on the wrong side.
+>
+> - **Row/column balance** decides which way the grid leans. Real panels are row-dominant; around 0.80 matches the look of `lcd1x` if that is what you are used to.
 
 #### dmg-perfect
 
+An original Game Boy look: the dot matrix grid with its pale gaps, over a clean pixel scale. Dots can cast a shadow so they sit above the panel. The grid is invisible on white and strongest on dark content, as a real DMG is.
+
 | Parameter | Range | Default | |
 |---|---|---|---|
-| Grid visibility | 0.00 – 1.00 | 0.30 | |
-| Grid line thickness | 0.25 – 2.00 | 1.00 | In output pixels |
-| Dot shadow | 0.00 – 1.00 | 0.00 | Off by default |
-| Brightness | 0.25 – 4.00 | 1.00 | |
-| Gamma | 0.50 – 2.00 | 1.20 | |
-| Cool / warm balance | −1.00 – 1.00 | 0.00 | Above 0 is warmer |
-| Magenta / green balance | −1.00 – 1.00 | 0.00 | Above 0 is greener |
-
-**Tips**
-
-- **Grid line thickness is in output pixels**, not a fraction of a cell, so the panel reads the same at 640x480 as at 1024x768. 1.00 is a one-pixel line.
-- **Dot shadow** lifts the dots off the panel, as if lit from above. It is off by default and free until you turn it on. Only driven pixels cast one.
-- The **balance pair** is worth a small trim, because Game Boy palettes vary a lot between emulator cores and none of them is neutral.
+| Grid visibility | 0.00 – 1.00 | 0.30 |  |
+| Grid line thickness | 0.25 – 2.00 | 1.00 | Grid line thickness, in pixels. |
+| Dot shadow | 0.00 – 1.00 | 0.00 | Shadow cast by driven dots. |
+| Brightness | 0.25 – 4.00 | 1.00 | Output gain. |
+| Gamma | 0.50 – 2.00 | 1.20 | Output gamma. |
+| Cool / warm balance | −1.00 – 1.00 | 0.00 | Warm above 0, cool below. |
+| Magenta / green balance | −1.00 – 1.00 | 0.00 | Green above 0, magenta below. |
 
 > [!TIP]
-> To brighten a picture, use **brightness**, not gamma. Brightness clips the highlights, and that is what a real CRT or LCD does when you turn it up — gamma instead lifts the mid-tones, which washes out the colours and flattens the contrast.
+> - **Grid line thickness is in output pixels**, not a fraction of a cell, so the panel reads the same at 640x480 as at 1024x768. 1.00 is a one-pixel line.
+>
+> - **Dot shadow** lifts the dots off the panel, as if lit from above. It is off by default. Only driven pixels cast one.
 
 ## Performance
 
-Measured against [`pixellate`](tools/vendor/pixellate.glsl), the shader most people already use for clean upscaling, at 320x240 into 1024x768.
+Measured against [`pixellate`](tools/vendor/pixellate.glsl), the shader most people already use for clean upscaling, at 320x240 into 1024x768. Two rows per shader: as it ships, and with every effect it has turned up.
 
-| Shader | Instructions | Texture taps | Special-function ops | Frame time vs `pixellate` |
-|---|---|---|---|---|
-| `pixellate` (baseline) | 292 | 4 | 30 | 100% |
-| **`pixel-perfect`** | **190** | 4 | **6** | **79%** |
-| `dmg-perfect` | 498 | 8 | 6 | 103% |
-| `lcd-perfect` | 396 | 4 | 23 | 107% |
-| `crt-perfect` | 610 | 4 | 14 | 108% |
+| Shader | Active instructions | Texture taps | Frame time vs `pixellate` |
+|---|---|---|---|
+| `pixellate` (baseline) | 240 | 4 | 100% |
+| **`pixel-perfect`**, defaults | **111** | 4 | **79%** |
+| `pixel-perfect`, everything on | 143 | 4 | 81% |
+| `dmg-perfect`, defaults | 265 | 4 | 103% |
+| `dmg-perfect`, everything on | 447 | 8 | 129% |
+| `lcd-perfect`, defaults | 334 | 4 | 107% |
+| `lcd-perfect`, everything on | 339 | 4 | 107% |
+| `crt-perfect`, defaults | 428 | 4 | 107% |
+| `crt-perfect`, everything on | 503 | 4 | 116% |
 
-`pixel-perfect` is a drop-in replacement for `pixellate` that produces the same image for a fifth less work. The three effect shaders do considerably more and still land within a tenth of it, because the expensive part of all four is the same scaler underneath.
+`pixel-perfect` is a drop-in replacement for `pixellate` that produces the same image with better performance. The three effect shaders do considerably more and still land within a tenth of it, because the expensive part of all four is the same scaler underneath.
 
-The counts come from the compiled shader and are exact. The frame times are from a desktop GPU, not a handheld — treat them as a ranking, not as milliseconds you will see on a device, and note that no difference under about 2% is bigger than the measurement noise.
+*Active instructions* are what actually runs at those settings, not what the file contains: every optional feature sits behind a check on its own parameter, so a control left alone is skipped rather than computed and thrown away. That is why the two rows differ, and why turning curvature, the dot shadow or a colour balance off costs almost nothing.
 
-Everything that can be switched off is behind a check on the parameter itself, so a control left at its default is skipped entirely rather than computed and thrown away. Turning curvature, the shadow or a colour balance off costs nothing.
+The instruction and tap counts come from the compiled shader and are exact. The frame times are from a desktop GPU, not a handheld so consider them a rough guide.
 
 ## Related
 

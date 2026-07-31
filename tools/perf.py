@@ -14,6 +14,7 @@ may rank it the other way round, and nothing here can say.
     python tools/perf.py                     working set against the references
     python tools/perf.py crt-perfect         one family
     python tools/perf.py --static            skip the timing, SPIR-V only
+    python tools/perf.py --max               each shader at defaults and all on
     python tools/perf.py --sweep cp_curvature=0,0.1 crt-perfect-v10.glsl
 """
 
@@ -64,12 +65,18 @@ OPT_PASSES = ['--ccp', '--eliminate-dead-branches', '--simplify-instructions',
               '--eliminate-dead-code-aggressive']
 
 
-def _disassemble(name, at_defaults=False, optimise=False):
+def _disassemble(name, at_defaults=False, optimise=False, values=None):
     body = c.stage_source(c.read(name), 'frag')
     if at_defaults:
         # drop the uniform declarations, so every parameter becomes its #define
         # fallback and the guards it feeds become compile-time constants
         body = body.replace("#define PARAMETER_UNIFORM\n", "")
+        # and optionally rewrite those fallbacks, which is how a setting other
+        # than the shipped default can be folded: the guards then resolve the
+        # other way and the blocks they protect stay in the count
+        for k, v in (values or {}).items():
+            body = re.sub(rf"^#define {k} [-\d.]+$", f"#define {k} {v}",
+                          body, flags=re.M)
     with tempfile.NamedTemporaryFile('w', suffix='.frag', delete=False) as f:
         f.write(body)
         tmp = f.name
@@ -89,7 +96,7 @@ def _disassemble(name, at_defaults=False, optimise=False):
     return dis
 
 
-def static(name, at_defaults=False, optimise=False):
+def static(name, at_defaults=False, optimise=False, values=None):
     """Fragment-stage instruction and SFU counts.
 
     The unoptimised figure walks every instruction regardless of control flow,
@@ -98,7 +105,7 @@ def static(name, at_defaults=False, optimise=False):
     expensive than the one it replaces - exactly backwards. Hence the folded
     columns beside it.
     """
-    dis = _disassemble(name, at_defaults, optimise)
+    dis = _disassemble(name, at_defaults, optimise, values)
     if dis is None:
         return None
     width = {}
@@ -261,10 +268,30 @@ def time_cases(cases):
 
 # --------------------------------------------------------------------------
 
-def build_cases(names, sweep):
+# Parameters whose cost is a branch, not a value: the shader skips the block
+# entirely at the neutral setting, so what a feature costs is only visible with
+# it turned on. Everything else is arithmetic that runs regardless, so pushing
+# it to the end of its range measures nothing.
+MAXED = {
+    "cp_scanlines": 1.0, "cp_rgb_mask": 1.0, "cp_curvature": 0.15,
+    "cp_gamma": 1.40,
+    "lp_grid": 1.0, "lp_subpixels": 1.0, "lp_gamma": 1.40,
+    "dp_grid": 1.0, "dp_shadow": 1.0, "dp_temperature": 0.5, "dp_tint": 0.5,
+    "pp_saturation": 1.5, "pp_gamma": 1.40, "pp_temperature": 0.5,
+    "pp_tint": 0.5,
+}
+
+
+def build_cases(names, sweep, maxed=False):
     """One row per shader, plus one per swept value where the shader has it."""
     cases = []
     for name in names:
+        if maxed:
+            over = {k: v for k, v in MAXED.items() if k in c.parameters(name)}
+            cases.append((f"{name}  defaults", name, {}))
+            if over:
+                cases.append((f"{name}  everything on", name, over))
+            continue
         if not sweep:
             cases.append((name, name, {}))
             continue
@@ -291,7 +318,7 @@ def main():
         if r not in names:
             names = [r] + names if r == REFERENCES[0] else names + [r]
 
-    cases = build_cases(names, sweep)
+    cases = build_cases(names, sweep, "--max" in sys.argv)
     stats = {}
     for _l, name, _p in cases:
         if name not in stats:
@@ -299,6 +326,22 @@ def main():
             folded = static(name, optimise=True)
             at_def = static(name, at_defaults=True, optimise=True)
             stats[name] = (a, folded, at_def)
+
+    if "--static" in sys.argv and "--max" in sys.argv:
+        # Active instructions: what survives folding once the parameters are
+        # literals. The unoptimised column cannot show what a setting costs,
+        # since it counts both arms of every guard - which is the whole point
+        # of guarding them.
+        print(f"{'shader':<24s} {'all paths':>9s} {'defaults':>9s} "
+              f"{'all on':>7s} {'tex':>4s} {'SFU@def':>8s}")
+        for name in dict.fromkeys(n for _l, n, _p in cases):
+            a = static(name)
+            d = static(name, at_defaults=True, optimise=True)
+            over = {k: v for k, v in MAXED.items() if k in c.parameters(name)}
+            m = static(name, at_defaults=True, optimise=True, values=over) if over else d
+            print(f"{name:<24s} {a['ops']:9d} {d['ops']:9d} {m['ops']:7d} "
+                  f"{a['tex']:4d} {d['slots']:8d}")
+        return 0
 
     if "--static" in sys.argv:
         print(f"{'shader':<30s} {'ops':>5s} {'tex':>4s} {'SFU':>5s}   "
