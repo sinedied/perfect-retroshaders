@@ -154,27 +154,29 @@ void main()
     // value has to be the second argument on both axes.
     vec3 col = mix(mix(d, c, w.x), mix(b, a, w.x), w.y);
 
-    // Brightness, contrast and saturation fold into one affine map, using the
-    // fact that LUMA sums to 1. Folded, not three steps: that makes it exactly
-    // col*1.0 + 0.0 at the defaults, where the literal chain rounds. Do not
-    // un-fold it. Affine is also what makes grading safe after the blend.
+    // The balance goes first, so saturation sees the tinted colour and 0 really
+    // is monochrome. Applied last it would put colour back into an image
+    // saturation had just flattened. It is a separate multiply either way,
+    // since dot(col*t, LUMA) is not t*dot(col, LUMA).
     //
-    // The balance stays a separate multiply after the saturation mix, since
-    // dot(col*t, LUMA) is not t*dot(col, LUMA).
+    // Brightness, contrast and saturation then fold into one affine map, using
+    // the fact that LUMA sums to 1. Folded, not three steps: that makes it
+    // exactly col*1.0 + 0.0 at the defaults, where the literal chain rounds. Do
+    // not un-fold it. Affine is also what makes grading safe after the blend.
     //
     // Tested separately, not summed, or a warm temperature could cancel a cool
     // tint.
     if (pp_brightness != 1.0 || pp_contrast != 1.0 || pp_saturation != 1.0
         || pp_temperature != 0.0 || pp_tint != 0.0) {
-        float ga = pp_brightness * pp_contrast;
-        float gb = 0.5 - 0.5 * pp_contrast;
-        col = col * (ga * pp_saturation)
-            + (dot(col, LUMA) * (ga * (1.0 - pp_saturation)) + gb);
-
         // Warm/cool trades red against blue, tint trades green against both.
         // Not luma-normalised, so they shift the level a little too.
         col *= 1.0 + pp_temperature * vec3(1.0, 0.0, -1.0)
                    + pp_tint        * vec3(-0.5, 1.0, -0.5);
+
+        float ga = pp_brightness * pp_contrast;
+        float gb = 0.5 - 0.5 * pp_contrast;
+        col = col * (ga * pp_saturation)
+            + (dot(col, LUMA) * (ga * (1.0 - pp_saturation)) + gb);
 
         // Inside the guard because only a grade can leave 0 to 1: the scaler's
         // own output is a convex blend of taps already in range. It is also

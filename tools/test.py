@@ -62,6 +62,19 @@ def goldens(names, ctx, progs, report, cases, record=False):
     half of what the twins were doing; the correctness half is the scaler anchor
     in tests/contracts.py.
     """
+    # A golden is only worth anything if the same render is reproducible. Every
+    # phase before this one shares a GL context, and a phase that quietly makes
+    # its own leaves the caller's unbound - renders then keep succeeding and
+    # return a different picture. That happened, and a whole set of hashes was
+    # recorded from renders nobody could reproduce outside the run. So the first
+    # shader is rendered twice, once now and once after the walk, and the two
+    # have to agree.
+    probe, (psw, psh, pow_, poh) = names[0], cases[0]
+    def _probe():
+        return c.golden_hash(
+            c.render(ctx, progs, probe, c.scene(psw, psh), pow_, poh))
+    guard = _probe()
+
     table = {k: dict(v) for k, v in c.GOLDEN.items()}
     changed = []
     for name in names:
@@ -73,6 +86,12 @@ def goldens(names, ctx, progs, report, cases, record=False):
             if want is None or got != want:
                 changed.append(f"{name} {key}")
             table.setdefault(name, {})[key] = got
+    if _probe() != guard:
+        report.fail("goldens are reproducible",
+                    "the same render changed during the walk - a phase above "
+                    "took its own GL context")
+        return report
+
     if record:
         c.write_goldens(table)
         report.note(f"recorded {sum(len(v) for v in table.values())} goldens")
@@ -119,7 +138,7 @@ def main():
         importlib.import_module(mod).run(gated, ctx, progs, report, cases)
 
     print("\nmeasure")
-    measure.run(gated, report, cases)
+    measure.run(gated, report, ctx, progs, cases)
 
     print("\ngoldens")
     record = "--record" in flags

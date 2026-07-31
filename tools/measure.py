@@ -569,9 +569,19 @@ def self_test(report):
 
 # --------------------------------------------------------------------------
 
-def run(names, report, cases=None, verbose=False):
-    ctx = c.context()
-    progs = c.Programs(ctx)
+def run(names, report, ctx=None, progs=None, cases=None, verbose=False):
+    """Take the caller's GL context, never make a second one.
+
+    Creating one here worked when this was a standalone script and silently
+    corrupted everything downstream once test.py started sharing a context: the
+    new context becomes current, so every render the CALLER makes afterwards is
+    issued against a context that is no longer bound. It does not fail - it
+    returns a different picture, which is how a whole run of golden hashes came
+    to be recorded from renders nobody could reproduce.
+    """
+    if ctx is None:
+        ctx = c.context()
+        progs = c.Programs(ctx)
     cases = cases or c.CASES
 
     for name in names:
