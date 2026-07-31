@@ -695,8 +695,8 @@ def report_grade():
     a no-op, so a broken saturation would measure perfect. The chroma case is a
     red/cyan 1px checker, the same worst case one axis over.
     """
-    from lcd_preview import (DEFAULTS_PP_V5, LUMA_709, area_average,
-                             render_pixel_perfect_v5)
+    from lcd_preview import (DEFAULTS_PP_V6, LUMA_709, TINT_AXIS, WARM_AXIS,
+                             area_average, render_pixel_perfect_v6)
 
     def chroma(w, h):
         yy, xx = np.mgrid[0:h, 0:w]
@@ -711,7 +711,8 @@ def report_grade():
         s = p["pp_saturation"]
         luma = (col * LUMA_709).sum(axis=-1, keepdims=True)
         g = col * (ga * s) + (luma * (ga * (1.0 - s)) + gb)
-        g = g * np.array([p["pp_red"], p["pp_green"], p["pp_blue"]])
+        g = g * (1.0 + p["pp_temperature"] * WARM_AXIS
+                     + p["pp_tint"] * TINT_AXIS)
         return float(((g < 0.0) | (g > 1.0)).mean()) * 100.0
 
     configs = [
@@ -724,13 +725,21 @@ def report_grade():
         ("brightness 2.00", dict(pp_brightness=2.0)),
         ("gamma 0.70", dict(pp_gamma=0.7)),
         ("gamma 1.40", dict(pp_gamma=1.4)),
-        # the per-channel trim. A diagonal gain is affine like the rest, so
-        # these must land on the neutral floor unless they clip - and the
-        # realistic way to use them, pulling channels down, cannot clip at all.
-        ("warm (blue/green down)", dict(pp_blue=0.85, pp_green=0.95)),
-        ("cool (red/green down)", dict(pp_red=0.85, pp_green=0.95)),
-        ("red killed", dict(pp_red=0.0)),
-        ("red 1.40, clips", dict(pp_red=1.4)),
+        # the balance axes. Still a diagonal gain, so affine like the rest:
+        # these must land on the neutral floor unless they clip, and a positive
+        # axis clips first because it pushes one channel above 1.
+        ("warm 0.10", dict(pp_temperature=0.10)),
+        ("cool 0.10", dict(pp_temperature=-0.10)),
+        ("magenta 0.10", dict(pp_tint=0.10)),
+        ("green 0.10", dict(pp_tint=-0.10)),
+        ("warm 0.40, clips", dict(pp_temperature=0.40)),
+        # Every row above clips, and not because the axis misbehaves: a 1px
+        # checkerboard reaches white, so raising ANY channel leaves the range
+        # at once. Trim the level back so the peak lands on 1 and the axis is
+        # measured on its own - it returns to the neutral floor, which is the
+        # affine claim holding.
+        ("warm 0.10, level trimmed",
+         dict(pp_temperature=0.10, pp_brightness=1.0 / 1.1)),
         ("full grade", dict(pp_saturation=1.3, pp_contrast=1.2,
                             pp_brightness=1.1, pp_gamma=0.9)),
     ]
@@ -738,7 +747,7 @@ def report_grade():
               ((480, 272), (640, 480)), ((320, 240), (640, 480)),
               ((160, 144), (1024, 768))]
 
-    print("\npixel-perfect-v5: what a post-blend grade costs, worst over "
+    print("\npixel-perfect-v6: what a post-blend grade costs, worst over "
           f"{len(scales)} scales")
     print(f"(1px checkerboards, visible above ~{VISIBLE}; clip is the share of "
           "the frame\n the grade pushes outside 0 to 1 before the clamp)\n")
@@ -746,12 +755,12 @@ def report_grade():
 
     worst_clean, worst_at = 0.0, ""
     for label, over in configs:
-        p = dict(DEFAULTS_PP_V5, **over)
+        p = dict(DEFAULTS_PP_V6, **over)
         mono_b = chroma_b = clip = 0.0
         for (sw, sh), (ow, oh) in scales:
             for name, make in (("mono", checkerboard), ("chroma", chroma)):
                 src = make(sw, sh)
-                r = beat(render_pixel_perfect_v5(src, ow, oh, p), sw, sh)
+                r = beat(render_pixel_perfect_v6(src, ow, oh, p), sw, sh)
                 if name == "mono":
                     mono_b = max(mono_b, r)
                 else:

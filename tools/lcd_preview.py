@@ -38,6 +38,22 @@ DEFAULTS_PP_V4 = dict(DEFAULTS_PP_V3)
 # the grade, so it costs nothing that the grade was not already paying.
 DEFAULTS_PP_V5 = dict(DEFAULTS_PP_V4, pp_red=1.00, pp_green=1.00, pp_blue=1.00)
 
+# v6 replaces the three channel gains with the two axes a white balance
+# actually has. Three gains carry one redundant degree of freedom, since
+# overall level is already pp_brightness.
+DEFAULTS_PP_V6 = dict(
+    pp_brightness=1.00,
+    pp_contrast=1.00,
+    pp_saturation=1.00,
+    pp_gamma=1.00,
+    pp_temperature=0.00,
+    pp_tint=0.00,
+)
+
+# The two chromatic axes, matching pixel-perfect-v6.glsl.
+WARM_AXIS = np.array([1.0, 0.0, -1.0])
+TINT_AXIS = np.array([-0.5, 1.0, -0.5])
+
 # Rec.709, matching LUMA in pixel-perfect-v3.glsl.
 LUMA_709 = np.array([0.2126, 0.7152, 0.0722])
 
@@ -343,6 +359,33 @@ def render_pixel_perfect_v5(src_u8, out_w, out_h, p=None, quantise=True):
         luma = (col * LUMA_709).sum(axis=-1, keepdims=True)
         col = col * (ga * s) + (luma * (ga * (1.0 - s)) + gb)
         col = col * np.array([p["pp_red"], p["pp_green"], p["pp_blue"]])
+        col = np.clip(col, 0.0, 1.0)
+
+    if abs(p["pp_gamma"] - 1.0) > 0.001:
+        col = np.power(np.maximum(col, 1e-8), p["pp_gamma"])
+    return (col * 255.0 + 0.5).astype(np.uint8) if quantise else col
+
+
+def render_pixel_perfect_v6(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors pixel-perfect-v6.glsl: v5 with the trim as temperature + tint.
+
+    Not normalised on luma, by decision: the axes shift the overall level a
+    little as well as the colour, and pp_brightness takes that back out.
+    """
+    p = dict(DEFAULTS_PP_V6, **(p or {}))
+    src = src_u8.astype(np.float64) / 255.0
+    col = area_average(src, out_w, out_h)[0]
+
+    if (p["pp_brightness"] != 1.0 or p["pp_contrast"] != 1.0
+            or p["pp_saturation"] != 1.0 or p["pp_temperature"] != 0.0
+            or p["pp_tint"] != 0.0):
+        ga = p["pp_brightness"] * p["pp_contrast"]
+        gb = 0.5 - 0.5 * p["pp_contrast"]
+        s = p["pp_saturation"]
+        luma = (col * LUMA_709).sum(axis=-1, keepdims=True)
+        col = col * (ga * s) + (luma * (ga * (1.0 - s)) + gb)
+        col = col * (1.0 + p["pp_temperature"] * WARM_AXIS
+                         + p["pp_tint"] * TINT_AXIS)
         col = np.clip(col, 0.0, 1.0)
 
     if abs(p["pp_gamma"] - 1.0) > 0.001:

@@ -23,6 +23,7 @@ No build, no test suite. Verification is the Python harness in `tools/`.
 | `shaders/pixel-perfect-v3.glsl` | in flight: no `pp_sharpness`, adds a four-control grade |
 | `shaders/pixel-perfect-v4.glsl` | in flight: v3, but the grade costs nothing when off |
 | `shaders/pixel-perfect-v5.glsl` | in flight: v4 plus per-channel r/g/b gains |
+| `shaders/pixel-perfect-v6.glsl` | in flight: v5's trim as temperature + tint, reordered |
 | `shaders/dmg-perfect-v5.glsl` | Game Boy DMG: two-pass in one pass, soft shadow, colour trim. `dp_` params |
 | `shaders/dmg-perfect-v4.glsl` | superseded: hard-edged shadow, offset exposed per axis |
 | `shaders/dmg-perfect-v3.glsl` | superseded: shadow subtracted from the gap colour only |
@@ -246,8 +247,12 @@ Then one blank line, then the `#pragma parameter` lines, column-aligned.
   splice on the first delimiter, then diff.
 - Parameter identifiers are prefixed per shader (`cp_`, `lp_`, `pp_`, `dp_`) and
   lowercase. **Order them geometry first, colour last**, ending with `*_brightness`
-  then `*_gamma` — every shader here follows that, so a user moving between them finds
-  the same two controls in the same place.
+  then `*_gamma` — so a user moving between them finds the same two controls in the
+  same place. **`pixel-perfect-v6` supersedes this for the colour half**, at the
+  owner's request: brightness, contrast, saturation, gamma, then the balance pair.
+  That reads as a grading panel rather than as a list ending in the two most-used
+  knobs. The other families still follow the old rule; if v6 is promoted, they should
+  move with it rather than the two orders being left to coexist.
 - **The `#pragma parameter` label and the identifier are both user-visible, on
   different hosts.** RetroArch and RetroShader Lab render the quoted label; **minarch
   renders the identifier** (`ma_config.c` uses `params[j].name`). So the identifier
@@ -1065,6 +1070,7 @@ fraction of the cost. Two things in the original are redundant:
 | `pixel-perfect-v3.glsl` | 161 | 4 | 6 |
 | `pixel-perfect-v4.glsl` | 174 | 4 | 6 |
 | `pixel-perfect-v5.glsl` | 190 | 4 | 6 |
+| `pixel-perfect-v6.glsl` | 190 | 4 | 6 |
 
 Four taps stay: an output footprint spans up to two texels per axis, so four is the
 minimum without delegating the blend to the texture unit. A one-tap LINEAR variant was
@@ -1355,6 +1361,42 @@ every other setting — `col *= 1.0` is exact — so it is a strict superset rat
 new look. Its 1/255 against the bare scaler is v4's branch-contraction effect, and
 `equivalence.py` checks it lands on *the same pixels* as v4's rather than merely the
 same count.
+
+### Three channel gains are two controls wearing a third
+
+`pixel-perfect-v6` replaces v5's `pp_red/green/blue` with `pp_temperature` and
+`pp_tint`. That is not a simplification that gives something up: three gains carry
+3 DOF, but one of them **is** overall level, which `pp_brightness` already provides.
+The genuinely chromatic content is 2 DOF — the two axes every camera exposes.
+
+```glsl
+col *= 1.0 + pp_temperature * vec3(1.0, 0.0, -1.0)
+           + pp_tint        * vec3(-0.5, 1.0, -0.5);
+```
+
+Solving `rgb = brightness · (1 + temp·warm + tint·tint)` reproduces every v5 setting
+exactly — warm (0.85/0.95) is brightness 0.933, temp +0.080, tint +0.018; even "red
+killed" is reachable at temp −0.75, tint +0.50, brightness 0.667. `equivalence.py`
+gates the round trip on the GPU: **0/255 against v5** both with the balance neutral
+and at five settings where the two axes hit an exact `r/g/b` triple. It is a
+reparameterisation, not an approximation.
+
+Cost is unchanged — same single multiply, 190 static and **111 at defaults, equal to
+v4 and v5** — and the guard is one comparison shorter.
+
+**Not normalised on luma, by decision.** Dividing by `dot(wb, LUMA)` would make
+temperature purely chromatic (white luma stays 1.0000 instead of drifting to 1.0281 at
+temp 0.20), but it costs a divide and pushes the up-channel to 1.167, so it clips where
+the raw form merely dims. The owner's call: this is a retro shader, not a photo editor,
+and `pp_brightness` takes the level back out.
+
+**Reading the beat table for these needs care.** Every balance row clips on a 1px
+checkerboard — 16.7% at temperature 0.10 — and that is the *source*, not the axis: a
+full-range checkerboard reaches white, so raising any channel leaves the range at once.
+Trimming the level so the peak lands on 1 (`pp_temperature` 0.10 with `pp_brightness`
+1/1.1) reads **0.320 / 0.097 at 0% clip, below the neutral floor of 0.349 / 0.116**.
+The axis is affine and clean; all the beat is the clamp. This is the same test-source
+trap recorded for `dmg_checkerboard`, hit again by a different control.
 
 ## Measurement traps
 

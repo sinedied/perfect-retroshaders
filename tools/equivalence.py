@@ -21,7 +21,7 @@ import numpy as np
 
 import moderngl
 from gl_check import stage_source, gl_render, LINEAR_SAMPLED
-from lcd_preview import DEFAULTS_PP_V3, DEFAULTS_PP_V5
+from lcd_preview import DEFAULTS_PP_V3, DEFAULTS_PP_V5, DEFAULTS_PP_V6
 from paths import shader_path
 
 PIXELLATE = shader_path("pixellate.glsl")
@@ -29,6 +29,21 @@ PIXEL_PERFECT = shader_path("pixel-perfect.glsl")
 PIXEL_PERFECT_V3 = shader_path("pixel-perfect-v3.glsl")
 PIXEL_PERFECT_V4 = shader_path("pixel-perfect-v4.glsl")
 PIXEL_PERFECT_V5 = shader_path("pixel-perfect-v5.glsl")
+PIXEL_PERFECT_V6 = shader_path("pixel-perfect-v6.glsl")
+
+# v6 swaps v5's three channel gains for the two axes a white balance actually
+# has. The grade around them is untouched, so with the balance neutral it has
+# to reproduce v5 exactly - and any (r,g,b) that IS reachable on those two axes
+# has to land on the same pixels, which is the claim that the basis is right
+# rather than merely plausible.
+V6_REACHABLE = [
+    # (label, temperature, tint, the equivalent r/g/b for v5)
+    ("warm 0.20", 0.20, 0.00, (1.20, 1.00, 0.80)),
+    ("cool 0.20", -0.20, 0.00, (0.80, 1.00, 1.20)),
+    ("magenta 0.20", 0.00, 0.20, (0.90, 1.20, 0.90)),
+    ("green 0.20", 0.00, -0.20, (1.10, 0.80, 1.10)),
+    ("warm + green", 0.15, -0.10, (1.20, 0.90, 0.90)),
+]
 
 # v5 folds a per-channel trim into v4's affine map. Two things have to hold and
 # they are different claims: with the trim neutral it must reproduce v4 at every
@@ -197,6 +212,7 @@ def main():
                        ("pixel-perfect-v3", PIXEL_PERFECT_V3),
                        ("pixel-perfect-v4", PIXEL_PERFECT_V4),
                        ("pixel-perfect-v5", PIXEL_PERFECT_V5),
+                       ("pixel-perfect-v6", PIXEL_PERFECT_V6),
                        ("sharp-shimmerless", SHIMMERLESS)):
         s = open(path).read()
         prog[name] = ctx.program(vertex_shader=stage_source(s, "vert"),
@@ -473,8 +489,49 @@ def main():
     # which the driver contracts differently, so it is rounding again - but with
     # the unreachable-branch control alongside to prove that is all it is. v5
     # has the same branch as v4, so with the trim neutral it is exactly v4.
+    print("\n9. pixel-perfect-v6: two balance axes instead of three gains\n")
+    print("   Three channel gains carry one redundant degree of freedom, since"
+          "\n   overall level is already pp_brightness. v6 spends the other two"
+          "\n   on the axes a white balance actually has. Two claims: with the"
+          "\n   balance neutral it is still v5, and where the two axes CAN"
+          "\n   reach an r/g/b triple they must agree with v5 set to it.\n")
+    print(f"   {'configuration':<32s} {'vs v5':>9s}")
+    worst_v6 = 0
+    for label, over in V5_VS_V4:
+        mx = 0
+        for iw, ih, ow, oh in CASES[:4]:
+            for _, s in sources(iw, ih, rng):
+                base = dict(DEFAULTS_PP_V3, **over)
+                a = gl_render(ctx, prog["pixel-perfect-v5"], s, ow, oh,
+                              dict(base, pp_red=1.0, pp_green=1.0, pp_blue=1.0)).astype(int)
+                b = gl_render(ctx, prog["pixel-perfect-v6"], s, ow, oh,
+                              dict(base, pp_temperature=0.0, pp_tint=0.0)).astype(int)
+                mx = max(mx, int(np.abs(a - b).max()))
+        worst_v6 = max(worst_v6, mx)
+        print(f"   {label + ', balance off':<32s} {mx:6d}/255")
+
+    for label, temp, tint, (r, g, b) in V6_REACHABLE:
+        mx = 0
+        for iw, ih, ow, oh in CASES[:4]:
+            for _, s in sources(iw, ih, rng):
+                a = gl_render(ctx, prog["pixel-perfect-v5"], s, ow, oh,
+                              dict(DEFAULTS_PP_V5, pp_red=r, pp_green=g,
+                                   pp_blue=b)).astype(int)
+                bb = gl_render(ctx, prog["pixel-perfect-v6"], s, ow, oh,
+                               dict(DEFAULTS_PP_V6, pp_temperature=temp,
+                                    pp_tint=tint)).astype(int)
+                mx = max(mx, int(np.abs(a - bb).max()))
+        worst_v6 = max(worst_v6, mx)
+        print(f"   {label + f' = rgb {r:.2f}/{g:.2f}/{b:.2f}':<32s} {mx:6d}/255")
+
+    print(f"\n   worst: {worst_v6}/255   "
+          f"{'the basis is exact' if worst_v6 == 0 else 'v6 IS NOT A REPARAMETERISATION'}")
+    print("   Deliberately not normalised on luma, so an axis shifts the level"
+          "\n   a little as well as the colour; pp_brightness takes that out.")
+
     return 0 if (worst <= 1 and worst_v3 == 0 and ok_v4
-                 and worst_v5 == 0 and worst_v5d <= 1 and same_as_v4) else 1
+                 and worst_v5 == 0 and worst_v5d <= 1 and same_as_v4
+                 and worst_v6 == 0) else 1
 
 
 if __name__ == "__main__":

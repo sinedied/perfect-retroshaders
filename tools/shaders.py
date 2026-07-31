@@ -26,9 +26,9 @@ from lcd_preview import (
     # defaults and a 255/255 mismatch that looked like a shader bug
     DEFAULTS_V3 as DEFAULTS_LCD_V3, render_lcd_v3,
     DEFAULTS_LCD, DEFAULTS_PP, DEFAULTS_PP_V2, DEFAULTS_PP_V3, DEFAULTS_PP_V4,
-    DEFAULTS_PP_V5, DEFAULTS_V2A, DEFAULTS_V2B,
+    DEFAULTS_PP_V5, DEFAULTS_PP_V6, DEFAULTS_V2A, DEFAULTS_V2B,
     render_pixel_perfect_v2, render_pixel_perfect_v3, render_pixel_perfect_v4,
-    render_pixel_perfect_v5,
+    render_pixel_perfect_v5, render_pixel_perfect_v6,
     render_lcd, render_lcd_v2a, render_pixel_perfect,
 )
 
@@ -274,6 +274,34 @@ REGISTRY = {
             ("gamma 1.4", dict(pp_gamma=1.4)),
             ("gamma 2.0", dict(pp_gamma=2.0)),
             ("crisp + gamma", dict(pp_sharpness=0.3, pp_gamma=0.8)),
+        ],
+    ),
+    "pixel-perfect-v6.glsl": Model(
+        render=render_pixel_perfect_v6,
+        defaults=DEFAULTS_PP_V6,
+        variants=[
+            ("greyscale", dict(pp_saturation=0.0)),
+            ("flat", dict(pp_contrast=0.4)),
+            ("dim", dict(pp_brightness=0.6)),
+            ("clipped gain", dict(pp_brightness=2.0)),
+            ("gamma 1.4", dict(pp_gamma=1.4)),
+            # each axis alone and both signs, so a swapped basis vector or a
+            # sign error cannot hide behind the other axis
+            ("warm", dict(pp_temperature=0.20)),
+            ("cool", dict(pp_temperature=-0.20)),
+            ("magenta", dict(pp_tint=0.20)),
+            ("green", dict(pp_tint=-0.20)),
+            # the corner where a channel gain goes negative, which only the
+            # clamp saves
+            ("cool + magenta, extreme", dict(pp_temperature=-1.0, pp_tint=1.0)),
+            ("warm, extreme", dict(pp_temperature=1.0)),
+            ("balance + grade", dict(pp_temperature=0.15, pp_tint=-0.08,
+                                     pp_saturation=1.3, pp_contrast=1.2,
+                                     pp_brightness=1.1)),
+            ("balance + greyscale", dict(pp_temperature=0.2,
+                                         pp_saturation=0.0)),
+            # axes that cancel in a sum but not when tested separately
+            ("cancelling axes", dict(pp_temperature=0.2, pp_tint=-0.2)),
         ],
     ),
     "pixel-perfect-v5.glsl": Model(
