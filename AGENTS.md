@@ -48,9 +48,18 @@ renders, and the golden hashes are only meaningful against a fixed stack.
 .venv/bin/python tools/test.py crt-perfect     # one family
 .venv/bin/python tools/test.py --all           # golden the archive too
 .venv/bin/python tools/test.py --record        # accept a deliberate change
+
 .venv/bin/python tools/preview.py --diff       # look at it
-.venv/bin/python tools/perf.py                 # cost, when you want to compare
+.venv/bin/python tools/preview.py --moire      # show only the beat band
+.venv/bin/python tools/preview.py --as-shipped # without the preview overrides
+
+.venv/bin/python tools/perf.py                 # timings, when comparing
+.venv/bin/python tools/perf.py --static        # ops and SFU, one second
+.venv/bin/python tools/measure.py --self-test  # check the metric, not the shader
 ```
+
+`test.py` runs `check.py`, the contracts, the per-family properties, `measure.py`
+and the goldens. Run the others directly when you want one of them on its own.
 
 To add or change a shader:
 
@@ -72,9 +81,9 @@ control. A property nobody can regress into is a property with no proof.
 same arithmetic twice is genuinely useful while working out what a shader should
 do — it caught the anisotropic footprint correction in v6 and a `float32`
 `floor()` knife edge twice. It stops earning its keep the moment the version
-freezes: across 67 commits, every twin-versus-shader disagreement that reached a
-commit was resolved by fixing the twin. Write one in `/tmp` while iterating.
-Do not commit it.
+freezes: over this repo's whole history, every twin-versus-shader disagreement
+that reached a commit was resolved by fixing the twin. Write one in `/tmp` while
+iterating. Do not commit it.
 
 ## Verification, and what it does not cover
 
@@ -93,14 +102,16 @@ Four layers, deliberately:
   question, not a verdict.
 
 **Not covered: the device.** Everything here runs desktop GL 4.10 on an Apple
-GPU. `perf.py`'s SFU count is the proxy used for the Mali, and the two disagree —
-`pixellate` has the most SFU of anything here (30 against 14) and is still the
-fastest thing measured. Treat SFU as the device signal and timings as the
-desktop one, and assume neither predicts the other.
+GPU, and the two cost signals disagree on it. `crt-perfect` has less than half
+`pixellate`'s SFU (14 against 30), 70% more ALU ops (501 against 292), and comes
+out slower — so on this GPU time tracks ops and SFU is not the bottleneck. On a
+Mali G31 it may well be the other way round. Treat SFU as the device signal and
+timings as the desktop one, and assume neither predicts the other.
 
 **Perf is not a gate**, deliberately: GPU timing moves a few percent with laptop
-thermals. `baseline.toml` records op and SFU counts as unenforced reference
-figures.
+thermals, so it would fail for reasons that have nothing to do with the shader.
+`perf.py --static` prints the deterministic half (ops, texture taps, SFU) in a
+second, and nothing enforces it.
 
 ## Hard contracts
 
