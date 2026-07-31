@@ -109,9 +109,24 @@ def header(name):
             errors.append(f"line {i}: {len(line)} columns, over {WIDTH}")
     if any("/*" in l for l in head):
         errors.append("header uses a block comment; the format is line comments")
-    if not re.match(r'^// [\w-]+ - \S.*\.$', head[0]):
-        errors.append('first line should be "// <name> - <description ending in '
-                      'a period.>"')
+
+    # "// dmg-perfect v9 - a Game Boy dot matrix over a pixel-perfect scale."
+    # The version lives here, not in the filename: a release copy is
+    # <family>.glsl with no suffix and still has to say which iteration it is.
+    m = re.match(r'^// ([a-z][a-z-]*) v([0-9]+[a-z]?) - \S.*\.$', head[0])
+    if not m:
+        errors.append('first line should be "// <family> v<N> - <description '
+                      'ending in a period.>"')
+    else:
+        fam, ver = m.group(1), m.group(2)
+        if fam != c.family(name):
+            errors.append(f"header says {fam} but it is declared as "
+                          f"{c.family(name)}")
+        # The check that would have caught pixel-perfect-v6 shipping a header
+        # reading v5: a copy nobody remembered to renumber.
+        on_disk = c.filename_version(name)
+        if on_disk is not None and on_disk != ver:
+            errors.append(f"header says v{ver} but the filename says v{on_disk}")
 
     seps = [i for i, l in enumerate(head) if l == SEP]
     if len(seps) != 3:

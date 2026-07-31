@@ -57,6 +57,7 @@ CASES = [tuple(c) for c in SETTINGS["cases"]]
 MOIRE = SETTINGS["moire"]
 MIN_PITCH = SETTINGS["min_pitch"]
 TOLERANCE = SETTINGS["tolerance"]
+SCALER_REFERENCE = SETTINGS["scaler_reference"]
 
 SHADERS_DECLARED = {s["name"]: s for s in _DOC["shader"]}
 GOLDEN = _DOC.get("golden", {})
@@ -94,7 +95,7 @@ def families():
 
 
 def current(fam):
-    """The version of a family a default run gates on.
+    """The newest iteration of a family: what a default run gates on.
 
     Never derive this by sorting names: "v8" sorts above "v10", so the newest
     version silently stops being tested the moment a family reaches two digits.
@@ -103,18 +104,25 @@ def current(fam):
     for name, s in SHADERS_DECLARED.items():
         if s["family"] == fam and CURRENT in s["role"]:
             return name
-    raise KeyError(f"no current version declared for {fam}")
+    return None
 
 
 def released(fam):
+    """The shipped copy of a family, or None if nothing has been released yet.
+
+    Optional by design. `shaders/` holds only what the owner has approved for
+    release, so a family being iterated on has nothing there at all.
+    """
     for name, s in SHADERS_DECLARED.items():
         if s["family"] == fam and RELEASED in s["role"]:
             return name
-    raise KeyError(f"no released version declared for {fam}")
+    return None
 
 
 def working_set():
-    """What a default run covers: everything a user could actually be running."""
+    """What a default run covers: everything a user could actually be running,
+    plus the candidate for each family. Falls back to the candidates alone while
+    nothing is released."""
     return by_role(RELEASED, CURRENT)
 
 
@@ -132,13 +140,35 @@ def resolve(args):
             out.append(a)
         elif a in families():
             for n in (released(a), current(a)):
-                if n not in out:
+                if n and n not in out:
                     out.append(n)
         elif a + ".glsl" in SHADERS_DECLARED:
             out.append(a + ".glsl")
         else:
             raise SystemExit(f"unknown shader or family: {a}")
     return out
+
+
+def version(name):
+    """The version a shader's own header claims, as a string like "9" or "2a".
+
+    The header is where the version lives, not the filename: a released copy is
+    `<family>.glsl` with no suffix, and it still has to say which iteration it
+    is. Returns None if the title line does not declare one.
+    """
+    m = TITLE.match(read(name).split("\n", 1)[0])
+    return m.group(2) if m else None
+
+
+def filename_version(name):
+    """The version in a filename, or None for an unsuffixed release copy."""
+    m = re.match(r'^(.*?)-v([0-9]+[a-z]?)\.glsl$', name)
+    return m.group(2) if m else None
+
+
+def source_iteration(name):
+    """For a release copy, the iteration it must be identical to."""
+    return f"{family(name)}-v{version(name)}.glsl"
 
 
 def moire_allowance(name, case):
@@ -150,8 +180,8 @@ def moire_allowance(name, case):
 
 
 def check_baseline():
-    """Every declared shader is on disk, every shader on disk is declared, and
-    every family has both roles filled.
+    """Every declared shader is on disk, every shader on disk is declared, every
+    family has a current version, and any release really is a copy of one.
 
     The disk-to-baseline direction matters as much as the other one. A new
     version nobody declares would simply not be tested, and dropping out of the
@@ -167,11 +197,32 @@ def check_baseline():
         if name not in SHADERS_DECLARED:
             errors.append(f"{name}: on disk but not declared in baseline.toml")
     for fam in families():
-        for role, fn in ((CURRENT, current), (RELEASED, released)):
-            try:
-                fn(fam)
-            except KeyError:
-                errors.append(f"{fam}: no {role} version declared")
+        if current(fam) is None:
+            errors.append(f"{fam}: no current version declared")
+
+    # A release is a copy of an approved iteration, so the two files must be
+    # byte-identical. Which iteration is read off the release's own header,
+    # which is the only place its version is written down.
+    for name in os.listdir(SHADERS) if os.path.isdir(SHADERS) else []:
+        if not name.endswith(".glsl"):
+            continue
+        if name not in SHADERS_DECLARED:
+            continue  # already reported above; family() would raise on it
+        if filename_version(name):
+            errors.append(f"{name}: a release carries no version in its "
+                          f"filename, only in its header")
+            continue
+        v = version(name)
+        if v is None:
+            errors.append(f"{name}: header does not say which version it is")
+            continue
+        src = f"{family(name)}-v{v}.glsl"
+        try:
+            if read(name) != open(os.path.join(ITERATIONS, src)).read():
+                errors.append(f"{name}: not identical to {src}, which its "
+                              f"header says it is a copy of")
+        except FileNotFoundError:
+            errors.append(f"{name}: header claims v{v} but {src} does not exist")
     return errors
 
 
@@ -217,6 +268,11 @@ def stage_source(src, stage, version=VERSION_HEADER):
               else "#define FRAGMENT\n#define PARAMETER_UNIFORM\n")
     return version + define + body
 
+
+# "// dmg-perfect v9 - a Game Boy dot matrix over a pixel-perfect scale."
+# The version belongs here rather than in the filename, because a released copy
+# is <family>.glsl with no suffix and still has to say which iteration it is.
+TITLE = re.compile(r'^(?://\s*|\s+)([a-z][a-z-]*?)(?:\s+v([0-9]+[a-z]?))?\s+-\s+(\S.*)$')
 
 PRAGMA = re.compile(
     r'#pragma parameter\s+(\w+)\s+"([^"]*)"\s+'

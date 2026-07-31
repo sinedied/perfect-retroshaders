@@ -1,4 +1,4 @@
-// lcd-perfect-v2a - a sinusoidal LCD mesh over a pixel-perfect scale.
+// lcd-perfect v2a - a sinusoidal LCD mesh over a pixel-perfect scale.
 // -----------------------------------------------------------------------------
 // Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied

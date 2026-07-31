@@ -1,5 +1,5 @@
 /*
-    crt-perfect-v3 - moire-free CRT scanlines and RGB mask with pixel-perfect scaling.
+    crt-perfect v3 - moire-free CRT scanlines and an RGB mask, pixel-perfect.
 
     Author:  sinedied
     Licence: MIT - Copyright (c) 2026 sinedied

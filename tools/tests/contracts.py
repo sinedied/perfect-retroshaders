@@ -51,7 +51,7 @@ def run(names, ctx, progs, report, cases=None):
 
     # The scaler anchor. Skipped where a shader declares no neutral setting,
     # which means it has no configuration in which it is just a scaler.
-    base = "pixel-perfect-v1.glsl"
+    base = c.SCALER_REFERENCE
     for name in names:
         neutral = c.declared(name).get("neutral")
         if neutral is None or name == base:

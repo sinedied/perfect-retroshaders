@@ -1,4 +1,4 @@
-// crt-perfect-v8 - scanlines, an RGB mask and curvature, pixel-perfect scale.
+// crt-perfect v8 - scanlines, an RGB mask and curvature, pixel-perfect scale.
 // -----------------------------------------------------------------------------
 // Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied

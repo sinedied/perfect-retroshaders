@@ -1,5 +1,5 @@
 /*
-    crt-perfect-v2 - pixel-perfect scaling with CRT scanlines and an RGB subpixel mask.
+    crt-perfect v2 - CRT scanlines and an RGB mask over a pixel-perfect scale.
 
     Author:  sinedied
     Licence: MIT - Copyright (c) 2026 sinedied

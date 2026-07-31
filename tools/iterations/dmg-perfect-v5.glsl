@@ -1,4 +1,4 @@
-// dmg-perfect - a Game Boy dot matrix over a pixel-perfect scale.
+// dmg-perfect v5 - a Game Boy dot matrix over a pixel-perfect scale.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //

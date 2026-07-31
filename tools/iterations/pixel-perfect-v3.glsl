@@ -1,4 +1,4 @@
-// pixel-perfect-v3 - uniform pixel blocks and a colour grade, at minimal cost.
+// pixel-perfect v3 - uniform pixel blocks and a colour grade, at minimal cost.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //

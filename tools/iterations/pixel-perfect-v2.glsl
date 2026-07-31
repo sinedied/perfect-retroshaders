@@ -1,4 +1,4 @@
-// pixel-perfect-v2 - uniform pixel blocks and a gamma, at minimal cost.
+// pixel-perfect v2 - uniform pixel blocks and a gamma, at minimal cost.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //

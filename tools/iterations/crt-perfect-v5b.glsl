@@ -1,4 +1,4 @@
-// crt-perfect - scanlines and an RGB mask over a pixel-perfect scale.
+// crt-perfect v5b - scanlines and an RGB mask over a pixel-perfect scale.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //

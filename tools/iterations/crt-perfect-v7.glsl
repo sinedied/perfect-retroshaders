@@ -1,4 +1,4 @@
-// crt-perfect-v7 - scanlines, an RGB mask and curvature, pixel-perfect.
+// crt-perfect v7 - scanlines, an RGB mask and curvature, pixel-perfect.
 // -----------------------------------------------------------------------------
 // Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied

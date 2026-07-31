@@ -1,4 +1,4 @@
-// pixel-perfect-v5 - uniform pixel blocks and a colour grade, at minimal cost.
+// pixel-perfect v6 - uniform pixel blocks and a colour grade, at minimal cost.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
@@ -137,27 +137,23 @@ uniform COMPAT_PRECISION float pp_tint;
 #define pp_tint 0.0
 #endif
 
-// Rec.709 luma, for the saturation mix. These are applied to encoded values
-// rather than to linear light, which is what the rest of the shader works in -
-// the alternative would need a linearise/re-encode round trip, and that is the
-// exact construction the scaler exists to avoid.
+// Rec.709 luma, for the saturation mix. Applied to encoded values, not linear
+// light: the round trip that would need is the construction the scaler exists
+// to avoid.
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
 void main()
 {
-    // Work in source texels: p is this output pixel's centre, h its half-footprint.
-    // The max() guards a host that leaves InputSize at 0: h is a divisor below, so
-    // without it every pixel would come out NaN - a black screen, not a subtle
-    // error. There is no sharpness control: narrowing the footprint below the
-    // output pixel turns this back into nearest-neighbour, which is the uneven,
-    // crawling result the shader exists to remove.
+    // Source texels: p is this pixel's centre, h its half footprint. The max()
+    // guards an unset InputSize, which is 0 and would make every pixel NaN.
+    // There is no sharpness control on purpose: narrowing the footprint below
+    // one output pixel is nearest-neighbour again, which is what crawls.
     vec2 p = TEX0.xy * TextureSize;
     vec2 h = max(0.4995 * InputSize / OutputSize, 1e-6);
 
-    // B is the texel boundary nearest the footprint. w is the share of the
-    // footprint lying on B's low side, and clamps to exactly 0 or 1 whenever the
-    // footprint sits wholly inside one texel - which is most output pixels, and is
-    // what keeps the blocks flat instead of gradients.
+    // B is the nearest texel boundary; w is the share of the footprint on its
+    // low side. Clamps to exactly 0 or 1 wherever the footprint sits inside one
+    // texel, which is most pixels - that is what keeps the blocks flat.
     vec2 B = floor(p + 0.5);
     vec2 w = clamp((B - p + h) / (2.0 * h), 0.0, 1.0);
 
@@ -174,26 +170,20 @@ void main()
     // value has to be the second argument on both axes.
     vec3 col = mix(mix(d, c, w.x), mix(b, a, w.x), w.y);
 
-    // Brightness, contrast and saturation fold into one affine map: the chain
-    // is col*(ga*s) + dot(col, LUMA)*(ga*(1 - s)) + gb, using the fact that
-    // LUMA sums to 1. Folded rather than written as three steps because that
-    // makes it exactly col*1.0 + 0.0 at the defaults, where the literal chain
-    // rounds. Do not un-fold it.
+    // Brightness, contrast and saturation fold into one affine map, using the
+    // fact that LUMA sums to 1. Folded, not three steps: that makes it exactly
+    // col*1.0 + 0.0 at the defaults, where the literal chain rounds. Do not
+    // un-fold it. Affine is also what makes grading safe after the blend - the
+    // weights sum to 1, so it cannot give partial-coverage pixels the shift
+    // that beats against the pixel grid.
     //
-    // The balance is a separate multiply, not folded into those coefficients:
-    // folding widens the luma term to vec3 and measures 4 instructions worse.
-    // It must come after the saturation mix, since dot(col*t, LUMA) is not
-    // t*dot(col, LUMA).
+    // The balance stays a separate multiply after the saturation mix: folding
+    // it in widens the luma term to vec3 and measures 4 instructions worse,
+    // and dot(col*t, LUMA) is not t*dot(col, LUMA) anyway.
     //
-    // Affine is what makes any of this safe after the scaler's blend - the
-    // weights sum to 1, so grading here equals grading the four taps, and it
-    // cannot give partial-coverage pixels the coverage-dependent shift that
-    // beats against the pixel grid.
-    //
-    // The guard is exact, not an epsilon: every control is a true no-op at its
-    // default, so there is nothing to protect against and a dead band would
-    // only buy settings where this disagrees with v5. Test the controls
-    // separately - a sum would let a warm temperature cancel a cool tint.
+    // Tested separately, not summed, or a warm temperature could cancel a cool
+    // tint. Exact rather than an epsilon: every control is a true no-op at its
+    // default.
     if (pp_brightness != 1.0 || pp_contrast != 1.0 || pp_saturation != 1.0
         || pp_temperature != 0.0 || pp_tint != 0.0) {
         float ga = pp_brightness * pp_contrast;

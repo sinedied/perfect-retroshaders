@@ -1,4 +1,4 @@
-// pixel-perfect - uniform pixel blocks with no shimmer, at minimal cost.
+// pixel-perfect v1 - uniform pixel blocks with no shimmer, at minimal cost.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //

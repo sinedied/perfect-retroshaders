@@ -15,21 +15,34 @@ does not read GLSL.
 
 | Path | What |
 |---|---|
-| `shaders/` | the working set: what ships, plus the current candidate per family |
+| `shaders/` | **releases only.** Never edit one. Replace only when the owner says so |
+| `tools/iterations/` | every version, including the current candidate. Where the work happens |
 | `tools/baseline.toml` | **the one data file** — every shader's role, sampler and limits |
 | `tools/{check,measure,perf,test,preview}.py` | the five entry points |
 | `tools/common.py` | paths, shader text, GL, sources, reporting |
 | `tools/tests/` | per-family behavioural properties, each with its control |
 | `tools/vendor/` | third-party shaders, comparison only, not ours and not edited |
-| `tools/iterations/` | superseded versions, kept compiling as negative controls |
 | `docs/<shader>.md` | design record: what was measured, what was rejected, why |
 
-`tools/baseline.toml` declares each shader's family, lifecycle role (`released`,
-`current`, `archive`, `vendor`), sampler and thresholds. **Never work out the
-current version from a filename** — `max(names)` returns `v8` over `v10`, which
-silently froze a gate two versions behind. A shader on disk that nobody declares
-fails the check, because dropping out of the matrix silently is the same defect
-wearing different clothes.
+### Release and iteration
+
+A release is a **copy** of an iteration the owner has approved, and nothing else
+puts a file in `shaders/`. Iterate in `tools/iterations/`; a superseded version
+stays there and keeps compiling, because the per-family tests use them as
+negative controls.
+
+- `shaders/<family>.glsl` — **no version in the filename**
+- `tools/iterations/<family>-v<N>.glsl` — version in the filename
+- **the version lives in the header of both**, and `check.py` asserts a release
+  is byte-identical to the iteration its header names
+
+`baseline.toml` declares family, role (`released`, `current`, `archive`,
+`vendor`), sampler and thresholds. `released` is optional — a family being
+worked on has nothing in `shaders/` at all. **Never work out the current version
+from a filename**: `max(names)` returns `v8` over `v10`, which silently froze a
+gate two versions behind. A shader on disk that nobody declares fails the check,
+because dropping out of the matrix silently is the same defect wearing different
+clothes.
 
 ## Setup
 
@@ -63,15 +76,24 @@ and the goldens. Run the others directly when you want one of them on its own.
 
 To add or change a shader:
 
-1. Edit the `.glsl`.
-2. Declare it in `tools/baseline.toml` — family, role, and anything it needs a
-   limit or a preview override for.
-3. `tools/test.py <family>`.
-4. `tools/preview.py` **if the change moves geometry.** Not optional:
+1. Copy the current version to `tools/iterations/<family>-v<N+1>.glsl` and edit
+   that. **Never edit a file in `shaders/`**, and never edit a superseded
+   iteration — both are somebody's fixed reference.
+2. Set its header title line to `// <family> v<N+1> - <description>.`
+3. Declare it in `tools/baseline.toml`: move `current` onto it, demote the old
+   one to `archive`, and add anything it needs a limit or a preview override for.
+4. `tools/test.py <family>`.
+5. `tools/preview.py` **if the change moves geometry.** Not optional:
    `crt-perfect-v7` passed every number in the harness while having cropped its
    entire image border off-screen, and was caught by a person looking at a
    screenshot.
-5. If the goldens moved and you meant it, `--record`.
+6. If the goldens moved and you meant it, `--record`.
+
+**When the owner says they tweaked something**, they mean a value or a comment
+they changed by hand in the working tree. `git diff` it, read what actually
+changed, and run `tools/test.py`. Goldens moving is the expected outcome of a
+parameter tweak, not a failure — confirm the change was intended, then
+`--record`. See *Never revert* below.
 
 New behaviour that can be stated as a property belongs in
 `tools/tests/<family>.py`, with the version that got it wrong kept as a negative
@@ -137,12 +159,22 @@ even a plain `clamp()` from a gain above 1 have each done it. A soft shoulder
 does not rescue it — measured worse than the hard clamp. See
 `docs/crt-perfect.md`.
 
-## Shader header format
+## Shader header and comments
 
-Line comments, hard 80 columns, separator `// ` + 77 dashes. Order: name,
+Line comments, hard 80 columns, separator `// ` + 77 dashes. Order: title,
 licence, `PARAMETERS`, one short paragraph, `Notes:` of one or two phrases each.
 Then a blank line and the column-aligned `#pragma parameter` lines.
 
+The title line carries the version, and it is the only place the version is
+written down for a release:
+
+```
+// dmg-perfect v9 - a Game Boy dot matrix over a pixel-perfect scale.
+```
+
+- **In `tools/iterations/` the header version must match the filename.**
+  `check.py` gates it. `pixel-perfect-v6` shipped with a header reading `v5` for
+  exactly as long as nothing checked.
 - Parameter identifiers are prefixed per shader (`cp_`, `lp_`, `pp_`, `dp_`),
   lowercase, **geometry first and colour last**, ending `*_brightness` then
   `*_gamma`, so the same two controls sit in the same place in every shader.
@@ -153,6 +185,13 @@ Then a blank line and the column-aligned `#pragma parameter` lines.
   these headers has produced stray fragments and a duplicated licence block.
 - The `#ifdef` fallback `#define`s must equal the `#pragma` defaults. A host
   that does not parse pragmas renders the fallbacks. `check.py` gates this.
+
+**Comments in the body are short and local.** It is a shader, not a research
+paper: say what a line does and why it is not the obvious thing, in a few lines.
+Measurements, rejected approaches and the argument for a design belong in
+`docs/<family>.md`, which is where anyone looking for them will go. A shader
+that was 184 comment lines against 153 of code was not better documented, it was
+harder to read.
 
 ## GLSL traps that actually bit
 
@@ -221,6 +260,8 @@ in three shaders at once while chasing an unrelated bug.
   the thing that was looked at and judged** — change what is written down.
 - `git diff` before touching anything anomalous. A working tree that differs
   from HEAD is somebody's work, possibly another agent's mid-edit.
+- **Answer the question that was asked.** A question about the code is not
+  permission to change it. If the answer suggests a fix, say so and stop.
 
 ## Commits
 

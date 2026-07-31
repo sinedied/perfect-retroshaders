@@ -48,6 +48,12 @@ cases = [
 # where an exact box average alone leaves 0.349. See box_floor() in measure.py.
 moire = 0.40
 
+# The plain scaler every family is diffed against with its effects switched off,
+# and which is itself proven equal to the vendored pixellate. Declared rather
+# than hardcoded in the test: naming a version in code is how a reference
+# silently stops moving when the family does.
+scaler_reference = "pixel-perfect-v1.glsl"
+
 # The smallest pitch any shader here puts a pattern at, in output pixels. Both
 # crt-perfect and lcd-perfect lock to this when source cells get too small to
 # carry the pattern, so it is the floor of what counts as signal.
@@ -69,7 +75,7 @@ cp_curvature = 0.10
 [[shader]]
 name = "pixel-perfect-v1.glsl"
 family = "pixel-perfect"
-role = ["released"]
+role = ["archive"]
 # The scaler every other shader in this repo is built on, and the only one with
 # a genuine third-party reference to check against.
 equivalent_to = "pixellate.glsl"
@@ -85,7 +91,7 @@ neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamm
 [[shader]]
 name = "crt-perfect-v5b.glsl"
 family = "crt-perfect"
-role = ["released"]
+role = ["archive"]
 pattern = "output-locked"
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0 }
 # PSP into 640x480, pre-existing and unreviewed. Not a regression: it has read
@@ -117,7 +123,7 @@ moire_allow = [
 [[shader]]
 name = "lcd-perfect-v3.glsl"
 family = "lcd-perfect"
-role = ["released"]
+role = ["archive"]
 pattern = "whole-cell"
 neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
 
@@ -133,7 +139,7 @@ name = "dmg-perfect-v9.glsl"
 family = "dmg-perfect"
 # No un-suffixed file exists; v9 is what the README links, so it is both what
 # ships and what a default run gates on.
-role = ["released", "current"]
+role = ["current"]
 neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
 
 

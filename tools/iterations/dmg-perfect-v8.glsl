@@ -1,4 +1,4 @@
-// dmg-perfect - a Game Boy dot matrix over a pixel-perfect scale.
+// dmg-perfect v8 - a Game Boy dot matrix over a pixel-perfect scale.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
@@ -17,10 +17,12 @@
 //   dp_grid           0.00 - 1.00  Grid visibility. 0 disables it.
 //   dp_gap            0.25 - 2.00  Grid line thickness, in pixels.
 //   dp_shadow         0.00 - 1.00  Shadow cast by driven dots. 0 disables it.
+//   dp_red            0.00 - 2.00  Red gain. 1.00 disables it.
+//   dp_green          0.00 - 2.00  Green gain. 1.00 disables it.
+//   dp_blue           0.00 - 2.00  Blue gain. 1.00 disables it.
+//   dp_contrast       0.00 - 1.00  Contrast wheel. 1.00 disables it.
 //   dp_brightness     0.25 - 4.00  Output gain.
 //   dp_gamma          0.50 - 2.00  Output gamma. 1.00 disables it.
-//   dp_temperature   -1.00 - 1.00  Warm above 0, cool below. 0.00 is off.
-//   dp_tint          -1.00 - 1.00  Green above 0, magenta below. 0.00 is off.
 // -----------------------------------------------------------------------------
 // Draws a Game Boy's dot matrix over a pixel-perfect scale. It reproduces, in a
 // single pass, what you get by drawing the matrix at a whole scale factor and
@@ -50,25 +52,35 @@
 // - The shadow's distance and softness are fixed in source pixels, so they
 //   hold their proportions at every resolution rather than shrinking as the
 //   screen grows.
+// - dp_contrast is the wheel on the side of the console. 1.00 is the wheel at
+//   its correct setting and lower turns it down, washing the picture out
+//   towards a blank undriven panel; at 0.00 nothing is driven at all. It
+//   leaves the gaps alone, since no bias voltage ever reaches them.
+// - It does not go past 1.00, and that is not an oversight. Driving harder
+//   than normal has to push the darkest shade below black, and clipping after
+//   the blend is the one thing that reliably brings the moire back. Every
+//   setting it does accept clips nothing at all. For a darker picture reach
+//   for dp_gamma, which costs some evenness but never clips.
+// - dp_red, dp_green and dp_blue trim the colour balance, which is worth having
+//   because Game Boy palettes vary a lot between cores and none of them is
+//   neutral. They are plain gains, so above 1.00 they clip; the usual way to
+//   warm or cool a picture is to pull the other two channels down instead.
 // - dp_shadow is usable across most of its range: measured on a Game Boy
 //   palette it costs 0.24 at 0.25, 0.29 at 0.45 and 0.39 at 0.70, against a
 //   visible threshold of 0.4, so only the top of the range is worth avoiding.
-// - dp_temperature and dp_tint are the two axes of a white balance, worth
-//   having because Game Boy palettes vary a lot between cores and none of them
-//   is neutral. Useful trims are small, roughly within 0.20; the rest of the
-//   range is there for effect. They shift the overall level a little as well
-//   as the colour, which dp_brightness can take back out.
 // - Set dp_brightness 1.20 and dp_gamma 1.40 for dmg_dot_matrix's own tone.
 //   Both sit after the blend, so they trade a little of the evenness the rest
 //   of this buys; the defaults leave them neutral and the trade to you.
 
-#pragma parameter dp_grid        "Grid visibility"          0.30  0.00 1.00 0.01
-#pragma parameter dp_gap         "Grid line px"             1.00  0.25 2.00 0.05
-#pragma parameter dp_shadow      "Dot shadow"               0.00  0.00 1.00 0.01
-#pragma parameter dp_brightness  "Brightness"               1.00  0.25 4.00 0.05
-#pragma parameter dp_gamma       "Gamma"                    1.00  0.50 2.00 0.05
-#pragma parameter dp_temperature "Warm / cool balance"      0.00 -1.00 1.00 0.01
-#pragma parameter dp_tint        "Green / magenta balance"  0.00 -1.00 1.00 0.01
+#pragma parameter dp_grid          "Grid visibility"       0.30 0.00 1.00 0.01
+#pragma parameter dp_gap           "Grid line px"          1.00 0.25 2.00 0.05
+#pragma parameter dp_shadow        "Dot shadow"            0.00 0.00 1.00 0.01
+#pragma parameter dp_red           "Red gain"              1.00 0.00 2.00 0.01
+#pragma parameter dp_green         "Green gain"            1.00 0.00 2.00 0.01
+#pragma parameter dp_blue          "Blue gain"             1.00 0.00 2.00 0.01
+#pragma parameter dp_contrast      "Contrast wheel"        1.00 0.00 1.00 0.01
+#pragma parameter dp_brightness    "Brightness"            1.00 0.25 4.00 0.05
+#pragma parameter dp_gamma         "Gamma"                 1.00 0.50 2.00 0.05
 
 #if defined(VERTEX)
 
@@ -143,18 +155,22 @@ COMPAT_VARYING vec4 TEX0;
 uniform COMPAT_PRECISION float dp_grid;
 uniform COMPAT_PRECISION float dp_gap;
 uniform COMPAT_PRECISION float dp_shadow;
+uniform COMPAT_PRECISION float dp_red;
+uniform COMPAT_PRECISION float dp_green;
+uniform COMPAT_PRECISION float dp_blue;
+uniform COMPAT_PRECISION float dp_contrast;
 uniform COMPAT_PRECISION float dp_brightness;
 uniform COMPAT_PRECISION float dp_gamma;
-uniform COMPAT_PRECISION float dp_temperature;
-uniform COMPAT_PRECISION float dp_tint;
 #else
 #define dp_grid 0.30
 #define dp_gap 1.0
 #define dp_shadow 0.0
+#define dp_contrast 1.0
 #define dp_brightness 1.0
 #define dp_gamma 1.0
-#define dp_temperature 0.0
-#define dp_tint 0.0
+#define dp_red 1.0
+#define dp_green 1.0
+#define dp_blue 1.0
 #endif
 
 // The substrate a DMG's gaps show: undriven crystal at its lightest state.
@@ -280,6 +296,50 @@ void main()
                    mix(vec3(DMG_SUBSTRATE), dotm * dp_brightness, dot2d),
                    dp_grid);
 
+    // The contrast wheel on the side of a Game Boy.
+    //
+    // It is a potentiometer on the LCD board that sets the amplitude of the
+    // V0-V5 bias ladder the driver builds its drive levels from, so it scales
+    // how hard every pixel is driven at once. Turned down the picture washes
+    // out into undriven panel, which is the light limit a real one has.
+    //
+    // That is an affine map on the panel's output, and affine is the one thing
+    // that may sit after the blend: the scaler's weights sum to one, so
+    // a*(sum w_i x_i) + b == sum w_i*(a*x_i + b) exactly, and it costs a
+    // quarter of what applying it to the four taps would. It is the converse
+    // of the rule against post-blend non-linearity rather than an exception to
+    // it.
+    //
+    // Pivoting on DMG_SUBSTRATE is what makes one multiply-add enough. The
+    // substrate is the map's fixed point, so applying it to the finished
+    // colour leaves the gaps exactly where they were - which is correct, since
+    // a gap has no electrode over it and no bias voltage can reach it.
+    //
+    // It stops at 1.00 on purpose. The map sends [0,1] to [1 - c, 1], so at or
+    // below 1.00 nothing can leave the range whatever the source or the
+    // palette, and above it the low end is clipped by exactly c - 1. That is a
+    // property of the map, not of any particular content, and a clip after the
+    // blend is a coverage-dependent shift on every partial pixel - measured on
+    // a Game Boy palette, 1.15 already reads 1.54 beat against a floor of 0.19.
+    // Every setting this shader will accept clips nothing and measures at or
+    // below that floor. libretro's Game Boy shader, the only other one with
+    // this control, ships exactly the same range for what is very likely the
+    // same reason.
+    //
+    // Written as a folded gain and offset rather than as a mix so that 1.00 is
+    // col * 1.0 + 0.0, which is bit-exact; mix(p, col, 1.0) is only exactly col
+    // if the driver spells mix as x*(1-a) + y*a, and drivers ship the other
+    // form. Both coefficients are uniform, so they are computed once per draw.
+    //
+    // Unbranched on purpose, unlike the gamma and the colour trim below. A
+    // uniform branch round it was measured and bought nothing at all - 105.5%
+    // of the yardstick unbranched against 105.7% branched-and-skipped, inside
+    // the noise - because the control costs about 2.4 points whether it is
+    // enabled or not, and skipping the multiply-add is not what that pays for.
+    // With the shadow on the branch was a point *worse*. So the fold is the
+    // whole of the no-op guarantee here, and it is an exact one.
+    col = col * dp_contrast + (1.0 - dp_contrast) * DMG_SUBSTRATE;
+
     // A cast shadow, so the dots read as sitting above the panel rather than
     // being printed on it.
     //
@@ -395,38 +455,24 @@ void main()
     }
 
 
-    // The two axes of a white balance, for panels and palettes that are not
-    // neutral - and Game Boy palettes vary a lot between cores, none of them
-    // neutral. Warm/cool trades red against blue, tint trades green against
-    // both. Two axes rather than three per-channel gains: the pair is what
-    // people actually reach for, and a gain above 1 on one channel only warms
-    // a picture by clipping it.
-    //
-    // A multiply is affine, so applying it here is identical to applying it to
-    // the four taps - the blend weights sum to one - at a quarter of the cost,
-    // and it is not the kind of post-blend non-linearity that would beat
-    // against the pixel grid. It goes on the finished colour rather than the
-    // taps on purpose: the substrate is part of the panel, so it should take
-    // the same tint as the picture.
-    //
-    // Not normalised on luma, so these shift the level a little as well as the
-    // colour; dp_brightness takes that back out.
-    //
-    // The guard is exact, and tests the two controls separately: both are true
-    // no-ops at 0.0, so there is nothing an epsilon would protect against, and
-    // a sum would let a warm temperature cancel a cool tint into a false
-    // neutral. The branch is uniform across the draw, so a balance left alone
-    // costs nothing rather than merely doing nothing.
-    if (dp_temperature != 0.0 || dp_tint != 0.0) {
-        col *= 1.0 + dp_temperature * vec3(1.0, 0.0, -1.0)
-                   + dp_tint        * vec3(-0.5, 1.0, -0.5);
-    }
-
     // The branch is uniform across the draw, so a gamma of 1 costs nothing. The
     // base is clamped because pow(0, g) is undefined and returns NaN on real
     // drivers, and black texels are everywhere; 1e-8 is small enough that pure
     // black still encodes to 0 even at the lowest gamma, where 1e-5 would lift
     // it to 1/255.
+    // Per-channel trim. A gain is affine, so applying it here is identical to
+    // applying it to the four taps - the blend weights sum to one - at a
+    // quarter of the cost, and it is not the kind of post-blend non-linearity
+    // that would beat against the pixel grid. It goes on the finished colour
+    // rather than the taps on purpose: the substrate is part of the panel, so
+    // it should take the same tint as the picture.
+    //
+    // The branch is uniform across the draw, so a neutral balance costs
+    // nothing, which is the only reason it is a branch and not three multiplies.
+    if (abs(dp_red - 1.0) + abs(dp_green - 1.0) + abs(dp_blue - 1.0) > 0.001) {
+        col *= vec3(dp_red, dp_green, dp_blue);
+    }
+
     if (abs(dp_gamma - 1.0) > 0.001) {
         col = pow(max(col, 1e-8), vec3(dp_gamma));
     }

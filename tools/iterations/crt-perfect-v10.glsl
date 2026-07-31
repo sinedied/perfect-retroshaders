@@ -1,4 +1,4 @@
-// crt-perfect-v10 - scanlines, an RGB mask and curvature, pixel-perfect scale.
+// crt-perfect v10 - scanlines, an RGB mask and curvature, pixel-perfect scale.
 // -----------------------------------------------------------------------------
 // Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied
@@ -163,27 +163,13 @@ void main()
 {
     vec2 texelSize = SourceSize.zw;
 
-    // Curvature, normalised so the screen corners land exactly on the image
-    // corners. The divisor IS the zoom: no solving, no black frame, and the
-    // whole screen stays covered.
-    // Barrel distortion. The warp itself is c * (1 + k*r2); what it is divided
-    // by is the entire design decision, and it is not obvious from the algebra.
-    //
-    //   nothing        the image shrinks into a barrel and there is black on all
-    //                  four sides
-    //   (1 + 2k)       the CORNER value, so the corners sit at 1:1 and the whole
-    //                  border is cropped off-screen. The curved edge is the cue
-    //                  that reads as a tube, so losing it leaves only the middle
-    //                  magnification, which looks like a lens bump
-    //   (1 + k)        the EDGE-MIDPOINT value, used here. r2 is 1 at an edge
-    //                  midpoint, so the factor is exactly 1 and the image edge
-    //                  lands on the screen edge. At a corner r2 is 2, the factor
-    //                  exceeds 1, and the sample falls outside the image - which
-    //                  is the tube's rounded corner
-    //
-    // So nothing is ever cropped, the picture reaches all four screen edges, and
-    // the only black left is in the corners. Both axes normalise by the same
-    // constant, so this is symmetric at any aspect ratio.
+    // Barrel distortion. The warp is c * (1 + k*r2); the divisor is the whole
+    // design decision. (1 + k) is the edge-midpoint value, so an image edge
+    // lands exactly on the screen edge and nothing is ever cropped, while the
+    // corners fall outside the image and become the tube's rounded corners.
+    // The corner value (1 + 2k) instead crops the entire border and reads as a
+    // lens bump; no divisor at all leaves black on all four sides. Both axes
+    // use the same constant, so it is symmetric at any aspect ratio.
     vec2  uv   = vTexCoord;
     vec2  jac  = vec2(1.0);
     float tube = 1.0;
@@ -200,10 +186,9 @@ void main()
                                    + vec2(1.0, 3.0) * cc.y)) * norm;
         noWarp = 0.0;
 
-        // The corners reach past the image, so they have to be masked rather
-        // than left to the sampler: it clamps to edge, which stretches the
-        // border texel across the whole corner instead of showing nothing.
-        // Faded over one output pixel so the curve does not stair-step.
+        // The corners reach past the image and must be masked: the sampler
+        // clamps to edge, which would stretch the border texel across the
+        // whole corner. Faded over one pixel so the curve does not stair-step.
         vec2 e  = outsize.zw;
         vec2 aa = smoothstep(vec2(0.0), e, uv) * smoothstep(vec2(0.0), e, 1.0 - uv);
         tube = aa.x * aa.y;
@@ -236,34 +221,25 @@ void main()
         color = pow(max(color, 1e-8), vec3(cp_gamma));
     }
 
-    // The patterns are positioned in tube space, so they curve with the glass
-    // the way a real mask and a real beam do. Their pitch, however, is the flat
-    // one: see the note below the floor.
+    // Positioned in tube space, so the patterns curve with the glass. Their
+    // pitch is the flat one - see the note below the floor.
     float scanSrcPitch = OutputSize.y / max(InputSize.y, 1.0);
     float scanPitch    = max(scanSrcPitch, cp_min_pitch);
     float scanLocked   = (1.0 - smoothstep(cp_min_pitch * 1.001, cp_min_pitch * 1.02, scanSrcPitch)) * noWarp;
     float scanFreq     = 1.0 / scanPitch;
 
-    // Pitch and band-limit are both computed as though the screen were flat,
-    // and neither takes any account of the curvature.
+    // Pitch and band-limit are computed as though the screen were flat, on two
+    // counts. It keeps the pattern locked to the source - one cycle per source
+    // line - which is what makes scanlines read as scanlines; scaling the pitch
+    // by the frame's worst magnification turned 240 source lines into 201. And
+    // it keeps the argument uniform, so the driver hoists boxSinc's sin and
+    // nyquistFade's smoothstep out of the fragment shader. Making it vary per
+    // pixel cost 16.5 points of frame time, paid even with curvature off.
     //
-    // That is deliberate on two counts. It keeps the pattern locked to the
-    // source - one cycle per source line, one triad per source column - which
-    // is the property that makes scanlines read as scanlines, and scaling the
-    // pitch by the frame's worst magnification quietly broke it: 240 source
-    // lines came out as 201 scanlines at cp_curvature 0.10. And it keeps the
-    // argument a uniform expression, so the driver hoists boxSinc's sin and
-    // nyquistFade's smoothstep out of the fragment shader and runs them once
-    // per draw. Making that argument vary per pixel costs two sin and two
-    // smoothstep per fragment - 16.5 points of frame time, paid even with
-    // curvature off.
-    //
-    // The cost is that the magnified corners run finer than the band-limit
-    // assumes, so the pattern is drawn slightly stronger there than its true
-    // box average. It stays above two output pixels per cycle at every setting
-    // in range, so it is over-contrast and not aliasing, and curvature is a
-    // distortion by construction - artifacts it creates in the region it is
-    // distorting are the effect, not a defect in the pattern.
+    // The magnified corners therefore run slightly stronger than their true box
+    // average. Still above two output pixels per cycle at every setting, so it
+    // is over-contrast rather than aliasing - and curvature is a distortion by
+    // construction. See docs/crt-perfect.md.
     float scanLocal    = scanFreq;
 
     float scanAmp = cp_scanlines * mix(nyquistFade(scanLocal), 1.0, scanLocked);

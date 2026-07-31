@@ -1,5 +1,5 @@
 /*
-    crt-perfect-v4 - moire-free CRT scanlines and RGB mask with pixel-perfect
+    crt-perfect v4 - moire-free CRT scanlines and an RGB mask, pixel-perfect.
     scaling, down to a 640x480 target.
 
     Author:  sinedied
