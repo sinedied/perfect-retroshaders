@@ -63,32 +63,38 @@ SHADERS_DECLARED = {s["name"]: s for s in _DOC["shader"]}
 GOLDEN = _DOC.get("golden", {})
 
 
-def declared(name):
-    """A shader's entry, with a release inheriting from the iteration it copies.
+def _resolve_releases():
+    """Give every release its source's keys, once, before anything reads them.
 
-    A release is byte-identical to its source, so every fact about how to
-    measure it - which sampler, where its pattern sits, which moire exceedances
-    were granted - is identical too. Repeating them would be two places to
-    forget. Not inheriting them at all is worse and was the first thing that
-    happened: lcd-perfect.glsl lost `pattern`, the moire band then cut through
-    its own mesh, and the copy measured 5.823 where the file it was copied from
-    measured 0.365.
+    A release is byte-identical to the iteration it copies, so every fact about
+    how to measure it - sampler, where its pattern sits, which moire exceedances
+    were granted - is identical too. Repeating them in the file would be two
+    places to forget; not inheriting them at all measured lcd-perfect.glsl at
+    5.823 where the file it was copied from measured 0.365.
+
+    Resolved eagerly rather than on first access. Doing it lazily meant the
+    answer depended on whether something had happened to call declared() first:
+    pattern_freq() reads this dict directly, so the same shader at the same
+    scale returned a different band before and after, and only the gate's
+    happening to resolve early kept it right.
     """
+    for name, entry in list(SHADERS_DECLARED.items()):
+        if RELEASED not in entry.get("role", ()):
+            continue
+        v = version(name)
+        src = f"{entry['family']}-v{v}.glsl" if v else None
+        if src in SHADERS_DECLARED:
+            merged = dict(SHADERS_DECLARED[src])
+            merged.update(entry)      # the release's own keys win
+            merged["source"] = src
+            SHADERS_DECLARED[name] = merged
+
+
+def declared(name):
+    """A shader's entry, releases already carrying their source's keys."""
     if name not in SHADERS_DECLARED:
         raise KeyError(f"{name} is not declared in tools/baseline.toml")
-    entry = SHADERS_DECLARED[name]
-    if RELEASED not in entry.get("role", ()) or entry.get("_resolved"):
-        return entry
-    v = version(name)
-    src = f"{entry['family']}-v{v}.glsl" if v else None
-    if src in SHADERS_DECLARED:
-        merged = dict(SHADERS_DECLARED[src])
-        merged.update(entry)          # the release's own keys win
-        merged["_resolved"] = True
-        SHADERS_DECLARED[name] = merged
-        return merged
-    entry["_resolved"] = True
-    return entry
+    return SHADERS_DECLARED[name]
 
 
 def family(name):
@@ -191,6 +197,7 @@ def filename_version(name):
 def source_iteration(name):
     """For a release copy, the iteration it must be identical to."""
     return f"{family(name)}-v{version(name)}.glsl"
+
 
 
 def moire_allowance(name, case):
@@ -553,3 +560,9 @@ class Report:
             return 1
         print(f"{self.title}: \033[32m{self.checked} ok\033[0m")
         return 0
+
+
+# Fold each release's source keys into it, at import, before any caller can
+# observe an unresolved entry. Last in the file because it needs version(),
+# which needs TITLE and read().
+_resolve_releases()

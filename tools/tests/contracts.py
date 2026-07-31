@@ -27,6 +27,23 @@ def _endpoints(name):
 def run(names, ctx, progs, report, cases=None):
     cases = cases or c.CASES
 
+    # A release is a byte copy of an iteration, so every tool must measure the
+    # two the same way. This is checked on the raw declaration rather than
+    # through a render, because the failure it guards against was invisible in
+    # the output: the release lost its `pattern` key, the moire band was then
+    # derived on the wrong rule, and the copy scored 5.823 against its source's
+    # 0.365 while both files were identical on disk.
+    for fam in c.families():
+        rel, src = c.released(fam), c.current(fam)
+        if rel is None:
+            continue
+        shared = [k for k in c.declared(src)
+                  if k not in ("name", "role", "source")]
+        differ = [k for k in shared
+                  if c.declared(rel).get(k) != c.declared(src).get(k)]
+        report.check(not differ, f"{rel} is measured like {src}",
+                     f"differs on {differ}" if differ else "")
+
     for name in names:
         bad = []
         for param, v in _endpoints(name):
@@ -51,6 +68,30 @@ def run(names, ctx, progs, report, cases=None):
 
     # The scaler anchor. Skipped where a shader declares no neutral setting,
     # which means it has no configuration in which it is just a scaler.
+    # A `neutral` block that omits a parameter silently tests less than it
+    # claims. Rather than keep a hand-written list of which omissions are fine -
+    # which would rot the moment a parameter gained an effect - each one is
+    # proved irrelevant: with the neutral block applied, sweeping it to either
+    # end of its range must change nothing at all.
+    src = c.scene(320, 240)
+    for name in names:
+        neutral = c.declared(name).get("neutral")
+        if neutral is None:
+            continue
+        ref = c.render(ctx, progs, name, src, 1024, 768, **neutral)
+        live = []
+        for param, (_lab, _d, lo, hi, _st) in c.parameters(name).items():
+            if param in neutral:
+                continue
+            for v in (lo, hi):
+                out = c.render(ctx, progs, name, src, 1024, 768,
+                               **dict(neutral, **{param: v}))
+                if m.worst_diff(ref, out) > c.TOLERANCE:
+                    live.append(f"{param}={v:g}")
+        report.check(not live, f"{name} neutral block covers everything that acts",
+                     f"still changes the picture: {', '.join(live)}"
+                     if live else "")
+
     base = c.SCALER_REFERENCE
     for name in names:
         neutral = c.declared(name).get("neutral")

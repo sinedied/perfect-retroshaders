@@ -4,12 +4,17 @@ import numpy as np
 
 import common as c
 
-CURRENT = "lcd-perfect-v4.glsl"
+# The shader under test is whichever version is current, read from the manifest.
+# Naming it here is how this file spent a release testing v4 while v5 shipped:
+# the constant was right when it was written and nothing rechecks a constant.
+CURRENT = c.current("lcd-perfect")
 
-# v4 is v3's arithmetic rearranged, not retuned: the mesh, its box filter and
-# the stripes all live on the same angle, so one sine and one cosine of it
+# The rearrangement claim is about two specific versions and stays pinned to
+# them. v4 is v3's arithmetic rearranged, not retuned: the mesh, its box filter
+# and the stripes all live on the same angle, so one sine and one cosine of it
 # replace four evaluations through the angle-sum identities. That is a claim
 # about the picture, so it is checked as one.
+REARRANGED = "lcd-perfect-v4.glsl"
 PREVIOUS = "lcd-perfect-v3.glsl"
 
 # The controls. These are real lcd-perfect versions with real differences from
@@ -39,14 +44,15 @@ SWEEP = [
 ]
 
 
-def _worst(ctx, progs, other, cases, sweep):
-    """Worst 8-bit difference between CURRENT and another version."""
+def _worst(ctx, progs, other, cases, sweep, subject=None):
+    """Worst 8-bit difference between `subject` and another version."""
+    subject = subject or CURRENT
     worst, at = 0, ""
     for case in cases:
         sw, sh, ow, oh = case
         src = c.scene(sw, sh)
         for params in sweep:
-            a = c.render(ctx, progs, CURRENT, src, ow, oh, **params)
+            a = c.render(ctx, progs, subject, src, ow, oh, **params)
             b = c.render(ctx, progs, other, src, ow, oh, **params)
             d = int(np.abs(a.astype(int) - b.astype(int)).max())
             if d > worst:
@@ -59,17 +65,17 @@ def run(names, ctx, progs, report, cases=None):
     cases = cases or c.CASES
 
     # The rewrite's whole claim: same picture, less arithmetic.
-    worst, at = _worst(ctx, progs, PREVIOUS, cases, SWEEP)
+    worst, at = _worst(ctx, progs, PREVIOUS, cases, SWEEP, REARRANGED)
     report.check(worst <= c.TOLERANCE,
-                 f"{CURRENT} is {PREVIOUS} rearranged",
+                 f"{REARRANGED} is {PREVIOUS} rearranged",
                  f"worst {worst}/255 at {at}")
 
     # ... and the control, so that check means something. These have to differ
     # by more than the tolerance or the comparison above proves nothing.
     for old in SUPERSEDED:
-        seen, at = _worst(ctx, progs, old, cases, [{}])
+        seen, at = _worst(ctx, progs, old, cases, [{}], REARRANGED)
         report.check(seen > c.TOLERANCE,
-                     f"{old} is NOT {CURRENT}, so the check can fail",
+                     f"{old} is NOT {REARRANGED}, so the check can fail",
                      f"worst {seen}/255 at {at}")
 
     # lp_layout is documented as stripe order. If it really is only that, BGR

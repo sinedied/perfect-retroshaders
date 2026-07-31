@@ -55,7 +55,7 @@ A clean upscale: every source pixel becomes an even block, with no shimmer and n
 | Magenta / green balance | −1.00 – 1.00 | 0.00 | Green above 0, magenta below. |
 
 > [!NOTE]
-> Output is identical to the well-known `pixellate` shader with default params, but with a better performance.
+> Output matches the well-known `pixellate` shader to within 1 level out of 255 at default params, and runs faster.
 
 #### crt-perfect
 
@@ -94,7 +94,7 @@ A handheld LCD look: a soft backlit mesh with RGB subpixel stripes, over a clean
 > [!TIP]
 > - **Set stripe order to BGR (1) for Game Boy Advance content.** The GBA panel really is laid out blue-green-red, so RGB puts the colour fringes on the wrong side.
 >
-> - **Row/column balance** decides which way the grid leans. Real panels are row-dominant; around 0.80 matches the look of `lcd1x` if that is what you are used to.
+> - **Row/column balance** decides which way the grid leans: 0 is all rows, 1 all columns. Real panels lean towards rows; `lcd1x` leans the other way, at around 0.80.
 
 #### dmg-perfect
 
@@ -115,6 +115,9 @@ An original Game Boy look: the dot matrix grid with its pale gaps, over a clean 
 >
 > - **Dot shadow** lifts the dots off the panel, as if lit from above. It is off by default. Only driven pixels cast one.
 
+> [!NOTE]
+> Brightness and gamma are the two controls applied after the image is scaled, so they are the two worth a light touch. The defaults keep the clipping in the highlights, where it reads like a real screen; pushing brightness much past 1.50 can start to show a faint pattern on dense content at some scales.
+
 ## Performance
 
 Measured against [`pixellate`](tools/vendor/pixellate.glsl), the shader most people already use for clean upscaling, at 320x240 into 1024x768. Two rows per shader: as it ships, and with every effect it has turned up.
@@ -133,9 +136,9 @@ Measured against [`pixellate`](tools/vendor/pixellate.glsl), the shader most peo
 
 `pixel-perfect` is a drop-in replacement for `pixellate` that produces the same image with better performance. The three effect shaders do considerably more and still stay within a tenth of it at their defaults, because the expensive part of all four is the same scaler underneath.
 
-*Active instructions* are what actually runs at those settings, not what the file contains: every optional feature sits behind a check on its own parameter, so a control left alone is skipped rather than computed and thrown away. That is why the two rows differ, and why turning curvature, the dot shadow or a colour balance off costs almost nothing.
+*Active instructions* are what survives once the parameters are fixed at those settings and the branches they control are resolved: every optional feature sits behind a check on its own parameter, so a control left alone can be skipped rather than computed and thrown away. That is why the two rows differ, and why turning curvature or the dot shadow off costs almost nothing. A driver compiling against live uniforms may keep more than this, so read the two rows as the span between them rather than as a literal count.
 
-Speed is throughput: 127% means the same GPU time buys 27% more frames than `pixellate` does. The instruction and tap counts come from the compiled shader and are exact. The timings are from a desktop GPU, not a handheld so consider them a rough guide.
+Speed is throughput: 127% means the same GPU time buys 27% more frames than `pixellate` does. The counts come from the compiled shader; the timings are from a desktop GPU, not a handheld, so consider them a rough guide rather than a prediction.
 
 ## Related
 

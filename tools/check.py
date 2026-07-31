@@ -224,8 +224,13 @@ def fallbacks(name):
         d = DEFINE.match(line)
         if d:
             defs[d.group(1)] = float(d.group(2))
-    return [(k, prag[k], defs[k]) for k in prag
-            if k in defs and abs(prag[k] - defs[k]) > 1e-9]
+    out = [(k, prag[k], defs[k]) for k in prag
+           if k in defs and abs(prag[k] - defs[k]) > 1e-9]
+    # A parameter with no fallback at all is worse than one that disagrees: on
+    # a host that does not parse pragmas it is simply undefined. Comparing only
+    # the overlap could never see that, so the two sets have to match.
+    out += [(k, prag[k], None) for k in prag if k not in defs]
+    return out
 
 
 def run(names, report, also_compile=None):
@@ -241,8 +246,10 @@ def run(names, report, also_compile=None):
                      "" if not errors else errors[0])
 
     for name in names:
-        errors = header(name) + [f"{k}: #pragma {p:g} but #define fallback {d:g}"
-                                 for k, p, d in fallbacks(name)]
+        errors = header(name) + [
+            f"{k}: no #define fallback" if d is None else
+            f"{k}: #pragma {p:g} but #define fallback {d:g}"
+            for k, p, d in fallbacks(name)]
         n = len(c.parameters(name))
         report.check(not errors, f"{name} header",
                      f"{n} parameters" if not errors else "; ".join(errors))

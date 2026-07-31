@@ -184,18 +184,17 @@ role = ["released"]
 name = "dmg-perfect-v9.glsl"
 family = "dmg-perfect"
 # dp_gamma ships at 1.20 and this shader applies gamma after the blend, so it
-# beats out of the box. An owner decision, taken by eye: the alternative is
-# gamma on the four taps, which measures 0.388 flat at every setting and costs
-# 18 more SFU. Pinned per case so it cannot get worse without failing, and
-# printed on every run so it cannot be forgotten. At dp_gamma 1.00 all six drop
-# to 0.388 or below.
+# beats out of the box. An owner decision, taken by eye.
+#
+# These figures are on a real Game Boy palette, not a black-and-white
+# checkerboard. That matters more than it sounds: a plain checkerboard's light
+# square is white, which no DMG ever displays, and it read 4.621 here against
+# 0.485 on the palette a core actually outputs. The palette source existed for
+# this reason and was simply never wired up.
 moire_allow = [
-    { case = [320, 240, 1024, 768], value = 1.443 },
-    { case = [256, 224, 1024, 768], value = 1.264 },
-    { case = [240, 160, 1024, 768], value = 0.948 },
-    { case = [160, 144, 1024, 768], value = 1.018 },
-    { case = [480, 272, 1024, 768], value = 1.413 },
-    { case = [480, 272,  640, 480], value = 4.621 },
+    { case = [320, 240, 1024, 768], value = 0.443 },
+    { case = [480, 272, 1024, 768], value = 0.422 },
+    { case = [480, 272,  640, 480], value = 0.485 },
 ]
 # No un-suffixed file exists; v9 is what the README links, so it is both what
 # ships and what a default run gates on.

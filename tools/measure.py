@@ -141,6 +141,19 @@ def box_floor(case):
     return _FLOORS[case]
 
 
+def source_for(name):
+    """The checkerboard a family should be measured on.
+
+    A plain checkerboard's light square IS white, so every fault that depends on
+    the difference between white and the panel's own paper is invisible on it -
+    which is exactly the fault a DMG shader can have, since its grid is lighter
+    than a lit pixel rather than darker. The palette source existed for this and
+    was never wired up, so the DMG shaders were measured on the one input that
+    cannot show their characteristic defect.
+    """
+    return dmg_checkerboard if c.family(name) == "dmg-perfect" else c.checkerboard
+
+
 def moire(ctx, progs, name, case, source=None, **override):
     """What the SHADER adds, over what the scale factor makes unavoidable.
 
@@ -161,7 +174,7 @@ def moire(ctx, progs, name, case, source=None, **override):
     discriminating case is the one that looked worst.
     """
     sw, sh, ow, oh = case
-    src = (source or c.checkerboard)(sw, sh)
+    src = (source or source_for(name))(sw, sh)
     img = c.render(ctx, progs, name, src, ow, oh, **override)
     raw = beat(img, sw, sh, pattern_freq(name, sw, sh, ow, oh))
     floor = box_floor(case)
