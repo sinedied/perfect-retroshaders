@@ -119,23 +119,23 @@ An original Game Boy look: the dot matrix grid with its pale gaps, over a clean 
 
 Measured against [`pixellate`](tools/vendor/pixellate.glsl), the shader most people already use for clean upscaling, at 320x240 into 1024x768. Two rows per shader: as it ships, and with every effect it has turned up.
 
-| Shader | Active instructions | Texture taps | Frame time vs `pixellate` |
+| Shader | Active instructions | Texture taps | Speed vs `pixellate` |
 |---|---|---|---|
 | `pixellate` (baseline) | 240 | 4 | 100% |
-| **`pixel-perfect`**, defaults | **111** | 4 | **79%** |
-| `pixel-perfect`, everything on | 143 | 4 | 81% |
-| `dmg-perfect`, defaults | 265 | 4 | 103% |
-| `dmg-perfect`, everything on | 447 | 8 | 129% |
-| `lcd-perfect`, defaults | 334 | 4 | 107% |
-| `lcd-perfect`, everything on | 339 | 4 | 107% |
-| `crt-perfect`, defaults | 428 | 4 | 107% |
-| `crt-perfect`, everything on | 503 | 4 | 116% |
+| **`pixel-perfect`**, defaults | **111** | 4 | **127%** |
+| `pixel-perfect`, everything on | 143 | 4 | 123% |
+| `dmg-perfect`, defaults | 265 | 4 | 97% |
+| `dmg-perfect`, everything on | 447 | 8 | 78% |
+| `lcd-perfect`, defaults | 334 | 4 | 94% |
+| `lcd-perfect`, everything on | 339 | 4 | 94% |
+| `crt-perfect`, defaults | 428 | 4 | 93% |
+| `crt-perfect`, everything on | 503 | 4 | 86% |
 
-`pixel-perfect` is a drop-in replacement for `pixellate` that produces the same image with better performance. The three effect shaders do considerably more and still land within a tenth of it, because the expensive part of all four is the same scaler underneath.
+`pixel-perfect` is a drop-in replacement for `pixellate` that produces the same image with better performance. The three effect shaders do considerably more and still stay within a tenth of it at their defaults, because the expensive part of all four is the same scaler underneath.
 
 *Active instructions* are what actually runs at those settings, not what the file contains: every optional feature sits behind a check on its own parameter, so a control left alone is skipped rather than computed and thrown away. That is why the two rows differ, and why turning curvature, the dot shadow or a colour balance off costs almost nothing.
 
-The instruction and tap counts come from the compiled shader and are exact. The frame times are from a desktop GPU, not a handheld so consider them a rough guide.
+Speed is throughput: 127% means the same GPU time buys 27% more frames than `pixellate` does. The instruction and tap counts come from the compiled shader and are exact. The timings are from a desktop GPU, not a handheld so consider them a rough guide.
 
 ## Related
 

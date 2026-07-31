@@ -370,13 +370,16 @@ def main():
           f"queried draws,\n{PASSES} interleaved passes after {WARMUP} "
           f"discarded. Not the target GPU: read\nthe ratios, and only where "
           f"they clear the spread.\n")
+    # Reported as throughput against the baseline, not as frame time: bigger is
+    # better, and a budget is easier to reason about that way round. 127% means
+    # the same GPU time buys 27% more frames than the baseline shader.
     print(f"  {'case':<34s} {'ops':>5s} {'tex':>4s} {'SFU':>4s} {'ms':>9s} "
           f"{'vs ' + cases[0][0][:12]:>15s} {'IQR':>6s}")
     for (label, name, _p), m, q in zip(cases, med, iqr):
         a = stats[name][0] or dict(ops=0, tex=0, slots=0)
         s = "L" if c.sampler_is_linear(name) else "N"
         print(f"  {label:<34s} {a['ops']:5d} {a['tex']:3d}{s} {a['slots']:4d} "
-              f"{m:9.4f} {m / base * 100:14.1f}% {q / m * 100:5.1f}%")
+              f"{m:9.4f} {base / m * 100:14.1f}% {q / m * 100:5.1f}%")
     worst = max(q / m * 100 for m, q in zip(med, iqr))
     print(f"\n  worst per-case IQR: {worst:.1f}% - differences smaller than "
           f"that are\n  noise, not shaders")
