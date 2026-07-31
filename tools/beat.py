@@ -42,8 +42,8 @@ import sys
 
 import numpy as np
 
-from crt_preview import render_crt, render_crt_v5
-from lcd_preview import DEFAULTS_LCD, render_lcd
+from models.crt import render_crt, render_crt_v5
+from models.lcd import DEFAULTS_LCD, render_lcd
 
 VISIBLE = 0.4
 
@@ -355,7 +355,7 @@ def report():
     # Each shader at its own shipped defaults, which is the only configuration
     # that gets gated; a parameter pushed past its default is the user's choice
     # and the headers document what it costs.
-    from shaders import REGISTRY
+    from models.registry import REGISTRY
     cols = [(n.replace(".glsl", "").replace("lcd-perfect", "lcd")
               .replace("dmg-perfect", "dmg"), n)
             for n in REGISTRY if n.startswith(("lcd-", "dmg-"))]
@@ -394,8 +394,8 @@ def report_dmg():
     halves it. That column is evidence, not a gate; a user who turns the shadow
     up is choosing a look, and the header says what it costs.
     """
-    import manifest
-    from shaders import REGISTRY
+    from core import manifest
+    from models.registry import REGISTRY
 
     names = [n for n in REGISTRY if manifest.known(n)
              and manifest.family(n) == "dmg-perfect"]
@@ -470,7 +470,7 @@ def report_curvature():
     supersampled reference of the same warp, because the curved render cannot be
     measured directly - see curvature_residual().
     """
-    from crt_preview import DEFAULTS_V6, render_crt_v6
+    from models.crt import DEFAULTS_V6, render_crt_v6
 
     print("\ncurvature: worst 128x128 tile of the residual against supersampled")
     print(f"truth, scaler only (visible above ~{VISIBLE})\n")
@@ -577,7 +577,7 @@ def report_curvature_uniformity():
     guarantees - with the obvious implementation alongside as a control. Then the
     rendered pattern strength, which confirms nothing has collapsed.
     """
-    from crt_preview import DEFAULTS_V7, render_crt_v7
+    from models.crt import DEFAULTS_V7, render_crt_v7
 
     print("\ncurvature: smallest output px per pattern cycle, anywhere in frame")
     print(f"(must stay >= cp_min_pitch = {MIN_PITCH:.2f}; 'naive' floors the pitch")
@@ -628,7 +628,7 @@ def report_curvature_uniformity():
     # v8 shipped with this check silently not applying to it.
     print("\ncurvature: pattern strength across the frame, 16x16 windows")
     print("(tiles wholly inside the tube; a partly lit tile is not a measurement)\n")
-    from crt_preview import (DEFAULTS_V8, DEFAULTS_V9, DEFAULTS_V10,
+    from models.crt import (DEFAULTS_V8, DEFAULTS_V9, DEFAULTS_V10,
                              render_crt_v8, render_crt_v9, render_crt_v10)
     shaders = [("v8", render_crt_v8, DEFAULTS_V8),
                ("v9", render_crt_v9, DEFAULTS_V9),
@@ -701,7 +701,7 @@ def report_grade():
     a no-op, so a broken saturation would measure perfect. The chroma case is a
     red/cyan 1px checker, the same worst case one axis over.
     """
-    from lcd_preview import (DEFAULTS_PP_V6, LUMA_709, TINT_AXIS, WARM_AXIS,
+    from models.lcd import (DEFAULTS_PP_V6, LUMA_709, TINT_AXIS, WARM_AXIS,
                              area_average, render_pixel_perfect_v6)
 
     def chroma(w, h):

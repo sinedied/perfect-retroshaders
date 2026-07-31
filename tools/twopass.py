@@ -36,7 +36,7 @@ import sys
 import numpy as np
 
 import moderngl
-from gl_check import gl_render
+from core.gpu import gl_render
 from grid import compile_shader
 
 CASES = [
@@ -101,7 +101,7 @@ def render_two_pass(src_u8, out_w, out_h, grid=0.30, level=1.0, brightness=1.0,
 
 def check(ctx, name, params, cases=CASES, sources=("gray", "scene"),
           tolerance=1, verbose=False):
-    from crt_preview import SOURCES
+    from models.crt import SOURCES
 
     prog = compile_shader(ctx, name)
     print(f"\n{name} against the two-pass pipeline")
@@ -180,7 +180,7 @@ def selftest():
 
 
 def main(argv):
-    from shaders import REGISTRY
+    from models.registry import REGISTRY
 
     verbose = "-v" in argv
     wanted = [a for a in argv[1:] if a != "-v"]
@@ -188,7 +188,7 @@ def main(argv):
         # The current version, from the manifest. This defaulted to
         # dmg-perfect-v2 for six releases after v2 stopped being current, so
         # the two-pass gate was green for a shader nobody ships.
-        import manifest
+        from core import manifest
         wanted = [manifest.current("dmg-perfect")]
     if not selftest():
         print("\nthe reference is wrong; nothing below can be trusted")

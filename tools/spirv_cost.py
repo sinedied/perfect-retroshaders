@@ -45,9 +45,9 @@ import re
 import subprocess
 import tempfile
 
-from gl_check import stage_source
+from core.shader_source import stage_source
 
-from paths import shader_path, list_shaders
+from core.paths import shader_path, list_shaders
 COST = {'Pow': 2, 'Exp': 1, 'Exp2': 1, 'Log': 1, 'Log2': 1, 'Sqrt': 1,
         'InverseSqrt': 1, 'Sin': 1, 'Cos': 1, 'Tan': 2, 'Atan': 2}
 

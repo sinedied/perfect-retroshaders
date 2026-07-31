@@ -20,9 +20,11 @@ import sys
 import numpy as np
 
 import moderngl
-from gl_check import stage_source, gl_render, LINEAR_SAMPLED
-from lcd_preview import DEFAULTS_PP_V3, DEFAULTS_PP_V5, DEFAULTS_PP_V6
-from paths import shader_path
+from core.gpu import gl_render
+from core.shader_source import stage_source
+from core import manifest
+from models.lcd import DEFAULTS_PP_V3, DEFAULTS_PP_V5, DEFAULTS_PP_V6
+from core.paths import shader_path
 
 PIXELLATE = shader_path("pixellate.glsl")
 PIXEL_PERFECT = shader_path("pixel-perfect.glsl")
@@ -66,7 +68,7 @@ V5_VS_V4 = [
 SHIMMERLESS = shader_path("sharp-shimmerless.glsl")
 # read from the one declaration, so section 6 cannot drift from what preview.py
 # and bench_glsl.py render the same shader with
-SS_LINEAR = "sharp-shimmerless.glsl" in LINEAR_SAMPLED
+SS_LINEAR = manifest.sampler("sharp-shimmerless.glsl") == manifest.LINEAR
 
 # v4 guards v3's affine block with an exact uniform test, so the two must agree
 # at EVERY setting, not merely at the one that skips the block. Near-neutral

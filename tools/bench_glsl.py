@@ -27,10 +27,11 @@ Run:  cd tools && PYTHONPATH=. ../.venv/bin/python bench_glsl.py
 import numpy as np
 
 import moderngl
-from gl_check import stage_source, pragma_defaults, LINEAR_SAMPLED
+from core.shader_source import stage_source, pragma_defaults
+from core import manifest
 
-from paths import shader_path
-from shaders import REGISTRY
+from core.paths import shader_path
+from models.registry import REGISTRY
 OW, OH = 1024, 768
 IW, IH = 320, 240
 DRAWS = 200
@@ -92,7 +93,8 @@ CASES = [
 ]
 
 NEAR, LIN = "nearest", "linear"
-CASES = [(*c, LIN if c[1] in LINEAR_SAMPLED else NEAR) for c in CASES]
+CASES = [(*c, LIN if manifest.sampler(c[1]) == manifest.LINEAR else NEAR)
+         for c in CASES]
 
 
 def build(ctx, fn, params):

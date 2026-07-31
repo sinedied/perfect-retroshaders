@@ -30,7 +30,7 @@ break paths that presets point at. What a file *is* should not depend on where i
 happens to sit.
 """
 
-from paths import shader_path
+from core.paths import shader_path
 
 RELEASED = "released"
 CURRENT = "current"
@@ -144,7 +144,7 @@ def check():
     version that nobody declares would simply not be tested, and silently
     dropping out of the matrix is exactly the failure this file exists to stop.
     """
-    from paths import list_shaders
+    from core.paths import list_shaders
 
     errors = []
     for name in _M:

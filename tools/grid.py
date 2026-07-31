@@ -38,8 +38,9 @@ import sys
 import numpy as np
 
 import moderngl
-from gl_check import gl_render, stage_source
-from paths import shader_path
+from core.gpu import gl_render
+from core.shader_source import stage_source
+from core.paths import shader_path
 
 # Scales worth reporting: whole ones, where the reference is already correct and
 # must be matched, and the fractional ones the hosts actually run.
@@ -345,7 +346,7 @@ def identity(ctx, name, params, ref=REFERENCE, ref_params=None,
     already right at 5x and the replacement has to be no worse, which on a grid
     of hard-edged lines means identical rather than close.
     """
-    from crt_preview import SOURCES
+    from models.crt import SOURCES
 
     ref_params = REFERENCE_DEFAULTS if ref_params is None else ref_params
     cases = cases or [c for c in CASES if "integer" in c[0]]
@@ -455,7 +456,7 @@ def selftest(ctx):
 
 
 def main(argv):
-    from shaders import REGISTRY
+    from models.registry import REGISTRY
 
     wanted = argv[1:] or [n for n in REGISTRY if n.startswith("dmg-")]
     ctx = moderngl.create_standalone_context()

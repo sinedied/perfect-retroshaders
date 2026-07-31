@@ -8,19 +8,19 @@ in GLSL and in numpy to slip through.
 Add a shader by adding an entry. Nothing else needs wiring.
 """
 
-from crt_preview import (
+from models.crt import (
     DEFAULTS, DEFAULTS_V2, DEFAULTS_V3, DEFAULTS_V4, DEFAULTS_V5, DEFAULTS_V6,
     DEFAULTS_V7, DEFAULTS_V8, DEFAULTS_V9, DEFAULTS_V10,
     render_crt, render_crt_v3, render_crt_v4, render_crt_v5, render_crt_v6,
     render_crt_v7, render_crt_v8, render_crt_v9, render_crt_v10,
 )
-from dmg_preview import (
+from models.dmg import (
     DEFAULTS_DMG, DEFAULTS_DMG_V2, DEFAULTS_DMG_V3, DEFAULTS_DMG_V4,
     DEFAULTS_DMG_V5, DEFAULTS_DMG_V6, DEFAULTS_DMG_V7, DEFAULTS_DMG_V8,
     render_dmg, render_dmg_v2, render_dmg_v3, render_dmg_v4, render_dmg_v5,
     render_dmg_v6, render_dmg_v7, render_dmg_v8,
 )
-from lcd_preview import (
+from models.lcd import (
     # aliased: crt_preview exports a DEFAULTS_V3 of its own, and a bare
     # import here silently shadowed it, handing crt-perfect-v3 the LCD
     # defaults and a 255/255 mismatch that looked like a shader bug

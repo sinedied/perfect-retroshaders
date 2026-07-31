@@ -15,7 +15,8 @@ cost table or a compile report unless it was asked for.
 
 import os
 
-TOOLS = os.path.dirname(os.path.abspath(__file__))
+CORE = os.path.dirname(os.path.abspath(__file__))
+TOOLS = os.path.dirname(CORE)
 REPO = os.path.dirname(TOOLS)
 SHADERS = os.path.join(REPO, "shaders")
 VENDOR = os.path.join(TOOLS, "vendor")

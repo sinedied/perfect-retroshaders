@@ -30,10 +30,12 @@ from PIL import Image
 
 import moderngl
 
-from crt_preview import SOURCES
-from gl_check import gl_render, stage_source, pragma_defaults, LINEAR_SAMPLED
-from paths import TOOLS, list_shaders, shader_path
-from shaders import REGISTRY
+from models.crt import SOURCES
+from core.gpu import gl_render
+from core.shader_source import stage_source, pragma_defaults
+from core import manifest
+from core.paths import TOOLS, list_shaders, shader_path
+from models.registry import REGISTRY
 
 OUT = os.path.join(TOOLS, "preview")
 
@@ -167,7 +169,7 @@ def render_one(ctx, name, src, out_w, out_h):
     # and it rendered up-and-right here while gl_check.py had it down-and-right
     # from the same shader. Judge a handed effect only in this convention.
     return gl_render(ctx, prog, src, out_w, out_h, params_for(name),
-                     filter_linear=name in LINEAR_SAMPLED)
+                     filter_linear=manifest.sampler(name) == manifest.LINEAR)
 
 
 def sheet_for(ctx, names, src, ow, oh, crop, zoom=1, diff=False):
@@ -239,7 +241,7 @@ def main(argv):
         only = argv[i + 1].split(",")
         del argv[i:i + 2]
 
-    import manifest
+    from core import manifest
     names = argv[1:] or [manifest.current(f) for f in manifest.families()]
     missing = [n for n in names if not os.path.isfile(shader_path(n))]
     if missing:

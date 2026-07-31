@@ -13,7 +13,7 @@ is written fresh, because that is the part with no second implementation yet.
 
 import numpy as np
 
-from lcd_preview import area_average
+from models.lcd import area_average
 
 # The reference's own settings for the geometry, and neutral for the tone.
 # dmg_dot_matrix is already right at a whole scale factor, so matching it there

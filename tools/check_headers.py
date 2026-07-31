@@ -26,8 +26,8 @@ import os
 import re
 import sys
 
-from paths import list_shaders, shader_path
-from shaders import REGISTRY
+from core.paths import list_shaders, shader_path
+from models.registry import REGISTRY
 
 WIDTH = 80
 SEP = "// " + "-" * (WIDTH - 3)
