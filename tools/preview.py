@@ -84,16 +84,21 @@ DIFF_GAIN = 8
 # Curvature defaults to 0, which is the right default for a shader and the wrong
 # one for a preview - a curvature variant rendered flat looks identical to every
 # other version and tells you nothing. Turn it on for anything that has it.
-PREVIEW_PARAMS = {
-    "crt-perfect-v6.glsl": dict(cp_curvature=0.10),
-    "crt-perfect-v7.glsl": dict(cp_curvature=0.10),
-    "crt-perfect-v8.glsl": dict(cp_curvature=0.10),
+# Some parameters default to off because that is the right default for a
+# shader and the wrong one for a picture of it: a curvature variant rendered
+# flat is indistinguishable from every other version and says nothing. Keyed by
+# parameter rather than by filename - listing v6, v7 and v8 by name meant v9 and
+# v10 previewed flat the moment they existed, and the sheet looked fine.
+PREVIEW_OVERRIDES = {
+    "cp_curvature": 0.10,
 }
 
 
 def params_for(name):
     if name in REGISTRY:
-        return dict(REGISTRY[name].defaults, **PREVIEW_PARAMS.get(name, {}))
+        p = dict(REGISTRY[name].defaults)
+        p.update({k: v for k, v in PREVIEW_OVERRIDES.items() if k in p})
+        return p
     return dict(pragma_defaults(name), **VENDOR_PARAMS.get(name, {}))
 
 
@@ -234,8 +239,8 @@ def main(argv):
         only = argv[i + 1].split(",")
         del argv[i:i + 2]
 
-    names = argv[1:] or [n for n in list_shaders() if n.startswith("lcd-")] + \
-        ["lcd1x.glsl", "lcd3x.glsl"]
+    import manifest
+    names = argv[1:] or [manifest.current(f) for f in manifest.families()]
     missing = [n for n in names if not os.path.isfile(shader_path(n))]
     if missing:
         print(f"not found: {', '.join(missing)}")

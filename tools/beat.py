@@ -394,9 +394,11 @@ def report_dmg():
     halves it. That column is evidence, not a gate; a user who turns the shadow
     up is choosing a look, and the header says what it costs.
     """
+    import manifest
     from shaders import REGISTRY
 
-    names = [n for n in REGISTRY if n.startswith("dmg-perfect")]
+    names = [n for n in REGISTRY if manifest.known(n)
+             and manifest.family(n) == "dmg-perfect"]
     if not names:
         return 0.0
     scales = [((160, 144), (800, 720)), ((160, 144), (853, 768)),
@@ -432,7 +434,11 @@ def report_dmg():
     # their numbers are the record of why they were replaced - v1's 2px line
     # costs it 0.402 here, which is the fault that got it superseded, so gating
     # on it would mean failing forever for a reason already written down.
-    current = max(names)
+    #
+    # Which one is current comes from the manifest, never from sorting the
+    # names: max() returns "v8" over "v10" and the gate would quietly go on
+    # passing while testing a version two releases old.
+    current = manifest.current("dmg-perfect")
     worst, worst_at, worst_sh = 0.0, "", 0.0
     for (sw, sh), (ow, oh) in scales:
         row, row2 = [], []

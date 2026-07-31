@@ -185,7 +185,11 @@ def main(argv):
     verbose = "-v" in argv
     wanted = [a for a in argv[1:] if a != "-v"]
     if not wanted:
-        wanted = [n for n in REGISTRY if n.startswith("dmg-perfect-v2")]
+        # The current version, from the manifest. This defaulted to
+        # dmg-perfect-v2 for six releases after v2 stopped being current, so
+        # the two-pass gate was green for a shader nobody ships.
+        import manifest
+        wanted = [manifest.current("dmg-perfect")]
     if not selftest():
         print("\nthe reference is wrong; nothing below can be trusted")
         return 1

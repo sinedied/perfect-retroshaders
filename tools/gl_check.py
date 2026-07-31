@@ -162,6 +162,38 @@ def check(ctx, name, model, verbose=False):
         print(f"  {name:24s} FAILED TO LINK\n{exc}")
         return None
 
+    # The model's defaults and the shader's own #pragma defaults have to agree
+    # before either is used, because this function then feeds one dict to both
+    # sides. Feeding model.defaults to the GPU as well meant the shipped
+    # defaults were never once exercised here: the two implementations agreed
+    # perfectly about a configuration that need not be the one users get. The
+    # dicts are compared rather than merged - a mismatch is a bug in one of
+    # them, and picking a winner would hide it.
+    declared = pragma_defaults(name)
+    if declared:
+        only_shader = set(declared) - set(model.defaults)
+        only_model = set(model.defaults) - set(declared)
+        differ = {k for k in set(declared) & set(model.defaults)
+                  if abs(declared[k] - model.defaults[k]) > 1e-9}
+        if only_shader or only_model or differ:
+            print(f"  {name:24s} DEFAULTS DISAGREE")
+            for k in sorted(only_shader):
+                print(f"      {k}: in the shader, missing from the model")
+            for k in sorted(only_model):
+                print(f"      {k}: in the model, missing from the shader")
+            for k in sorted(differ):
+                print(f"      {k}: shader {declared[k]:g}, "
+                      f"model {model.defaults[k]:g}")
+            return 1
+
+        # Every declared parameter must actually reach the program. A uniform
+        # the harness never sets is 0, and 0 is a legal-looking value for most
+        # of these, so an unset one does not crash - it renders something else.
+        unset = [k for k in declared if k in prog and k not in model.defaults]
+        if unset:
+            print(f"  {name:24s} UNINITIALISED UNIFORMS: {', '.join(unset)}")
+            return 1
+
     runs = [("defaults", {})] + model.variants
     worst, worst_where, worst_out = 0, "", 0
     for label, overrides in runs:
