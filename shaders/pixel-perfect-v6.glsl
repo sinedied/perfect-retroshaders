@@ -19,7 +19,7 @@
 //   pp_saturation    0.00 - 2.00  Colour intensity. 0 is grey. 1.00 is off.
 //   pp_gamma         0.50 - 2.00  Output gamma. Below 1 brightens. 1.00 is off.
 //   pp_temperature  -1.00 - 1.00  Warm above 0, cool below. 0.00 is off.
-//   pp_tint         -1.00 - 1.00  Magenta above 0, green below. 0.00 is off.
+//   pp_tint         -1.00 - 1.00  Green above 0, magenta below. 0.00 is off.
 // -----------------------------------------------------------------------------
 // Scales an image so every source pixel becomes an even block, with a single
 // soft pixel wherever a block boundary falls between two output pixels. Integer
@@ -50,7 +50,7 @@
 #pragma parameter pp_saturation  "Colour saturation"        1.00  0.00 2.00 0.05
 #pragma parameter pp_gamma       "Gamma, below 1 brightens" 1.00  0.50 2.00 0.05
 #pragma parameter pp_temperature "Warm / cool balance"      0.00 -1.00 1.00 0.01
-#pragma parameter pp_tint        "Magenta / green balance"  0.00 -1.00 1.00 0.01
+#pragma parameter pp_tint        "Green / magenta balance"  0.00 -1.00 1.00 0.01
 
 #if defined(VERTEX)
 
