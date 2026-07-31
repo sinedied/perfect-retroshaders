@@ -84,7 +84,7 @@ A handheld LCD look: a soft backlit mesh with RGB subpixel stripes, over a clean
 | Parameter | Range | Default | |
 |---|---|---|---|
 | Grid visibility | 0.00 – 1.00 | 0.30 |  |
-| Row/column balance | 0.00 – 1.00 | 0.50 | 0 rows, 1 columns. |
+| Row/column balance | 0.00 – 1.00 | 0.60 | 0 rows, 1 columns. |
 | Minimum pitch in px | 2.00 – 6.00 | 3.00 | Smallest pattern pitch, in output pixels. |
 | RGB stripe visibility | 0.00 – 1.00 | 0.20 |  |
 | Stripe order | 0 / 1 | 0 | RGB or BGR. |

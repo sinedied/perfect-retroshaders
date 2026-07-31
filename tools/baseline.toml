@@ -153,6 +153,12 @@ name = "lcd-perfect-v5.glsl"
 family = "lcd-perfect"
 role = ["current"]
 pattern = "whole-cell"
+# Row/column balance ships at 0.60 rather than 0.50, leaning the mesh towards
+# columns. A column mesh shares its pitch with the RGB stripes, so the two
+# correlate and the beat rises with it: 0.365 at 0.50, 0.432 at 0.60, 0.620 at
+# the 0.80 that matches lcd1x. Only the densest case is affected, only on a 1px
+# checkerboard, and it is invisible on real content. An owner decision.
+moire_allow = [{ case = [480, 272, 1024, 768], value = 0.432 }]
 neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
 # Gamma moved after the blend, which halves its SFU and costs moire once it is
 # turned up: 0.294 at the 1.00 default, 1.918 at 1.20, 3.622 at 1.40. Nothing is
@@ -701,28 +707,28 @@ sampler = "linear"
 "480x272->640x480" = "dcd80a445b2465ee"
 
 [golden."lcd-perfect-v5.glsl"]
-"160x144->1024x768" = "e8cf6ba813c3e5c6"
-"240x160->1024x768" = "69d7c76f815605f9"
-"256x192->1024x768" = "7b96413b6ee69152"
-"256x192->640x480" = "3df0e90e1ff82a33"
-"256x224->1024x768" = "cac2af6e2aa0896c"
-"320x240->1024x768" = "30c0a5abc53d2cd2"
-"320x240->1280x720" = "e4c43a45a670f81a"
-"320x240->640x480" = "f6f32026137f33cf"
-"480x272->1024x768" = "b0f4be2b22354556"
-"480x272->640x480" = "365e76f3886eff7d"
+"160x144->1024x768" = "7320fd88c5ca9205"
+"240x160->1024x768" = "f8d5528822c9249e"
+"256x192->1024x768" = "daee5d79e0338303"
+"256x192->640x480" = "beb71fd034ba4877"
+"256x224->1024x768" = "cf674f53abdcaa6d"
+"320x240->1024x768" = "24df9501d32f885e"
+"320x240->1280x720" = "b1cd9ac57aab46f7"
+"320x240->640x480" = "66094074cae772a0"
+"480x272->1024x768" = "ac867203cbd29d99"
+"480x272->640x480" = "f3c3131b338766bd"
 
 [golden."lcd-perfect.glsl"]
-"160x144->1024x768" = "e8cf6ba813c3e5c6"
-"240x160->1024x768" = "69d7c76f815605f9"
-"256x192->1024x768" = "7b96413b6ee69152"
-"256x192->640x480" = "3df0e90e1ff82a33"
-"256x224->1024x768" = "cac2af6e2aa0896c"
-"320x240->1024x768" = "30c0a5abc53d2cd2"
-"320x240->1280x720" = "e4c43a45a670f81a"
-"320x240->640x480" = "f6f32026137f33cf"
-"480x272->1024x768" = "b0f4be2b22354556"
-"480x272->640x480" = "365e76f3886eff7d"
+"160x144->1024x768" = "7320fd88c5ca9205"
+"240x160->1024x768" = "f8d5528822c9249e"
+"256x192->1024x768" = "daee5d79e0338303"
+"256x192->640x480" = "beb71fd034ba4877"
+"256x224->1024x768" = "cf674f53abdcaa6d"
+"320x240->1024x768" = "24df9501d32f885e"
+"320x240->1280x720" = "b1cd9ac57aab46f7"
+"320x240->640x480" = "66094074cae772a0"
+"480x272->1024x768" = "ac867203cbd29d99"
+"480x272->640x480" = "f3c3131b338766bd"
 
 [golden."pixel-perfect-v1.glsl"]
 "160x144->1024x768" = "784dcd47f347a0dd"

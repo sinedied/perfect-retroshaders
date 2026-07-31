@@ -33,7 +33,7 @@
 //   0.80 or so matches lcd1x.
 
 #pragma parameter lp_grid       "Grid visibility"          0.30 0.00 1.00 0.01
-#pragma parameter lp_balance    "Row/column balance"       0.50 0.00 1.00 0.01
+#pragma parameter lp_balance    "Row/column balance"       0.60 0.00 1.00 0.01
 #pragma parameter lp_min_pitch  "Minimum pitch in px"      3.00 2.00 6.00 0.25
 #pragma parameter lp_subpixels  "RGB stripe visibility"    0.20 0.00 1.00 0.05
 #pragma parameter lp_layout     "Stripe order 0=RGB 1=BGR" 0.00 0.00 1.00 1.00
@@ -119,7 +119,7 @@ uniform COMPAT_PRECISION float lp_brightness;
 uniform COMPAT_PRECISION float lp_gamma;
 #else
 #define lp_grid 0.30
-#define lp_balance 0.50
+#define lp_balance 0.60
 #define lp_min_pitch 3.00
 #define lp_subpixels 0.20
 #define lp_layout 0.0
