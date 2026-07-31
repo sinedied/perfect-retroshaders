@@ -85,6 +85,17 @@ MATCHED = {
               dp_gamma=0.80), _ref(alpha=0.80, bright=1.00, gamma=0.80,
                                    light=0.00)),
     ],
+    "dmg-perfect-v8.glsl": [
+        ("reference defaults",
+         dict(dp_grid=0.30, dp_gap=1.00, dp_brightness=1.20, dp_gamma=1.40),
+         _ref()),
+        ("gamma off",
+         dict(dp_grid=0.30, dp_gap=1.00, dp_brightness=1.20, dp_gamma=1.00),
+         _ref(gamma=1.00)),
+        ("strong grid",
+         dict(dp_grid=0.80, dp_gap=1.00, dp_brightness=1.00, dp_gamma=0.80),
+         _ref(alpha=0.80, bright=1.00, gamma=0.80)),
+    ],
     "dmg-perfect-v7.glsl": [
         ("reference defaults",
          dict(dp_grid=0.30, dp_gap=1.00, dp_brightness=1.20, dp_gamma=1.40),

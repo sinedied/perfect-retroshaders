@@ -840,3 +840,148 @@ def render_dmg_v6(src_u8, out_w, out_h, p=None, quantise=True):
         col = np.power(np.maximum(col, 1e-8), p["dp_gamma"])
     out = np.clip(col, 0.0, 1.0)
     return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
+
+
+# v8 fixes v7's blur artifact and adds the contrast wheel.
+#
+# The blur itself was never the problem. At dp_shadow_blur = 1.0 v6's weights
+# reduce to clamp(gf, 0, 1) == gf and its footprint to h + APERTURE_SOFT, which
+# is exactly what v7 hardcodes - so the two are algebraically identical in both
+# the aperture and the interpolation, and every difference between them is the
+# `paper` divisor.
+#
+# v6 reduced over the scaler's four taps and v7 over the four shadow cells, and
+# both had to gate each term by its blend weight first so that floor() picking a
+# different *set* at a boundary could not swap in a different neighbour. v7's
+# gate opens over a weight range of 0.02 while its bilinear weights sweep the
+# full 0..1 once per cell, so paper stepped between the floor and the paper
+# level along a contour inside every cell: 22/255 against v6, reading as a hard
+# dark bar down the edge of every dark region with the gradient gone.
+#
+# v8 takes paper from the luma of the area blend instead. Continuous in position
+# by construction, stable at the boundary for the same reason the scaler is,
+# one dot product and one max, and bit-identical to v6 at a whole scale factor -
+# where the blend returns the source texel exactly.
+DEFAULTS_DMG_V8 = dict(DEFAULTS_DMG_V7, dp_contrast=1.0)
+
+
+def render_dmg_v8(src_u8, out_w, out_h, p=None, quantise=True):
+    """Mirrors dmg-perfect-v8.glsl."""
+    p = dict(DEFAULTS_DMG_V8, **(p or {}))
+    s = src_u8.astype(np.float64) / 255.0
+    in_h, in_w = s.shape[:2]
+
+    px = ((np.arange(out_w) + 0.5) / out_w) * in_w
+    py = ((np.arange(out_h) + 0.5) / out_h) * in_h
+    hx = max(0.4995 * in_w / out_w, 1e-6)
+    hy = max(0.4995 * in_h / out_h, 1e-6)
+    Bx = np.floor(px + 0.5)
+    By = np.floor(py + 0.5)
+
+    scx, scy = out_w / max(in_w, 1.0), out_h / max(in_h, 1.0)
+    N = fit_scale(in_w, in_h, out_w, out_h)
+    lit = np.clip(1.0 - p["dp_gap"] / N, 1e-3, 1.0)
+
+    Alox, Ahix = dot_integral(px - hx, lit), dot_integral(px + hx, lit)
+    Aloy, Ahiy = dot_integral(py - hy, lit), dot_integral(py + hy, lit)
+    Ix = np.maximum(Ahix - Alox, 1e-6)
+    Iy = np.maximum(Ahiy - Aloy, 1e-6)
+    covx_raw, covy_raw = Ix / (2 * hx), Iy / (2 * hy)
+
+    wxA = np.clip((Bx - px + hx) / (2 * hx), 0.0, 1.0)
+    wyA = np.clip((By - py + hy) / (2 * hy), 0.0, 1.0)
+    kx, ky = smoothstep(0.0, 0.01, covx_raw), smoothstep(0.0, 0.01, covy_raw)
+    wxL = wxA + (np.clip((Bx * lit - Alox) / Ix, 0.0, 1.0) - wxA) * kx
+    wyL = wyA + (np.clip((By * lit - Aloy) / Iy, 0.0, 1.0) - wyA) * ky
+
+    fx, fy = smoothstep(2.0, 2.9, scx), smoothstep(2.0, 2.9, scy)
+    covx = 1.0 + (covx_raw - 1.0) * fx
+    covy = 1.0 + (covy_raw - 1.0) * fy
+    dot2d = covy[:, None] * covx[None, :]
+
+    ixl = np.clip(Bx.astype(int) - 1, 0, in_w - 1)
+    ixh = np.clip(Bx.astype(int), 0, in_w - 1)
+    iyl = np.clip(By.astype(int) - 1, 0, in_h - 1)
+    iyh = np.clip(By.astype(int), 0, in_h - 1)
+    t00 = s[np.ix_(iyl, ixl)]; t10 = s[np.ix_(iyl, ixh)]
+    t01 = s[np.ix_(iyh, ixl)]; t11 = s[np.ix_(iyh, ixh)]
+
+    def blend(wx, wy):
+        WX = wx[None, :, None]; WY = wy[:, None, None]
+        hi = t11 + (t01 - t11) * WX
+        lo = t10 + (t00 - t10) * WX
+        return hi + (lo - hi) * WY
+
+    # area stays raw - the shadow's opacity is a ratio of two source levels, so
+    # an output gain has to cancel out of it rather than change how much light a
+    # dot appears to block.
+    area = blend(wxA, wyA)
+    dotm = blend(wxL, wyL)
+
+    D = dot2d[..., None]
+    ab = area * p["dp_brightness"]
+    db = dotm * p["dp_brightness"]
+    col = ab + (DMG_SUBSTRATE + (db - DMG_SUBSTRATE) * D - ab) * p["dp_grid"]
+
+    # The contrast wheel: an affine map pivoting on the substrate, so the gaps
+    # are its fixed point and stay exactly where they are. Folded to a gain and
+    # an offset rather than written as a mix, so 1.00 is col*1.0 + 0.0 and is
+    # bit-exact.
+    # Unbranched, matching the shader: a uniform branch round it measured
+    # 105.7% of the yardstick against 105.5% unbranched, so it bought nothing,
+    # and the fold is what makes 1.00 exact rather than the branch.
+    col = col * p["dp_contrast"] + (1.0 - p["dp_contrast"]) * DMG_SUBSTRATE
+
+    if p["dp_shadow"] > 0.0:
+        qx = px - SHADOW_OFFSET[0]
+        qy = py - SHADOW_OFFSET[1]
+        hsx, hsy = hx + SHADOW_APERTURE_SOFT, hy + SHADOW_APERTURE_SOFT
+        Sx = np.maximum(dot_integral(qx + hsx, lit)
+                        - dot_integral(qx - hsx, lit), 0.0) / (2 * hsx)
+        Sy = np.maximum(dot_integral(qy + hsy, lit)
+                        - dot_integral(qy - hsy, lit), 0.0) / (2 * hsy)
+        Sx = 1.0 + (Sx - 1.0) * fx
+        Sy = 1.0 + (Sy - 1.0) * fy
+
+        # the 2x2 of cells around the shifted point, and where in it we sit.
+        # No epsilon: the pair and the weight must come from the same value, and
+        # the interpolated texcoord's float32 error is larger than any epsilon
+        # worth adding anyway. Harmless, because the weight is zero exactly
+        # where the pair changes - see the shader.
+        gx, gy = qx - 0.5, qy - 0.5
+        gix, giy = np.floor(gx), np.floor(gy)
+        gfx, gfy = gx - gix, gy - giy
+        ix0 = np.clip(gix.astype(int), 0, in_w - 1)
+        ix1 = np.clip(gix.astype(int) + 1, 0, in_w - 1)
+        iy0 = np.clip(giy.astype(int), 0, in_h - 1)
+        iy1 = np.clip(giy.astype(int) + 1, 0, in_h - 1)
+
+        L = np.array([0.299, 0.587, 0.114])
+        c00 = s[np.ix_(iy0, ix0)] @ L
+        c10 = s[np.ix_(iy0, ix1)] @ L
+        c01 = s[np.ix_(iy1, ix0)] @ L
+        c11 = s[np.ix_(iy1, ix1)] @ L
+
+        WX = gfx[None, :]; WY = gfy[:, None]
+        caster_lum = ((c00 + (c10 - c00) * WX)
+                      + ((c01 + (c11 - c01) * WX)
+                         - (c00 + (c10 - c00) * WX)) * WY)
+
+        # No reduction over the taps at all - that is the whole of the fix.
+        # The blend is continuous in position, which is what a divisor needs if
+        # it is not to print its own structure into the shadow, and it is stable
+        # at the floor() boundary for the same reason the scaler is.
+        paper = np.maximum(area @ L, PAPER_FLOOR)
+        opacity = np.clip(1.0 - caster_lum / paper, 0.0, 1.0)
+        shade = p["dp_shadow"] * opacity * (Sy[:, None] * Sx[None, :])
+        col = col * (1.0 - shade)[..., None]
+
+    trim = (abs(p["dp_red"] - 1.0) + abs(p["dp_green"] - 1.0)
+            + abs(p["dp_blue"] - 1.0))
+    if trim > 0.001:
+        col = col * np.array([p["dp_red"], p["dp_green"], p["dp_blue"]])
+
+    if abs(p["dp_gamma"] - 1.0) > 0.001:
+        col = np.power(np.maximum(col, 1e-8), p["dp_gamma"])
+    out = np.clip(col, 0.0, 1.0)
+    return (out * 255.0 + 0.5).astype(np.uint8) if quantise else out
