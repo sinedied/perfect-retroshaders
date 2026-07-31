@@ -21,15 +21,18 @@ from models.dmg import (
     render_dmg_v6, render_dmg_v7, render_dmg_v8,
 )
 from models.lcd import (
-    # aliased: crt_preview exports a DEFAULTS_V3 of its own, and a bare
+    # aliased: models/crt.py exports a DEFAULTS_V3 of its own, and a bare
     # import here silently shadowed it, handing crt-perfect-v3 the LCD
     # defaults and a 255/255 mismatch that looked like a shader bug
     DEFAULTS_V3 as DEFAULTS_LCD_V3, render_lcd_v3,
-    DEFAULTS_LCD, DEFAULTS_PP, DEFAULTS_PP_V2, DEFAULTS_PP_V3, DEFAULTS_PP_V4,
-    DEFAULTS_PP_V5, DEFAULTS_PP_V6, DEFAULTS_V2A, DEFAULTS_V2B,
-    render_pixel_perfect_v2, render_pixel_perfect_v3, render_pixel_perfect_v4,
-    render_pixel_perfect_v5, render_pixel_perfect_v6,
-    render_lcd, render_lcd_v2a, render_pixel_perfect,
+    DEFAULTS_LCD, DEFAULTS_V2A, DEFAULTS_V2B,
+    render_lcd, render_lcd_v2a,
+)
+from models.pixel import (
+    DEFAULTS_PP, DEFAULTS_PP_V2, DEFAULTS_PP_V3, DEFAULTS_PP_V4,
+    DEFAULTS_PP_V5, DEFAULTS_PP_V6,
+    render_pixel_perfect, render_pixel_perfect_v2, render_pixel_perfect_v3,
+    render_pixel_perfect_v4, render_pixel_perfect_v5, render_pixel_perfect_v6,
 )
 
 # (label, source size, output size) - the scale factors that matter on the

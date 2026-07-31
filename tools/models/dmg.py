@@ -5,13 +5,15 @@ Independent numpy reimplementation of the fragment shader, so gl_check.py can
 diff the real shipped .glsl running on a GPU against it. An error has to be made
 identically in both to slip through.
 
-The four-tap scaler comes from lcd_preview.area_average, which is already
+The four-tap scaler comes from models.lcd.area_average, which is already
 cross-verified on the GPU against pixel-perfect.glsl and shared by every shader
 here. Everything DMG-specific - the gap floor, the dot coverage, the grid mix -
 is written fresh, because that is the part with no second implementation yet.
 """
 
 import numpy as np
+
+from models.common import smoothstep
 
 from models.lcd import area_average
 
@@ -51,16 +53,11 @@ DEFAULTS_DMG = dict(
 )
 
 
-def smoothstep(e0, e1, x):
-    t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
-    return t * t * (3.0 - 2.0 * t)
-
-
 def dot_integral(x, w):
     """Antiderivative of the dot profile: 1 across w of each cell, 0 after it.
 
     Differencing it over an output pixel's footprint gives that pixel's exact dot
-    coverage. Peak-normalised - it tops out at 1, unlike lcd_preview's aperture,
+    coverage. Peak-normalised - it tops out at 1, unlike the LCD aperture,
     which is normalised to a mean of 1 and peaks near 3.
     """
     n = np.floor(x)

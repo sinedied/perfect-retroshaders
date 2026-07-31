@@ -62,7 +62,7 @@ REFERENCE_DEFAULTS = dict(dmg_edge_alpha=0.3, dmg_brightness_correction=1.2,
 
 # The parameter pairings under which a shader and the reference are the same
 # shader. Not the shipped defaults on either side: those differ in tone, for a
-# reason dmg_preview.py records. Several pairings rather than one, because the
+# reason models/dmg.py records. Several pairings rather than one, because the
 # claim is that they agree across the parameter space, not at a lucky point.
 #
 # Keyed by shader, because dp_gap changed units between v1 and v2 - a share of a

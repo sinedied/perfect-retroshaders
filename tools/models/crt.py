@@ -8,13 +8,15 @@ render_crt() for the correspondence.
 render_crt_v5(after=True) is the shipped crt-perfect.glsl. The lower-numbered
 renderers mirror the archived iterations under tools/iterations/.
 
-Run:  /tmp/crtvenv/bin/python crt_preview.py
+Run:  cd tools && PYTHONPATH=. ../.venv/bin/python models/crt.py
 """
 
 import math
 import os
 
 import numpy as np
+
+from models.common import box_sinc, nyquist_fade, smoothstep
 from PIL import Image
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "preview")
@@ -84,21 +86,6 @@ DEFAULTS = dict(
 
 
 # ---------------------------------------------------------------- helpers
-
-
-def smoothstep(e0, e1, x):
-    t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
-    return t * t * (3.0 - 2.0 * t)
-
-
-def box_sinc(f):
-    """Exact average of a unit sinusoid of frequency f (cycles/output px) over
-    one pixel-wide box. numpy's sinc is already sin(pi x)/(pi x)."""
-    return np.sinc(np.maximum(f, 1e-4))
-
-
-def nyquist_fade(f):
-    return 1.0 - smoothstep(0.34, 0.5, f)
 
 
 def render_crt_v3(src_u8, out_w, out_h, p=None):
