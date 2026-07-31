@@ -4,6 +4,12 @@
 # The GLSL side needs glslang (glslangValidator + spirv-dis), which is not a
 # Python package:
 #   brew install glslang
-numpy>=2.0
-moderngl>=5.10
-Pillow>=10.0
+#
+# Pinned, not floated. The gate here is a 1/255 numeric comparison between a GPU
+# render and a numpy model, so a change in numpy's rounding or moderngl's
+# defaults is indistinguishable from a shader regression. Bump deliberately, and
+# re-run gl_check when you do.
+numpy==2.5.1
+moderngl==5.12.0
+Pillow==12.3.0
+pytest==9.1.1

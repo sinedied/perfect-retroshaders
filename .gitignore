@@ -5,3 +5,4 @@ preview/
 *.spv
 TODO
 .DS_Store
+.pytest_cache/
