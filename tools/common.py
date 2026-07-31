@@ -64,9 +64,31 @@ GOLDEN = _DOC.get("golden", {})
 
 
 def declared(name):
+    """A shader's entry, with a release inheriting from the iteration it copies.
+
+    A release is byte-identical to its source, so every fact about how to
+    measure it - which sampler, where its pattern sits, which moire exceedances
+    were granted - is identical too. Repeating them would be two places to
+    forget. Not inheriting them at all is worse and was the first thing that
+    happened: lcd-perfect.glsl lost `pattern`, the moire band then cut through
+    its own mesh, and the copy measured 5.823 where the file it was copied from
+    measured 0.365.
+    """
     if name not in SHADERS_DECLARED:
         raise KeyError(f"{name} is not declared in tools/baseline.toml")
-    return SHADERS_DECLARED[name]
+    entry = SHADERS_DECLARED[name]
+    if RELEASED not in entry.get("role", ()) or entry.get("_resolved"):
+        return entry
+    v = version(name)
+    src = f"{entry['family']}-v{v}.glsl" if v else None
+    if src in SHADERS_DECLARED:
+        merged = dict(SHADERS_DECLARED[src])
+        merged.update(entry)          # the release's own keys win
+        merged["_resolved"] = True
+        SHADERS_DECLARED[name] = merged
+        return merged
+    entry["_resolved"] = True
+    return entry
 
 
 def family(name):
