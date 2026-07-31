@@ -21,22 +21,17 @@
 //   cp_mask_size   0.25 - 2.00  Mask triads per source pixel.
 //   cp_min_pitch   2.00 - 6.00  Smallest pattern pitch, in output pixels.
 //   cp_curvature   0.00 - 0.15  Screen curvature. 0 disables it.
-//   cp_brightness  0.25 - 4.00  Output gain, compensates the darkening.
+//   cp_brightness  0.25 - 4.00  Output gain. 1.00 disables it.
 //   cp_gamma       0.50 - 2.00  Output gamma. 1.00 disables it.
 // -----------------------------------------------------------------------------
-// Scales the source into uniform pixel blocks, then modulates it with two pure
-// sinusoids: one across the source lines, one across the source columns in
-// three colour phases. Both are band-limited, so neither beats against the
-// pixel grid. Curvature bends the image onto a tube, and the patterns curve
-// with the glass the way a real mask and beam do.
+// A CRT look: soft scanlines and an RGB shadow mask over a clean pixel scale,
+// with optional screen curvature. Reads like a small tube TV, sharp rather than
+// blurry, and neither pattern beats against the pixel grid at any scale.
 //
 // Notes:
 // - Render at the output resolution, 1:1 with the display.
-// - At cp_min_pitch 2.00 the mask degenerates to two-colour columns: use 2.50
-//   or more to keep the triads visible.
-// - Curvature softens the patterns where the output is too small to lock them,
-//   since a pattern that follows the glass cannot also follow the pixel grid.
-// - Curvature costs about 9% of the frame time when on, and nothing when off.
+// - At min. pitch 2.00 the mask becomes 2 colours: use 2.50 or more to keep
+//   the triads visible.
 
 #pragma parameter cp_scanlines  "Scanline visibility"        0.60 0.00 1.00 0.05
 #pragma parameter cp_rgb_mask   "RGB mask visibility"        0.20 0.00 1.00 0.05

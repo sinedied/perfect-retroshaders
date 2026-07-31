@@ -1,4 +1,4 @@
-// pixel-perfect v6 - uniform pixel blocks and a colour grade, at minimal cost.
+// pixel-perfect v6 - uniform pixel blocks and colour controls, at minimal cost.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
@@ -14,41 +14,28 @@
 // -----------------------------------------------------------------------------
 // PARAMETERS
 //
-//   pp_brightness    0.50 - 2.00  Output gain. Above 1 clips highlights.
-//   pp_contrast      0.00 - 2.00  Contrast about mid grey. 1.00 is off.
-//   pp_saturation    0.00 - 2.00  Colour intensity. 0 is grey. 1.00 is off.
-//   pp_gamma         0.50 - 2.00  Output gamma. Below 1 brightens. 1.00 is off.
+//   pp_brightness    0.50 - 2.00  Output gain. 1.00 disables it.
+//   pp_contrast      0.00 - 2.00  Contrast. 1.00 disables it.
+//   pp_saturation    0.00 - 2.00  Colour intensity. 1.00 disables it.
+//   pp_gamma         0.50 - 2.00  Output gamma. 1.00 disables it.
 //   pp_temperature  -1.00 - 1.00  Warm above 0, cool below. 0.00 is off.
 //   pp_tint         -1.00 - 1.00  Green above 0, magenta below. 0.00 is off.
 // -----------------------------------------------------------------------------
-// Scales an image so every source pixel becomes an even block, with a single
-// soft pixel wherever a block boundary falls between two output pixels. Integer
-// scale factors come out exact. Each output pixel is the average of the source
-// over its own footprint, which spans at most two texels per axis, so four taps
-// with separable weights evaluate it exactly. On top of that sits a grade for
-// tuning the image to taste: gain, contrast about mid grey, saturation toward
-// luma, a white balance, then gamma. Every control is off at its default, and
-// the whole grade sits behind one uniform test, so a grade left alone costs
-// nothing at all rather than merely doing nothing.
+// A clean upscale: every source pixel becomes an even block, with no shimmer
+// and no blur. The plain, fast default when you want the picture and nothing
+// else, plus simple colour controls for tuning it to a screen.
 //
 // Notes:
 // - Render at the output resolution, 1:1 with the display.
-// - Brightness, contrast, saturation and the balance pair are all affine, so
-//   they commute with the scaler's blend and paint no pattern of their own.
-//   What costs is clipping, once a control is pushed past the range the
-//   display can show.
-// - pp_temperature and pp_tint are the two axes of a white balance, for panels
-//   that are not neutral. Useful trims are small, roughly within 0.20; the rest
-//   of the range is there for effect. They shift the overall level a little as
-//   well as the colour, which pp_brightness can take back out.
-// - pp_gamma is the one control that is non-linear after the blend, and much
-//   the most expensive: on dense content it paints moire where the others do
-//   not. Reach for it last.
+// - Useful white balance trims are small, roughly within 0.20; the rest of the
+//   range is there for effect.
+// - Gamma is the most expensive control and the only one that can paint moire
+//   on dense content. Reach for it last.
 
-#pragma parameter pp_brightness  "Brightness gain, clips"   1.00  0.50 2.00 0.05
-#pragma parameter pp_contrast    "Contrast, about mid grey" 1.00  0.00 2.00 0.05
-#pragma parameter pp_saturation  "Colour saturation"        1.00  0.00 2.00 0.05
-#pragma parameter pp_gamma       "Gamma, below 1 brightens" 1.00  0.50 2.00 0.05
+#pragma parameter pp_brightness  "Brightness"               1.00  0.50 2.00 0.05
+#pragma parameter pp_contrast    "Contrast"                 1.00  0.00 2.00 0.05
+#pragma parameter pp_saturation  "Saturation"               1.00  0.00 2.00 0.05
+#pragma parameter pp_gamma       "Gamma"                    1.00  0.50 2.00 0.05
 #pragma parameter pp_temperature "Warm / cool balance"      0.00 -1.00 1.00 0.01
 #pragma parameter pp_tint        "Green / magenta balance"  0.00 -1.00 1.00 0.01
 
@@ -137,23 +124,20 @@ uniform COMPAT_PRECISION float pp_tint;
 #define pp_tint 0.0
 #endif
 
-// Rec.709 luma, for the saturation mix. Applied to encoded values, not linear
-// light: the round trip that would need is the construction the scaler exists
-// to avoid.
+// Rec.709 luma, for the saturation mix. Applied to encoded values: the round
+// trip to linear is the construction the scaler exists to avoid.
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
 void main()
 {
-    // Source texels: p is this pixel's centre, h its half footprint. The max()
-    // guards an unset InputSize, which is 0 and would make every pixel NaN.
-    // There is no sharpness control on purpose: narrowing the footprint below
-    // one output pixel is nearest-neighbour again, which is what crawls.
+    // Source texels. The max() guards an unset InputSize, which is 0 and would
+    // make h a zero divisor below.
     vec2 p = TEX0.xy * TextureSize;
     vec2 h = max(0.4995 * InputSize / OutputSize, 1e-6);
 
     // B is the nearest texel boundary; w is the share of the footprint on its
-    // low side. Clamps to exactly 0 or 1 wherever the footprint sits inside one
-    // texel, which is most pixels - that is what keeps the blocks flat.
+    // low side. Clamps to 0 or 1 wherever the footprint sits inside one texel,
+    // which is what keeps the blocks flat.
     vec2 B = floor(p + 0.5);
     vec2 w = clamp((B - p + h) / (2.0 * h), 0.0, 1.0);
 
@@ -173,17 +157,13 @@ void main()
     // Brightness, contrast and saturation fold into one affine map, using the
     // fact that LUMA sums to 1. Folded, not three steps: that makes it exactly
     // col*1.0 + 0.0 at the defaults, where the literal chain rounds. Do not
-    // un-fold it. Affine is also what makes grading safe after the blend - the
-    // weights sum to 1, so it cannot give partial-coverage pixels the shift
-    // that beats against the pixel grid.
+    // un-fold it. Affine is also what makes grading safe after the blend.
     //
-    // The balance stays a separate multiply after the saturation mix: folding
-    // it in widens the luma term to vec3 and measures 4 instructions worse,
-    // and dot(col*t, LUMA) is not t*dot(col, LUMA) anyway.
+    // The balance stays a separate multiply after the saturation mix, since
+    // dot(col*t, LUMA) is not t*dot(col, LUMA).
     //
     // Tested separately, not summed, or a warm temperature could cancel a cool
-    // tint. Exact rather than an epsilon: every control is a true no-op at its
-    // default.
+    // tint.
     if (pp_brightness != 1.0 || pp_contrast != 1.0 || pp_saturation != 1.0
         || pp_temperature != 0.0 || pp_tint != 0.0) {
         float ga = pp_brightness * pp_contrast;
@@ -191,9 +171,8 @@ void main()
         col = col * (ga * pp_saturation)
             + (dot(col, LUMA) * (ga * (1.0 - pp_saturation)) + gb);
 
-        // Two chromatic axes: warm/cool trades red against blue, tint trades
-        // green against both. Not normalised on luma, so these shift the level
-        // a little as well as the colour.
+        // Warm/cool trades red against blue, tint trades green against both.
+        // Not luma-normalised, so they shift the level a little too.
         col *= 1.0 + pp_temperature * vec3(1.0, 0.0, -1.0)
                    + pp_tint        * vec3(-0.5, 1.0, -0.5);
 

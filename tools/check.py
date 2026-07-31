@@ -23,6 +23,10 @@ import common as c
 WIDTH = 80
 SEP = "// " + "-" * (WIDTH - 3)
 
+# Lines a description may run to, excluding blanks and the Notes list. Enough
+# for what it draws and what it looks like; not enough for how it works.
+DESC_MAX = 6
+
 # "  name  0.00 - 1.00  Description." or "  name  0 / 1  Description."
 ENTRY = re.compile(r'^//   (\w+)\s\s+(-?[\d.]+(?:\s*[-/]\s*-?[\d.]+)+)\s\s+\S')
 DEFINE = re.compile(r'^#define\s+(\w+)\s+(-?[\d.]+)\s*$')
@@ -169,6 +173,35 @@ def header(name):
             if not pmin <= default <= pmax:
                 errors.append(f"{n}: default {default:g} outside "
                               f"{pmin:g} to {pmax:g}")
+
+    # "0 disables it" has to name a value the slider can actually reach. It said
+    # 0 for a gain whose range starts at 0.25, which is not a setting anyone can
+    # choose. The neutral value and the shipped default are different things -
+    # a visibility control is off at 0 and ships at 0.30 - so only the range can
+    # be checked mechanically.
+    for line in head[params_at:]:
+        m = ENTRY.match(line)
+        n_off = re.search(r'(-?[\d.]+)\s+(?:disables it|is off)', line)
+        if m and n_off:
+            lo, hi = _parse_range(m.group(2))
+            v = float(n_off.group(1))
+            if not lo <= v <= hi:
+                errors.append(f"{m.group(1)}: says {v:g} disables it, outside "
+                              f"{lo:g} to {hi:g}")
+
+    # The description says what the shader draws and what it looks like. It is
+    # read by someone deciding whether they want it, not by someone maintaining
+    # it, and it grew to 22 lines once. Mechanism belongs in docs/<family>.md.
+    end = next((i for i, l in enumerate(head[params_at:], params_at)
+                if l == SEP), None)
+    if end is not None:
+        desc = head[end + 1:]
+        stop = next((i for i, l in enumerate(desc) if l.startswith("// Notes:")),
+                    len(desc))
+        n_lines = len([l for l in desc[:stop] if l.strip() != "//"])
+        if n_lines > DESC_MAX:
+            errors.append(f"description is {n_lines} lines, over {DESC_MAX} - "
+                          f"move the mechanism to docs/")
     return errors
 
 

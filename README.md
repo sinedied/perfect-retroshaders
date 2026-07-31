@@ -27,10 +27,10 @@ All shaders provided here follow these principles, and were tested on a real dev
 
 | Shader | Description |
 |---|---|
-| [`pixel-perfect-v1.glsl`](shaders/pixel-perfect-v1.glsl) | **Sharp pixel upscaling.** Uniform pixel blocks, no shimmer, fast |
-| [`crt-perfect-v5b.glsl`](shaders/crt-perfect-v5b.glsl) | **CRT.** Scanlines, RGB mask, pixel-perfect scaling |
-| [`lcd-perfect-v4.glsl`](shaders/lcd-perfect-v4.glsl) | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling |
-| [`dmg-perfect-v9.glsl`](shaders/dmg-perfect-v9.glsl) | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, white balance, pixel-perfect scaling |
+| [`pixel-perfect-v1.glsl`](shaders/pixel-perfect.glsl) | **Sharp pixel upscaling.** Uniform pixel blocks, no shimmer, fast |
+| [`crt-perfect-v5b.glsl`](shaders/crt-perfect.glsl) | **CRT.** Scanlines, RGB mask, pixel-perfect scaling |
+| [`lcd-perfect-v4.glsl`](shaders/lcd-perfect.glsl) | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling |
+| [`dmg-perfect-v9.glsl`](shaders/dmg-perfect.glsl) | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, white balance, pixel-perfect scaling |
 
 <!-- Include screenshots here and links to RetroShader Lab for each shader, so users can see the differences and tweak the parameters to their liking. -->
 
@@ -231,7 +231,7 @@ that — the smallest is 3.33 at 640×480.
 
 ## Performance
 
-TODO: performance tests: pixellate (baseline), pixel-perfect, crt-perfect, lcd-perfect. Include a table with the results and a graph, including real GPU usage.
+TODO: performance tests: pixellate (baseline), pixel-perfect, crt-perfect, lcd-perfect. Include a table with the results and a graph, including real GPU usage. For the retroshaders, 2 entries for each shader: one with default params, one with max params (for example, crt-perfect with max scanlines and rgb mask).
 
 ## Related
 

@@ -19,39 +19,18 @@
 //   lp_min_pitch   2.00 - 6.00  Smallest pattern pitch, in output pixels.
 //   lp_subpixels   0.00 - 1.00  RGB stripe visibility. 0 disables them.
 //   lp_layout      0 / 1        Stripe order: RGB or BGR.
-//   lp_brightness  0.25 - 4.00  Output gain.
-//   lp_gamma       0.50 - 2.00  Source gamma. 1.00 disables it.
+//   lp_brightness  0.25 - 4.00  Output gain. 1.00 disables it.
+//   lp_gamma       0.50 - 2.00  Output gamma. 1.00 disables it.
 // -----------------------------------------------------------------------------
-// Simulates a handheld LCD panel as a soft mesh rather than a hard matrix: one
-// sinusoid across the source columns and one across the rows, both locked to
-// the source grid. This is the shape lcd1x uses, and a sinusoid carries no
-// harmonics to fold back past Nyquist, so it stays clean where a hard-edged
-// aperture needs a widened ramp to.
-//
-// lp_balance sets which axis dominates. Real panels are row-dominant - a Game
-// Boy Color measures a 9% matrix down against 3.7% across - but lcd1x is the
-// reverse at about 4:1, which is a balance of 0.8.
-//
-// The mesh follows the source grid, one cycle per cell, while a cell is wide
-// enough to carry a line. Below lp_min_pitch output pixels per cell the period
-// grows to a whole number of cells rather than to a fixed size in output
-// pixels, so it keeps tracking the source and stays exactly periodic on it.
-// That is what keeps a 480x272 source usable: at 640x480 it is 1.33 output
-// pixels per cell, below the two per cycle any pattern needs.
-//
-// The stripes are three sinusoids 120 degrees apart, summing to a constant at
-// every pixel. They ride the mesh's pitch rules, so they band-limit with it.
-//
-// Same picture as v3, computed from one angle instead of four. The mesh, its
-// box filter and the stripes all live on TAU*(t - phase), so one sine and one
-// cosine of it serve all three through the angle-sum identities.
+// A handheld LCD look: a soft backlit mesh with RGB subpixel stripes, over a
+// clean pixel scale. Reads like a Game Boy Color or GBA screen in good light -
+// a gentle grid rather than a hard black matrix, and it stays even at every
+// scale instead of breaking into a pattern.
 //
 // Notes:
 // - Render at the output resolution, 1:1 with the display.
-// - A column mesh and the stripes share a pitch, so they multiply into a
-//   per-channel cast. It is divided out in closed form.
-// - Everything derived from the source and output sizes alone is hoisted out
-//   of the per-fragment work by the driver; keep it that way.
+// - Row/column balance sets which axis dominates. Real panels are row-dominant;
+//   0.80 or so matches lcd1x.
 
 #pragma parameter lp_grid       "Grid visibility"          0.30 0.00 1.00 0.01
 #pragma parameter lp_balance    "Row/column balance"       0.50 0.00 1.00 0.01
@@ -156,18 +135,16 @@ uniform COMPAT_PRECISION float lp_gamma;
 #define COS_TAU_6 0.5
 #define SIN_TAU_6 0.866025404
 
-// Mean of a unit sinusoid over one output pixel, zero at one cycle per pixel.
-// The mesh gets this exactly from the integral below; the stripes are sampled
-// rather than integrated, so they need it named.
+// Mean of a unit sinusoid over one output pixel. The mesh gets this exactly
+// from the integral below; the stripes are sampled, so they need it named.
 float boxSinc(float f)
 {
     float x = PI * max(f, 1e-4);
     return sin(x) / x;
 }
 
-// Nothing above Nyquist can be represented, so take the pattern out entirely
-// rather than let it fold to a coarser pitch at nearly full strength. Zero at
-// half a cycle per pixel: past that, the fold is what would be seen.
+// Past Nyquist the pattern would fold to a coarser pitch at nearly full
+// strength, so take it out entirely instead.
 vec2 nyquistFade(vec2 f)
 {
     return 1.0 - smoothstep(0.34, 0.5, f);
@@ -179,12 +156,9 @@ void main()
     vec2 d = max(InputSize / OutputSize, 1e-6);
     vec2 B = floor(p + 0.5);
 
-    // How many cells the mesh spans per period: one, until a cell is too small
-    // to carry a line, then a WHOLE number of cells rather than a fixed size in
-    // output pixels. That keeps the pattern exactly periodic on the source grid
-    // so it cannot beat against it. Pinning it to output space instead measured
-    // a real 12px beat from a 3px mesh over 2px blocks - crt-perfect escapes
-    // that only because its column pattern carries no luminance.
+    // Cells per period: one, until a cell is too small to carry a line, then a
+    // WHOLE number of cells rather than a fixed size in output pixels - that is
+    // what keeps the pattern periodic on the source grid so it cannot beat.
     //
     // ceil() on a division needs the bias: a/b is a*rcp(b), so a ratio equal to
     // 1 can land a hair above and jump the image to a two-cell period.
@@ -193,39 +167,30 @@ void main()
     vec2 f = d / N;
 
     // One fade, read twice: the mesh takes both axes, the stripes the column
-    // one. A sinusoid does not band-limit itself, unlike the trapezoid this
-    // grew out of - dropping the fade with the trapezoid is what let 480x272
-    // into 640x480 fold to a coarser pitch at nearly full amplitude.
+    // one. A sinusoid does not band-limit itself, so this cannot be dropped.
     vec2 fade = nyquistFade(f);
 
     // Once a period spans several cells only one boundary in N carries a line,
-    // so the same amplitude concentrates into a heavier pattern. Easing it back
-    // brings 480x272 into 640x480 from 0.94 to 0.34. N == 1, every ordinary
-    // case, is untouched.
+    // so the same amplitude concentrates into a heavier pattern. N == 1, every
+    // ordinary case, is untouched.
     vec2 amp = clamp(lp_grid * 2.0 * vec2(lp_balance, 1.0 - lp_balance), 0.0, 1.0)
                * fade * (2.0 / (N + 1.0));
 
-    // Half an output pixel, in cycles: puts one sample per cycle on the trough,
-    // which is what lets a two-pixel pitch resolve at all. At pixel centres
-    // both samples sit symmetrically about the peak and read the same.
+    // Half an output pixel, in cycles: puts one sample per cycle on the
+    // trough, which is what lets a two-pixel pitch resolve at all.
     vec2 phase = 0.5 * f;
 
     // The pattern coordinate, in periods. With N == 1 this is exactly p.
     vec2 t  = p / N;
     vec2 hh = 0.4995 * f;
 
-    // The aperture integral, from one angle.
+    // The aperture integral, differenced over the footprint: the exact box
+    // filter. Both ends are symmetric about X at a half-width Y that depends
+    // only on the sizes, so by the angle-sum identities one sin and one cos of
+    // X do the work of four, and the stripes below ride the same pair.
     //
-    // The profile is 1 - m*cos(TAU*(t - phase)), whose integral differenced
-    // over the footprint is the exact box filter. The two ends are symmetric
-    // about X = TAU*(t - phase) at a half-width Y = TAU*hh that depends only on
-    // the sizes, so by the angle-sum identities one sin and one cos of X do the
-    // work of four - sin(Y) and cos(Y) are uniform and get hoisted, and the
-    // stripes below ride the same pair. Verified against the two-evaluation
-    // form to 1e-13.
-    //
-    // Alo reuses the same product, so it must take the UNCLAMPED difference or
-    // the two stop agreeing exactly where the clamp bites.
+    // Alo reuses that product, so it must take the UNCLAMPED difference or the
+    // two stop agreeing exactly where the clamp bites.
     vec2 X    = TAU * (t - phase);
     vec2 sinX = sin(X);
     vec2 cosX = cos(X);
@@ -243,11 +208,10 @@ void main()
     vec2 g = I * (1.0 / (2.0 * hh * (1.0 + amp)));
     float gain = g.x * g.y;
 
-    // The blend weights. While the mesh tracks the cells its dark line sits on
-    // the cell boundary, which is where the scaler's soft transition pixel sits
-    // too, so the two correlate and the blend must be weighted by aperture
-    // rather than by area. Once the mesh locks to output space that correlation
-    // is gone and area weights are correct, so the two blend on the same term.
+    // While the mesh tracks the cells its dark line sits on the cell boundary,
+    // where the scaler's soft transition pixel also sits, so the two correlate
+    // and the blend must be weighted by aperture rather than by area. Once the
+    // mesh locks to output space that correlation is gone.
     //
     // The one sine left that does not share X: taken at the boundary B.
     vec2 Bt  = B / N;
@@ -263,8 +227,7 @@ void main()
     vec3 e = COMPAT_TEXTURE(Texture, vec2(hi.x, hi.y)).rgb;
 
     // On the taps, before the blend, so the blend stays linear in them.
-    // pow(0, g) returns NaN on real drivers, hence the clamp; 1e-8 keeps pure
-    // black at 0 even at the lowest gamma.
+    // pow(0, g) returns NaN on real drivers, hence the clamp.
     if (abs(lp_gamma - 1.0) > 0.001) {
         vec3 gm = vec3(lp_gamma);
         a = pow(max(a, 1e-8), gm);
@@ -275,15 +238,12 @@ void main()
 
     vec3 color = mix(mix(e, c, w.x), mix(b, a, w.x), w.y);
 
-    // RGB stripes: three sinusoids 120 degrees apart, summing to exactly 3 at
-    // every pixel, so they are luminance neutral by construction and blue costs
-    // no third cosine. They ride the mesh's pitch rules, so the box filter and
-    // the Nyquist fade band-limit them - the separate fade they used to have
-    // switched them off entirely at 3.2 output pixels per cell.
+    // Three sinusoids 120 degrees apart, summing to exactly 3 at every pixel,
+    // so they are luminance neutral and blue costs no third cosine. They ride
+    // the mesh's pitch rules, so the box filter and the fade band-limit them.
     //
-    // The triad is centred on its cell, which puts both stripe angles a
-    // constant offset from X, so the pair taken above covers them by the
-    // angle-sum identity. Green's offset is half a turn, so it is -cos(X).
+    // The triad is centred on its cell, so both stripe angles are a constant
+    // offset from X and the pair above covers them by the angle-sum identity.
     vec3 stripe = vec3(1.0);
     if (lp_subpixels > 0.0) {
         float sinc = boxSinc(f.x);
@@ -292,27 +252,21 @@ void main()
                                   -cosX.x);
         stripe = vec3(rg, 3.0 - rg.x - rg.y);
 
-        // Take the colour cast out. A column mesh and a stripe mask both sit
-        // at one cycle per cell, so they correlate: whichever stripe lands on
-        // the mesh's dark line is dimmed, and swapping the stripe order swaps
-        // which, so RGB and BGR cast in opposite directions. About four levels
-        // on a white field uncorrected.
-        //
-        // The mean of the product over a cell has a closed form, so dividing
-        // each channel by it equalises the three for a per-channel constant and
-        // no extra taps. It must use the BOX-FILTERED amplitude, not the
-        // nominal one, or the correction overshoots where the filter bites.
+        // Take the colour cast out. A column mesh and the stripes share a
+        // pitch, so whichever stripe lands on the mesh's dark line is dimmed -
+        // about four levels on a white field. The mean of the product over a
+        // cell has a closed form, so dividing by it costs a constant and no
+        // extra taps. Must use the BOX-FILTERED amplitude, not the nominal one,
+        // or it overshoots where the filter bites.
         // The stripe argument already carries -phase and the trough is at
         // phase, so it cancels. Subtracting it again rotates the correction off
         // the symmetry and reintroduces the very cast being corrected.
         float M = amp.x * sinc;
         vec3 corr = 1.0 - 0.5 * M * ac * vec3(COS_TAU_6, -1.0, COS_TAU_6);
-        // The square root is not decoration. That closed form is the cast in
-        // linear light, but what is seen - and measured - is the encoded value,
-        // and sqrt() below halves any relative deviation on the way there. So
-        // the correction has to be halved too, which is what taking its square
-        // root does. Applying it whole overshoots to the opposite sign: green
-        // went from 3 levels bright to 3.4 levels dark.
+        // The closed form is the cast in linear light, but sqrt() below halves
+        // any relative deviation on the way to the encoded value, so the
+        // correction has to be halved too. Applying it whole overshoots to the
+        // opposite sign.
         stripe /= sqrt(max(corr, 1e-3));
 
         if (lp_layout >= 0.5) {

@@ -185,13 +185,27 @@ written down for a release:
   these headers has produced stray fragments and a duplicated licence block.
 - The `#ifdef` fallback `#define`s must equal the `#pragma` defaults. A host
   that does not parse pragmas renders the fallbacks. `check.py` gates this.
+- A `PARAMETERS` entry reads `<what it does>. <value> disables it.` That value
+  is the **neutral** one, which is not always the default — a visibility control
+  is off at 0 and ships at 0.30. `check.py` gates that it is at least inside the
+  declared range.
+
+**The description says what the shader draws and what it looks like.** Not how
+it works. It is read by someone deciding whether they want this shader, who does
+not read GLSL and does not care about Nyquist. No mechanism, no measurements, no
+comparisons to other shaders — all of that belongs in `docs/<family>.md`. Six
+lines, gated; `lcd-perfect` reached 22 before anything stopped it.
+
+Then `Notes:`, for the handful of things a *user* needs: how to run it, and any
+setting that behaves surprisingly.
 
 **Comments in the body are short and local.** It is a shader, not a research
-paper: say what a line does and why it is not the obvious thing, in a few lines.
-Measurements, rejected approaches and the argument for a design belong in
-`docs/<family>.md`, which is where anyone looking for them will go. A shader
-that was 184 comment lines against 153 of code was not better documented, it was
-harder to read.
+paper. The test: **keep a comment only if it stops a misreading of that line.**
+"`mix()` returns y at t == 1, so the low-side tap goes second" earns its place;
+the optics of a reflective panel does not. Measurements, rejected approaches and
+the argument for a design belong in `docs/<family>.md`, which is where anyone
+looking for them will go. A shader that was 184 comment lines against 153 of
+code was not better documented, it was harder to read.
 
 ## GLSL traps that actually bit
 
