@@ -151,3 +151,80 @@ not sample the same phases.
   because lcd1x point-samples and its horizontal lines are sharper than a
   box-filtered one of the same measured swing. Render the frame before calling a
   look matched.
+
+## v4: one angle instead of four
+
+v4 is v3's picture computed differently. Not a retune - no parameter, default or
+range changed, and the `#pragma` block is byte-identical. The gate is equality
+with v3 within 1/255 across all ten cases and a thirteen-setting sweep, with v1
+and v2a kept as negative controls (they fail it at 146/255 and 95/255).
+
+**434 ops to 414, and 0.1512 ms to 0.1338 ms - 11.5% off frame time.**
+
+v3 spent eight per-fragment transcendentals building things that are all the
+same angle. With `X = TAU*(t - phase)` and `Y = TAU*hh`, where **`Y` is
+uniform-derived**, three identities collapse them onto one `sin(X)`/`cos(X)`
+pair:
+
+- `sin(X+Y) - sin(X-Y) = 2*cos(X)*sin(Y)`, so the aperture integral's difference
+  needs one angle, not two evaluations. One whole `apertureIntegral` call goes.
+- Substituting `k*cos(X)*sin(Y) = hh - I/2` back into the lower bound gives
+  `Alo = t - 0.5*Iraw - (k*cosY)*sinX`, reusing what the integral already
+  produced. This must use the **unclamped** `Iraw`: v3 computed `Alo`
+  independently, so feeding it the clamped `I` would make the two disagree
+  exactly where `max(..., 1e-6)` bites.
+- The stripe angles are `X.x` offset by compile-time constants, so
+  `cos(X.x - K) = cos(X.x)*cos(K) + sin(X.x)*sin(K)` turns both stripe cosines
+  into multiply-adds. `K1 = TAU/2` makes green simply `-cos(X.x)`.
+
+Also folded: the `corr` cosines are exact literals `vec3(0.5, -1.0, 0.5)`,
+`nyquistFade(f)` was being evaluated twice, `g`'s uniform divisor became a
+reciprocal-multiply, and `vec2 h = 0.4995 * d;` was dead code.
+
+All three identities were checked in float64 over 100k samples before any GLSL
+was written - max error 1e-13.
+
+### SFU went 39 to 41, and that number is wrong
+
+`perf.py --static` counts every SFU lane in the disassembly, including the ones
+the driver hoists out of the fragment shader. The split matters more than the
+total:
+
+| | varying SFU | uniform SFU | reported |
+|---|---|---|---|
+| v3 | 8 | 1 | 39 |
+| v4 | **6** | 5 | 41 |
+
+Per-fragment cost fell by a quarter while the reported figure rose. **This was
+proven, not assumed**: a probe multiplying `Y` by `step(-1.0, p.x)` - exactly
+1.0, but not constant-foldable - keeps the same 41 SFU and adds only 7 ops, yet
+runs **9.7% slower** (0.1472 against 0.1342). That is the hoist, measured.
+
+The useful part for a device nobody here can test: even that forced worst case,
+where nothing hoists at all, still beats v3 (0.1472 against 0.1506). v4 is ahead
+whether or not a Mali G31 hoists uniform trig.
+
+`sinY`/`cosY` cannot be removed - `I` needs one and `Alo` the other. Recovering
+`cos(X)` from the sines as `diff/(2*sin(Y))` blows up as `f -> 0`, which is the
+extreme-upscale case this shader exists for. `cosY = sqrt(1 - sinY*sinY)` trades
+one SFU class for another and needs a sign fix past `f > 0.5`. Hoisting them to
+a vertex output is blocked because `flat` is a reserved word in ESSL 1.00.
+
+### Rejected: the N == 1 fast path
+
+At `N == 1`, `Bt` is an integer, so the blend weight's `sin(TAU*(Bt - phase))`
+folds to the constant `-sin(TAU*phase)` and the last varying `sin` disappears.
+Branching on `N.x + N.y < 2.5` is safe - `N` comes from `ceil()`, so the values
+are exact small integers and the threshold sits between 2 and 3, which is not an
+exact comparison of a division result.
+
+It works: within 1/255, and **7% faster again** (0.1246 ms, 17.5% under v3). The
+precision hazard that was expected did not appear - `sin` at B around 320, near
+2010 radians where float32 argument reduction is lossy, still agreed within
+1/255.
+
+It was dropped anyway, because both branches stay in the binary: static ops go
+to 435 and SFU to 43. The rule for this rewrite was "only changes that cut both
+signals", and a branch that a weaker driver might scalarise is exactly the kind
+of guess that rule exists to refuse. Recorded here because the measurement stands
+and the decision could reasonably go the other way on evidence from the device.

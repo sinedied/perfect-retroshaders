@@ -4,10 +4,74 @@ import numpy as np
 
 import common as c
 
-CURRENT = "lcd-perfect-v3.glsl"
+CURRENT = "lcd-perfect-v4.glsl"
+
+# v4 is v3's arithmetic rearranged, not retuned: the mesh, its box filter and
+# the stripes all live on the same angle, so one sine and one cosine of it
+# replace four evaluations through the angle-sum identities. That is a claim
+# about the picture, so it is checked as one.
+PREVIOUS = "lcd-perfect-v3.glsl"
+
+# The controls. These are real lcd-perfect versions with real differences from
+# v3, so an equivalence check that cannot tell them apart is not checking
+# anything. v2a is the closest - the same sinusoid mesh, before the Nyquist
+# fade and the whole-cell period came back - and v1 is the trapezoid aperture.
+SUPERSEDED = ["lcd-perfect-v2a.glsl", "lcd-perfect-v1.glsl"]
+
+# Every branch the rewrite touches, not just the defaults. lp_gamma exercises
+# the pow() path, lp_min_pitch at 6 forces the N > 1 regime where the period
+# spans several cells, and lp_subpixels drives the stripe block that lost its
+# two cosines.
+SWEEP = [
+    {},
+    {"lp_grid": 0.0},
+    {"lp_grid": 1.0},
+    {"lp_balance": 0.0},
+    {"lp_balance": 1.0},
+    {"lp_subpixels": 0.0},
+    {"lp_subpixels": 1.0},
+    {"lp_layout": 1.0},
+    {"lp_gamma": 0.5},
+    {"lp_gamma": 2.0},
+    {"lp_min_pitch": 2.0},
+    {"lp_min_pitch": 6.0},
+    {"lp_grid": 1.0, "lp_subpixels": 1.0, "lp_balance": 1.0},
+]
+
+
+def _worst(ctx, progs, other, cases, sweep):
+    """Worst 8-bit difference between CURRENT and another version."""
+    worst, at = 0, ""
+    for case in cases:
+        sw, sh, ow, oh = case
+        src = c.scene(sw, sh)
+        for params in sweep:
+            a = c.render(ctx, progs, CURRENT, src, ow, oh, **params)
+            b = c.render(ctx, progs, other, src, ow, oh, **params)
+            d = int(np.abs(a.astype(int) - b.astype(int)).max())
+            if d > worst:
+                worst = d
+                at = f"{c.golden_key(case)} {params or 'defaults'}"
+    return worst, at
 
 
 def run(names, ctx, progs, report, cases=None):
+    cases = cases or c.CASES
+
+    # The rewrite's whole claim: same picture, less arithmetic.
+    worst, at = _worst(ctx, progs, PREVIOUS, cases, SWEEP)
+    report.check(worst <= c.TOLERANCE,
+                 f"{CURRENT} is {PREVIOUS} rearranged",
+                 f"worst {worst}/255 at {at}")
+
+    # ... and the control, so that check means something. These have to differ
+    # by more than the tolerance or the comparison above proves nothing.
+    for old in SUPERSEDED:
+        seen, at = _worst(ctx, progs, old, cases, [{}])
+        report.check(seen > c.TOLERANCE,
+                     f"{old} is NOT {CURRENT}, so the check can fail",
+                     f"worst {seen}/255 at {at}")
+
     # lp_layout is documented as stripe order. If it really is only that, BGR
     # is RGB with red and blue exchanged and nothing else.
     src = c.flat(64, 48, 200)

@@ -117,7 +117,14 @@ moire_allow = [
 [[shader]]
 name = "lcd-perfect-v3.glsl"
 family = "lcd-perfect"
-role = ["released", "current"]
+role = ["released"]
+pattern = "whole-cell"
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
+name = "lcd-perfect-v4.glsl"
+family = "lcd-perfect"
+role = ["current"]
 pattern = "whole-cell"
 neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
 
@@ -550,28 +557,28 @@ sampler = "linear"
 "480x272->640x480" = "d9f7069ed5495378"
 
 [golden."lcd-perfect-v1.glsl"]
-"160x144->1024x768" = "9c4d71137a4c1aff"
-"240x160->1024x768" = "46c202d6f53c97f3"
-"256x192->1024x768" = "db0311d389f38c4c"
-"256x192->640x480" = "582c84e03075decc"
-"256x224->1024x768" = "b4b28c1ecb8ac13b"
-"320x240->1024x768" = "2df4d158d6c7e5bd"
-"320x240->1280x720" = "b11f752c60ff61dd"
-"320x240->640x480" = "009dd078809c4f93"
-"480x272->1024x768" = "d458a92ef24b0b78"
-"480x272->640x480" = "2c2c614ca459ef30"
+"160x144->1024x768" = "dc0da95178ccfc99"
+"240x160->1024x768" = "fdb4e2c6dc5cd6dd"
+"256x192->1024x768" = "96af4e580b3b1a34"
+"256x192->640x480" = "cbb590d4ffa8bc6b"
+"256x224->1024x768" = "098401b89bd3ecce"
+"320x240->1024x768" = "e62afa741e33005e"
+"320x240->1280x720" = "cc1f51990802d8a0"
+"320x240->640x480" = "ccea61c909c65e9a"
+"480x272->1024x768" = "317dd7e7aef995b8"
+"480x272->640x480" = "a92fad825d3defc1"
 
 [golden."lcd-perfect-v2a.glsl"]
-"160x144->1024x768" = "db52baf2f62874a7"
-"240x160->1024x768" = "60d3f803d24a5188"
-"256x192->1024x768" = "f226aef34d90ca86"
-"256x192->640x480" = "a67e64020546e763"
-"256x224->1024x768" = "7916176ae1fa9459"
-"320x240->1024x768" = "7ff0c3b6c77817ad"
-"320x240->1280x720" = "2f943d80b0ae40f2"
-"320x240->640x480" = "3bc9b517e4fab036"
-"480x272->1024x768" = "12f81ddfb848b41f"
-"480x272->640x480" = "71d6dccf1051addb"
+"160x144->1024x768" = "caf2a613edfddd8f"
+"240x160->1024x768" = "6a83f114a3f6fc1b"
+"256x192->1024x768" = "f983ea8e1bd62579"
+"256x192->640x480" = "027da2192153669c"
+"256x224->1024x768" = "c303ca03cd25ed64"
+"320x240->1024x768" = "5918fc017ff6e66c"
+"320x240->1280x720" = "ad019720607ef013"
+"320x240->640x480" = "cce6ee5690c3bdb2"
+"480x272->1024x768" = "363b343e172e0326"
+"480x272->640x480" = "695200a9fdab1f61"
 
 [golden."lcd-perfect-v2b.glsl"]
 "160x144->1024x768" = "6e8bb170943372dd"
@@ -596,6 +603,18 @@ sampler = "linear"
 "320x240->640x480" = "1b97ca4d27a644d3"
 "480x272->1024x768" = "526e45a826d1c056"
 "480x272->640x480" = "a91083d8ba907300"
+
+[golden."lcd-perfect-v4.glsl"]
+"160x144->1024x768" = "73be8b9155aee0b3"
+"240x160->1024x768" = "e1515ed782047694"
+"256x192->1024x768" = "61d393dba6177082"
+"256x192->640x480" = "2edfd0046764e450"
+"256x224->1024x768" = "52523fa60b5f728f"
+"320x240->1024x768" = "7fd8b83297b68f56"
+"320x240->1280x720" = "ef7debaa1ba30c1a"
+"320x240->640x480" = "9a23fa00c26beea6"
+"480x272->1024x768" = "eb8ad8c462a2e21d"
+"480x272->640x480" = "dcd80a445b2465ee"
 
 [golden."pixel-perfect-v1.glsl"]
 "160x144->1024x768" = "784dcd47f347a0dd"
