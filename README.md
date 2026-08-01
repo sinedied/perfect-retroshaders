@@ -2,7 +2,7 @@
 
 # 📺<br>perfect-retroshaders
 
-**My take on the "perfect" retro shaders:<br>a retro look without compromising
+**My take on the "perfect" retro shaders: a retro look without compromising
 performance and brightness.**
 
 ![Retro look](https://img.shields.io/badge/%F0%9F%95%B9%20retro-look-C64A8F?style=flat-square)
