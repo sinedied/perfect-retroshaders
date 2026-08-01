@@ -23,12 +23,12 @@ All shaders provided here follow these principles, and were tested on a real dev
 
 ## Shaders
 
-| Shader | Description |
-|---|---|
-| [`pixel-perfect.glsl`](shaders/pixel-perfect.glsl) | **Sharp pixel upscaling.** Uniform pixel blocks, no shimmer, colour controls |
-| [`crt-perfect.glsl`](shaders/crt-perfect.glsl) | **CRT.** Scanlines, RGB mask, pixel-perfect scaling |
-| [`lcd-perfect.glsl`](shaders/lcd-perfect.glsl) | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling |
-| [`dmg-perfect.glsl`](shaders/dmg-perfect.glsl) | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, white balance, pixel-perfect scaling |
+| Shader                                             | Description                                                                                                   |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| [`pixel-perfect.glsl`](shaders/pixel-perfect.glsl) | **Sharp pixel upscaling.** Uniform pixel blocks, no shimmer, colour controls                                  |
+| [`crt-perfect.glsl`](shaders/crt-perfect.glsl)     | **CRT.** Scanlines, RGB mask, pixel-perfect scaling                                                           |
+| [`lcd-perfect.glsl`](shaders/lcd-perfect.glsl)     | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling                                       |
+| [`dmg-perfect.glsl`](shaders/dmg-perfect.glsl)     | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, white balance, pixel-perfect scaling |
 
 > [!IMPORTANT]
 > All shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to work at non-integer scaling factors with almost no visible artifacts/patterns, though the image will still look better at integer scales.
@@ -47,10 +47,10 @@ All configurations shown here ones uses aspect (except the DMG that uses native)
 
 Both pixel-perfect and pixellate produce the same output at default parameters, fixing uneven pixel scaling and shimmer issues, though **pixel-perfect** is almost 2x faster!
 
-| Pipeline                                    | Perf. |
-| ------------------------------------------- | ----- |
+| Pipeline                    | Perf. |
+| --------------------------- | ----- |
 | 1 pass · pixel-perfect.glsl | 100%  |
-| 1 pass · pixellate.glsl         | 57%   |
+| 1 pass · pixellate.glsl     | 57%   |
 
 </details>
 
@@ -61,10 +61,10 @@ Both pixel-perfect and pixellate produce the same output at default parameters, 
 
 Even with color correction enabled, pixel-perfect is still faster than pixellate, while allowing for more control over the output image.
 
-| Pipeline                                            | Perf. |
-| --------------------------------------------------- | ----- |
+| Pipeline                    | Perf. |
+| --------------------------- | ----- |
 | 1 pass · pixel-perfect.glsl | 100%  |
-| 1 pass · pixellate.glsl                 | 84%   |
+| 1 pass · pixellate.glsl     | 84%   |
 
 </details>
 
@@ -77,9 +77,9 @@ Even with color correction enabled, pixel-perfect is still faster than pixellate
 
 While res-independant-scanlines is slightly faster than crt-shader, it doesn't provide uniform pixel scaling and produce moire patterns at non-integer scaling factors. crt-perfect also add RGB mask simulation and controls for compensating for the brightness loss of scanlines.
 
-| Pipeline                                                            | Perf. |
-| ------------------------------------------------------------------- | ----- |
-| 1 pass · crt-perfect.glsl                             | 100%  |
+| Pipeline                                | Perf. |
+| --------------------------------------- | ----- |
+| 1 pass · crt-perfect.glsl               | 100%  |
 | 1 pass · res-independent-scanlines.glsl | 119%  |
 
 </details>
@@ -91,9 +91,9 @@ While res-independant-scanlines is slightly faster than crt-shader, it doesn't p
 
 When comparing crt-perfect with the "old-tv" preset from NextUI which adds barrel distortion in addition to scaline, crt-perfect becomes faster even with all the effects enabled, including anti-aliased barrel distorsion, uniform pixel scaling and brightness + gamma correction.
 
-| Pipeline                                                                              | Perf. |
-| ------------------------------------------------------------------------------------- | ----- |
-| 1 pass · crt-perfect.glsl                                       | 100%  |
+| Pipeline                                                           | Perf. |
+| ------------------------------------------------------------------ | ----- |
+| 1 pass · crt-perfect.glsl                                          | 100%  |
 | 2 passes · barrel-distortion.glsl → res-independent-scanlines.glsl | 73%   |
 
 </details>
@@ -107,9 +107,9 @@ When comparing crt-perfect with the "old-tv" preset from NextUI which adds barre
 
 lcd-perfect can reproduce the same output as lcd3x or lcd1x coupled with a pixellate pass, but with better performance and more visual controls. The preset pictured on the right corresponds to NextUI's "real-gba" preset.
 
-| Pipeline                                                 | Perf. |
-| -------------------------------------------------------- | ----- |
-| 1 pass · lcd-perfect.glsl                  | 100%  |
+| Pipeline                               | Perf. |
+| -------------------------------------- | ----- |
+| 1 pass · lcd-perfect.glsl              | 100%  |
 | 2 passes · pixellate.glsl → lcd3x.glsl | 72%   |
 
 </details>
@@ -121,9 +121,9 @@ lcd-perfect can reproduce the same output as lcd3x or lcd1x coupled with a pixel
 
 You can tune the horizontal/vertical grid balance (tip: 0.8 is lcd1x) with added RGB subpixel simulation and brightness compensation. Set the RGB subpixels order to BGR for proper Game Boy Advance screen simulation, all while still keeping better performance.
 
-| Pipeline                                                 | Perf. |
-| -------------------------------------------------------- | ----- |
-| 1 pass · lcd-perfect.glsl          | 100%  |
+| Pipeline                               | Perf. |
+| -------------------------------------- | ----- |
+| 1 pass · lcd-perfect.glsl              | 100%  |
 | 2 passes · pixellate.glsl → lcd3x.glsl | 87%   |
 
 </details>
@@ -137,9 +137,9 @@ You can tune the horizontal/vertical grid balance (tip: 0.8 is lcd1x) with added
 
 Not exactly a fair comparison here as the NextUI "real-gameboy" preset is based on lcd3x which cannot reproduce the lighter grid gap of the DMG screen. dmg-perfect simulates the dot-matrix grid with light gaps and uniform upscaling, while still keeping better performance.
 
-| Pipeline                                                 | Perf. |
-| -------------------------------------------------------- | ----- |
-| 1 pass · dmg-perfect.glsl          | 100%  |
+| Pipeline                               | Perf. |
+| -------------------------------------- | ----- |
+| 1 pass · dmg-perfect.glsl              | 100%  |
 | 2 passes · pixellate.glsl → lcd3x.glsl | 92%   |
 
 </details>
@@ -169,14 +169,14 @@ Every shader ships ready to use, so the defaults are the best balance between fi
 
 A clean upscale: every source pixel becomes an even block, with no shimmer and no blur. The plain, fast default when you want the picture and nothing else, plus simple colour controls for tuning it to a screen.
 
-| Parameter | Range | Default | |
-|---|---|---|---|
-| Brightness | 0.50 – 2.00 | 1.00 | Output gain. |
-| Contrast | 0.00 – 2.00 | 1.00 |  |
-| Saturation | 0.00 – 2.00 | 1.00 | Colour intensity. |
-| Gamma | 0.50 – 2.00 | 1.00 | Output gamma. |
-| Cool / warm balance | −1.00 – 1.00 | 0.00 | Warm above 0, cool below. |
-| Magenta / green balance | −1.00 – 1.00 | 0.00 | Green above 0, magenta below. |
+| Parameter               | Range        | Default |                               |
+| ----------------------- | ------------ | ------- | ----------------------------- |
+| Brightness              | 0.50 – 2.00  | 1.00    | Output gain.                  |
+| Contrast                | 0.00 – 2.00  | 1.00    |                               |
+| Saturation              | 0.00 – 2.00  | 1.00    | Colour intensity.             |
+| Gamma                   | 0.50 – 2.00  | 1.00    | Output gamma.                 |
+| Cool / warm balance     | −1.00 – 1.00 | 0.00    | Warm above 0, cool below.     |
+| Magenta / green balance | −1.00 – 1.00 | 0.00    | Green above 0, magenta below. |
 
 > [!NOTE]
 > Output matches the well-known `pixellate` shader to within 1 level out of 255 at default params, and runs faster.
@@ -185,16 +185,16 @@ A clean upscale: every source pixel becomes an even block, with no shimmer and n
 
 A CRT look: soft scanlines and an RGB shadow mask over a clean pixel scale, with optional screen curvature. Reads like a small tube TV, sharp rather than blurry, and neither pattern beats against the pixel grid at any scale.
 
-| Parameter | Range | Default | |
-|---|---|---|---|
-| Scanline visibility | 0.00 – 1.00 | 0.60 |  |
-| RGB mask visibility | 0.00 – 1.00 | 0.20 |  |
-| Mask | 0 / 1 / 2 | 1 | Off, aperture grille, slot grille. |
-| Mask triads per pixel | 0.25 – 2.00 | 1.00 | Mask triads per source pixel. |
-| Min. pitch in px | 2.00 – 6.00 | 3.00 | Smallest pattern pitch, in output pixels. |
-| Screen curvature | 0.00 – 0.15 | 0.00 |  |
-| Brightness | 0.25 – 4.00 | 1.25 | Output gain. |
-| Gamma | 0.50 – 2.00 | 1.00 | Output gamma. |
+| Parameter             | Range       | Default |                                           |
+| --------------------- | ----------- | ------- | ----------------------------------------- |
+| Scanline visibility   | 0.00 – 1.00 | 0.60    |                                           |
+| RGB mask visibility   | 0.00 – 1.00 | 0.20    |                                           |
+| Mask                  | 0 / 1 / 2   | 1       | Off, aperture grille, slot grille.        |
+| Mask triads per pixel | 0.25 – 2.00 | 1.00    | Mask triads per source pixel.             |
+| Min. pitch in px      | 2.00 – 6.00 | 3.00    | Smallest pattern pitch, in output pixels. |
+| Screen curvature      | 0.00 – 0.15 | 0.00    |                                           |
+| Brightness            | 0.25 – 4.00 | 1.25    | Output gain.                              |
+| Gamma                 | 0.50 – 2.00 | 1.00    | Output gamma.                             |
 
 > [!TIP]
 > - Keep **min. pitch** at 2.50 or above. Below that a triad has fewer than three output pixels to sit in, and the mask falls back to two colours.
@@ -205,15 +205,15 @@ A CRT look: soft scanlines and an RGB shadow mask over a clean pixel scale, with
 
 A handheld LCD look: a soft backlit mesh with RGB subpixel stripes, over a clean pixel scale. Reads like a Game Boy Color or GBA screen in good light — a gentle grid rather than a hard black matrix, and it stays even at every scale instead of breaking into a pattern.
 
-| Parameter | Range | Default | |
-|---|---|---|---|
-| Grid visibility | 0.00 – 1.00 | 0.30 |  |
-| Row/column balance | 0.00 – 1.00 | 0.60 | 0 rows, 1 columns. |
-| Minimum pitch in px | 2.00 – 6.00 | 3.00 | Smallest pattern pitch, in output pixels. |
-| RGB stripe visibility | 0.00 – 1.00 | 0.20 |  |
-| Stripe order | 0 / 1 | 0 | RGB or BGR. |
-| Brightness | 0.25 – 4.00 | 1.25 | Output gain. |
-| Gamma | 0.50 – 2.00 | 1.00 | Output gamma. |
+| Parameter             | Range       | Default |                                           |
+| --------------------- | ----------- | ------- | ----------------------------------------- |
+| Grid visibility       | 0.00 – 1.00 | 0.30    |                                           |
+| Row/column balance    | 0.00 – 1.00 | 0.60    | 0 rows, 1 columns.                        |
+| Minimum pitch in px   | 2.00 – 6.00 | 3.00    | Smallest pattern pitch, in output pixels. |
+| RGB stripe visibility | 0.00 – 1.00 | 0.20    |                                           |
+| Stripe order          | 0 / 1       | 0       | RGB or BGR.                               |
+| Brightness            | 0.25 – 4.00 | 1.25    | Output gain.                              |
+| Gamma                 | 0.50 – 2.00 | 1.00    | Output gamma.                             |
 
 > [!TIP]
 > - **Set stripe order to BGR (1) for Game Boy Advance content.** The GBA panel really is laid out blue-green-red, so RGB puts the colour fringes on the wrong side.
@@ -224,15 +224,15 @@ A handheld LCD look: a soft backlit mesh with RGB subpixel stripes, over a clean
 
 An original Game Boy look: the dot matrix grid with its pale gaps, over a clean pixel scale. Dots can cast a shadow so they sit above the panel. The grid is invisible on white and strongest on dark content, as a real DMG is.
 
-| Parameter | Range | Default | |
-|---|---|---|---|
-| Grid visibility | 0.00 – 1.00 | 0.30 |  |
-| Grid line thickness | 0.25 – 2.00 | 1.00 | Grid line thickness, in pixels. |
-| Dot shadow | 0.00 – 1.00 | 0.00 | Shadow cast by driven dots. |
-| Brightness | 0.25 – 4.00 | 1.00 | Output gain. |
-| Gamma | 0.50 – 2.00 | 1.20 | Output gamma. |
-| Cool / warm balance | −1.00 – 1.00 | 0.00 | Warm above 0, cool below. |
-| Magenta / green balance | −1.00 – 1.00 | 0.00 | Green above 0, magenta below. |
+| Parameter               | Range        | Default |                                 |
+| ----------------------- | ------------ | ------- | ------------------------------- |
+| Grid visibility         | 0.00 – 1.00  | 0.30    |                                 |
+| Grid line thickness     | 0.25 – 2.00  | 1.00    | Grid line thickness, in pixels. |
+| Dot shadow              | 0.00 – 1.00  | 0.00    | Shadow cast by driven dots.     |
+| Brightness              | 0.25 – 4.00  | 1.00    | Output gain.                    |
+| Gamma                   | 0.50 – 2.00  | 1.20    | Output gamma.                   |
+| Cool / warm balance     | −1.00 – 1.00 | 0.00    | Warm above 0, cool below.       |
+| Magenta / green balance | −1.00 – 1.00 | 0.00    | Green above 0, magenta below.   |
 
 > [!TIP]
 > - **Grid line thickness is in output pixels**, not a fraction of a cell, so the panel reads the same at 640x480 as at 1024x768. 1.00 is a one-pixel line.
@@ -246,17 +246,17 @@ An original Game Boy look: the dot matrix grid with its pale gaps, over a clean 
 
 Measured against [`pixellate`](tools/vendor/pixellate.glsl), the shader most people already use for clean upscaling, at 320x240 into 1024x768. Two rows per shader: as it ships, and with every effect it has turned up.
 
-| Shader | Active instructions | Texture taps | Speed vs `pixellate` |
-|---|---|---|---|
-| `pixellate` (baseline) | 240 | 4 | 100% |
-| **`pixel-perfect`**, defaults | **111** | 4 | **127%** |
-| `pixel-perfect`, everything on | 143 | 4 | 123% |
-| `dmg-perfect`, defaults | 265 | 4 | 97% |
-| `dmg-perfect`, everything on | 447 | 8 | 78% |
-| `lcd-perfect`, defaults | 334 | 4 | 94% |
-| `lcd-perfect`, everything on | 339 | 4 | 94% |
-| `crt-perfect`, defaults | 428 | 4 | 93% |
-| `crt-perfect`, everything on | 503 | 4 | 86% |
+| Shader                         | Active instructions | Texture taps | Speed vs `pixellate` |
+| ------------------------------ | ------------------- | ------------ | -------------------- |
+| `pixellate` (baseline)         | 240                 | 4            | 100%                 |
+| **`pixel-perfect`**, defaults  | **111**             | 4            | **127%**             |
+| `pixel-perfect`, everything on | 143                 | 4            | 123%                 |
+| `dmg-perfect`, defaults        | 265                 | 4            | 97%                  |
+| `dmg-perfect`, everything on   | 447                 | 8            | 78%                  |
+| `lcd-perfect`, defaults        | 334                 | 4            | 94%                  |
+| `lcd-perfect`, everything on   | 339                 | 4            | 94%                  |
+| `crt-perfect`, defaults        | 428                 | 4            | 93%                  |
+| `crt-perfect`, everything on   | 503                 | 4            | 86%                  |
 
 `pixel-perfect` is a drop-in replacement for `pixellate` that produces the same image with better performance. The three effect shaders do considerably more and still stay within a tenth of it at their defaults, because the expensive part of all four is the same scaler underneath.
 
