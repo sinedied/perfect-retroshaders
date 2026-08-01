@@ -88,9 +88,17 @@ family = "pixel-perfect"
 role = ["released"]
 
 [[shader]]
-name = "pixel-perfect-v6.glsl"
+name = "pixel-perfect-v7.glsl"
 family = "pixel-perfect"
 role = ["current"]
+equivalent_to = "pixellate.glsl"
+# At a neutral grade it must still be the plain scaler.
+neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
+
+[[shader]]
+name = "pixel-perfect-v6.glsl"
+family = "pixel-perfect"
+role = ["archive"]
 equivalent_to = "pixellate.glsl"
 # At a neutral grade it must still be the plain scaler.
 neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
@@ -117,9 +125,45 @@ family = "crt-perfect"
 role = ["released"]
 
 [[shader]]
-name = "crt-perfect-v10.glsl"
+name = "crt-perfect-v11.glsl"
 family = "crt-perfect"
 role = ["current"]
+pattern = "output-locked"
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
+# v10 is bit-identical to the released shader at equal parameters - measured
+# both ways, 0.249 and 0.434 to three decimals. Both exceedances are entirely
+# its retuned defaults: scanlines 0.55 -> 0.60 and mask 0.40 -> 0.20 beat harder.
+# Neither was visible before, because the tool used to pick a shader's pattern
+# rule by filename prefix and never matched v6-v10. The 256x224 case has a floor
+# of 0.000, so that one is all shader; the PSP case is the same pre-existing
+# fault the released shader has. Owner's tuning: pinned and surfaced, not changed.
+moire_allow = [
+    { case = [480, 272, 640, 480], value = 0.466 },
+    { case = [256, 224, 1024, 768], value = 0.434 },
+]
+
+[[shader]]
+name = "crt-perfect-v11b.glsl"
+family = "crt-perfect"
+role = ["archive"]
+pattern = "output-locked"
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
+# v10 is bit-identical to the released shader at equal parameters - measured
+# both ways, 0.249 and 0.434 to three decimals. Both exceedances are entirely
+# its retuned defaults: scanlines 0.55 -> 0.60 and mask 0.40 -> 0.20 beat harder.
+# Neither was visible before, because the tool used to pick a shader's pattern
+# rule by filename prefix and never matched v6-v10. The 256x224 case has a floor
+# of 0.000, so that one is all shader; the PSP case is the same pre-existing
+# fault the released shader has. Owner's tuning: pinned and surfaced, not changed.
+moire_allow = [
+    { case = [480, 272, 640, 480], value = 0.466 },
+    { case = [256, 224, 1024, 768], value = 0.434 },
+]
+
+[[shader]]
+name = "crt-perfect-v10.glsl"
+family = "crt-perfect"
+role = ["archive"]
 pattern = "output-locked"
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
 # v10 is bit-identical to the released shader at equal parameters - measured
@@ -149,9 +193,45 @@ family = "lcd-perfect"
 role = ["released"]
 
 [[shader]]
-name = "lcd-perfect-v5.glsl"
+name = "lcd-perfect-v6.glsl"
 family = "lcd-perfect"
 role = ["current"]
+pattern = "whole-cell"
+# Row/column balance ships at 0.60 rather than 0.50, leaning the mesh towards
+# columns. A column mesh shares its pitch with the RGB stripes, so the two
+# correlate and the beat rises with it: 0.365 at 0.50, 0.432 at 0.60, 0.620 at
+# the 0.80 that matches lcd1x. Only the densest case is affected, only on a 1px
+# checkerboard, and it is invisible on real content. An owner decision.
+moire_allow = [{ case = [480, 272, 1024, 768], value = 0.432 }]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+# Gamma moved after the blend, which halves its SFU and costs moire once it is
+# turned up: 0.294 at the 1.00 default, 1.918 at 1.20, 3.622 at 1.40. Nothing is
+# recorded here because the default skips the branch entirely - v5 and v4 are
+# byte-identical there. A deliberate trade, judged by eye at 1.40 on real
+# content, where the two are indistinguishable.
+
+[[shader]]
+name = "lcd-perfect-v6b.glsl"
+family = "lcd-perfect"
+role = ["archive"]
+pattern = "whole-cell"
+# Row/column balance ships at 0.60 rather than 0.50, leaning the mesh towards
+# columns. A column mesh shares its pitch with the RGB stripes, so the two
+# correlate and the beat rises with it: 0.365 at 0.50, 0.432 at 0.60, 0.620 at
+# the 0.80 that matches lcd1x. Only the densest case is affected, only on a 1px
+# checkerboard, and it is invisible on real content. An owner decision.
+moire_allow = [{ case = [480, 272, 1024, 768], value = 0.432 }]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+# Gamma moved after the blend, which halves its SFU and costs moire once it is
+# turned up: 0.294 at the 1.00 default, 1.918 at 1.20, 3.622 at 1.40. Nothing is
+# recorded here because the default skips the branch entirely - v5 and v4 are
+# byte-identical there. A deliberate trade, judged by eye at 1.40 on real
+# content, where the two are indistinguishable.
+
+[[shader]]
+name = "lcd-perfect-v5.glsl"
+family = "lcd-perfect"
+role = ["archive"]
 pattern = "whole-cell"
 # Row/column balance ships at 0.60 rather than 0.50, leaning the mesh towards
 # columns. A column mesh shares its pitch with the RGB stripes, so the two
@@ -181,7 +261,7 @@ family = "dmg-perfect"
 role = ["released"]
 
 [[shader]]
-name = "dmg-perfect-v9.glsl"
+name = "dmg-perfect-v10.glsl"
 family = "dmg-perfect"
 # dp_gamma ships at 1.20 and this shader applies gamma after the blend, so it
 # beats out of the box. An owner decision, taken by eye.
@@ -199,6 +279,54 @@ moire_allow = [
 # No un-suffixed file exists; v9 is what the README links, so it is both what
 # ships and what a default run gates on.
 role = ["current"]
+neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
+
+
+# Superseded. Still compiled, still linted, and still rendered as negative
+# controls: a property with no version that fails it has no proof.
+[[shader]]
+name = "dmg-perfect-v10b.glsl"
+family = "dmg-perfect"
+# dp_gamma ships at 1.20 and this shader applies gamma after the blend, so it
+# beats out of the box. An owner decision, taken by eye.
+#
+# These figures are on a real Game Boy palette, not a black-and-white
+# checkerboard. That matters more than it sounds: a plain checkerboard's light
+# square is white, which no DMG ever displays, and it read 4.621 here against
+# 0.485 on the palette a core actually outputs. The palette source existed for
+# this reason and was simply never wired up.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 0.443 },
+    { case = [480, 272, 1024, 768], value = 0.422 },
+    { case = [480, 272,  640, 480], value = 0.485 },
+]
+# No un-suffixed file exists; v9 is what the README links, so it is both what
+# ships and what a default run gates on.
+role = ["archive"]
+neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
+
+
+# Superseded. Still compiled, still linted, and still rendered as negative
+# controls: a property with no version that fails it has no proof.
+[[shader]]
+name = "dmg-perfect-v9.glsl"
+family = "dmg-perfect"
+# dp_gamma ships at 1.20 and this shader applies gamma after the blend, so it
+# beats out of the box. An owner decision, taken by eye.
+#
+# These figures are on a real Game Boy palette, not a black-and-white
+# checkerboard. That matters more than it sounds: a plain checkerboard's light
+# square is white, which no DMG ever displays, and it read 4.621 here against
+# 0.485 on the palette a core actually outputs. The palette source existed for
+# this reason and was simply never wired up.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 0.443 },
+    { case = [480, 272, 1024, 768], value = 0.422 },
+    { case = [480, 272,  640, 480], value = 0.485 },
+]
+# No un-suffixed file exists; v9 is what the README links, so it is both what
+# ships and what a default run gates on.
+role = ["archive"]
 neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
 
 
@@ -405,6 +533,30 @@ sampler = "linear"
 "480x272->1024x768" = "682de10fd3304f8e"
 "480x272->640x480" = "bf57cc916774758e"
 
+[golden."crt-perfect-v11.glsl"]
+"160x144->1024x768" = "2070509be3242835"
+"240x160->1024x768" = "08ced6bc8ca20f45"
+"256x192->1024x768" = "17e35cea4cbeaa08"
+"256x192->640x480" = "e7f4e5f23d140c4f"
+"256x224->1024x768" = "fc3e48b9cfec24fa"
+"320x240->1024x768" = "370516b207afc5c8"
+"320x240->1280x720" = "618ac0a5eca82f69"
+"320x240->640x480" = "3585a090a3e354f2"
+"480x272->1024x768" = "682de10fd3304f8e"
+"480x272->640x480" = "bf57cc916774758e"
+
+[golden."crt-perfect-v11b.glsl"]
+"160x144->1024x768" = "2070509be3242835"
+"240x160->1024x768" = "08ced6bc8ca20f45"
+"256x192->1024x768" = "17e35cea4cbeaa08"
+"256x192->640x480" = "e7f4e5f23d140c4f"
+"256x224->1024x768" = "fc3e48b9cfec24fa"
+"320x240->1024x768" = "370516b207afc5c8"
+"320x240->1280x720" = "618ac0a5eca82f69"
+"320x240->640x480" = "3585a090a3e354f2"
+"480x272->1024x768" = "682de10fd3304f8e"
+"480x272->640x480" = "bf57cc916774758e"
+
 [golden."crt-perfect-v2.glsl"]
 "160x144->1024x768" = "716692d3ac007c25"
 "240x160->1024x768" = "c39fcf45395522aa"
@@ -536,6 +688,30 @@ sampler = "linear"
 "320x240->640x480" = "4f3e542cb493ab79"
 "480x272->1024x768" = "deeb063e81ad0f2f"
 "480x272->640x480" = "7cc33d9020ae59cc"
+
+[golden."dmg-perfect-v10.glsl"]
+"160x144->1024x768" = "74cca56d82d07df0"
+"240x160->1024x768" = "56813361d5b8398b"
+"256x192->1024x768" = "7990a5b901c9afb0"
+"256x192->640x480" = "41ac3c742b8ac72e"
+"256x224->1024x768" = "c29d5a0c1e908140"
+"320x240->1024x768" = "4e401848ea36119f"
+"320x240->1280x720" = "42751732b4bc4e41"
+"320x240->640x480" = "4b70df91e81661fb"
+"480x272->1024x768" = "db66aeebbfcf266b"
+"480x272->640x480" = "771414784ea228a7"
+
+[golden."dmg-perfect-v10b.glsl"]
+"160x144->1024x768" = "e53319f243f17ed9"
+"240x160->1024x768" = "b2d9131921f91877"
+"256x192->1024x768" = "cf72b4ee5bfb0fca"
+"256x192->640x480" = "ecd8497f029771f1"
+"256x224->1024x768" = "8e10d4da843d7567"
+"320x240->1024x768" = "249c53180342adcb"
+"320x240->1280x720" = "b00dd95b796fc9f5"
+"320x240->640x480" = "4b70df91e81661fb"
+"480x272->1024x768" = "d484740e9da07b33"
+"480x272->640x480" = "2a3f89bc92b4cdf9"
 
 [golden."dmg-perfect-v2.glsl"]
 "160x144->1024x768" = "d2262d4faade7d59"
@@ -717,6 +893,30 @@ sampler = "linear"
 "480x272->1024x768" = "ac867203cbd29d99"
 "480x272->640x480" = "f3c3131b338766bd"
 
+[golden."lcd-perfect-v6.glsl"]
+"160x144->1024x768" = "7320fd88c5ca9205"
+"240x160->1024x768" = "f8d5528822c9249e"
+"256x192->1024x768" = "daee5d79e0338303"
+"256x192->640x480" = "beb71fd034ba4877"
+"256x224->1024x768" = "cf674f53abdcaa6d"
+"320x240->1024x768" = "24df9501d32f885e"
+"320x240->1280x720" = "b1cd9ac57aab46f7"
+"320x240->640x480" = "66094074cae772a0"
+"480x272->1024x768" = "ac867203cbd29d99"
+"480x272->640x480" = "f3c3131b338766bd"
+
+[golden."lcd-perfect-v6b.glsl"]
+"160x144->1024x768" = "7320fd88c5ca9205"
+"240x160->1024x768" = "f8d5528822c9249e"
+"256x192->1024x768" = "daee5d79e0338303"
+"256x192->640x480" = "beb71fd034ba4877"
+"256x224->1024x768" = "cf674f53abdcaa6d"
+"320x240->1024x768" = "24df9501d32f885e"
+"320x240->1280x720" = "b1cd9ac57aab46f7"
+"320x240->640x480" = "66094074cae772a0"
+"480x272->1024x768" = "ac867203cbd29d99"
+"480x272->640x480" = "f3c3131b338766bd"
+
 [golden."lcd-perfect.glsl"]
 "160x144->1024x768" = "7320fd88c5ca9205"
 "240x160->1024x768" = "f8d5528822c9249e"
@@ -790,6 +990,18 @@ sampler = "linear"
 "480x272->640x480" = "7cc33d9020ae59cc"
 
 [golden."pixel-perfect-v6.glsl"]
+"160x144->1024x768" = "1d186993662c8500"
+"240x160->1024x768" = "12a482322d4c7095"
+"256x192->1024x768" = "14fde0bf677a8ec7"
+"256x192->640x480" = "ccae2edd908513ee"
+"256x224->1024x768" = "8682ee72a1627db5"
+"320x240->1024x768" = "fe80c6c6000e8fd1"
+"320x240->1280x720" = "6ef196867a147d60"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "ca81cdba01150f6e"
+"480x272->640x480" = "7cc33d9020ae59cc"
+
+[golden."pixel-perfect-v7.glsl"]
 "160x144->1024x768" = "1d186993662c8500"
 "240x160->1024x768" = "12a482322d4c7095"
 "256x192->1024x768" = "14fde0bf677a8ec7"
