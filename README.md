@@ -5,7 +5,7 @@
 **My take on the "perfect" retro shaders:<br>a retro look without compromising
 performance and brightness.**
 
-![Retro look](https://img.shields.io/badge/%F0%9F%93%BA%20retro-look-C64A8F?style=flat-square)
+![Retro look](https://img.shields.io/badge/%F0%9F%95%B9%20retro-look-C64A8F?style=flat-square)
 ![GLSL](https://img.shields.io/badge/GLSL-ES%201.00-5586A4?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-3DA639?style=flat-square)
 
