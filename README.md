@@ -140,7 +140,7 @@ Not exactly a fair comparison here as the NextUI "real-gameboy" preset is based 
 | Pipeline                               | Perf. |
 | -------------------------------------- | ----- |
 | 1 pass · dmg-perfect.glsl              | 100%  |
-| 2 passes · pixellate.glsl → lcd3x.glsl | 92%   |
+| 2 passes · pixellate.glsl → lcd3x.glsl | 59%   |
 
 </details>
 
@@ -149,12 +149,12 @@ Not exactly a fair comparison here as the NextUI "real-gameboy" preset is based 
 <details>
 <summary><em>Comparison details</em></summary>
 
-Even with all features enabled, including the dots cast shadow and colour correction, dmg-perfect maintains a similar performace as the 2-pass pixellate + lcd3x, while producing a way more accurate DMG look.
+Even with all features enabled, including the dots cast shadow and colour correction, dmg-perfect maintains a better performace as the 2-pass pixellate + lcd3x, while producing a way more accurate DMG look.
 
 | Pipeline                                                 | Perf. |
 | -------------------------------------------------------- | ----- |
 | dmg-perfect-tweaked · 1 pass · dmg-perfect.glsl          | 100%  |
-| pixellate+lcd3x · 2 passes · pixellate.glsl → lcd3x.glsl | 102%  |
+| pixellate+lcd3x · 2 passes · pixellate.glsl → lcd3x.glsl | 89%  |
 
 </details>
 
