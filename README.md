@@ -25,7 +25,7 @@ All shaders provided here follow these principles, and were tested on a real dev
 
 | Shader | Description |
 |---|---|
-| [`pixel-perfect.glsl`](shaders/pixel-perfect.glsl) | **Sharp pixel upscaling.** Uniform pixel blocks, no shimmer, fast |
+| [`pixel-perfect.glsl`](shaders/pixel-perfect.glsl) | **Sharp pixel upscaling.** Uniform pixel blocks, no shimmer, colour controls |
 | [`crt-perfect.glsl`](shaders/crt-perfect.glsl) | **CRT.** Scanlines, RGB mask, pixel-perfect scaling |
 | [`lcd-perfect.glsl`](shaders/lcd-perfect.glsl) | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling |
 | [`dmg-perfect.glsl`](shaders/dmg-perfect.glsl) | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, white balance, pixel-perfect scaling |
@@ -35,11 +35,135 @@ All shaders provided here follow these principles, and were tested on a real dev
 
 ### Screenshots
 
-<!-- TODO manually, not by agent: Include screenshots here and links to RetroShader Lab for each shader, so users can see the differences and tweak the parameters to their liking. -->
+> [!TIP]
+> Click on an image to open a lab window with the shader loaded and its settings, ready to tweak. Open details to also see performance comparisons.
+
+All configurations shown here ones uses aspect (except the DMG that uses native) scaling to 1024x768 output resolution (Trimui Brick), cropped for comparison. The CRT barrel distortion uses 640x480 output (RG35xx) to show the full effect.
+
+#### pixel-perfect
+
+<details>
+<summary><em>Comparison details</em></summary>
+
+Both pixel-perfect and pixellate produce the same output at default parameters, fixing uneven pixel scaling and shimmer issues, though **pixel-perfect** is almost 2x faster!
+
+| Pipeline                                    | Perf. |
+| ------------------------------------------- | ----- |
+| 1 pass · pixel-perfect.glsl | 100%  |
+| 1 pass · pixellate.glsl         | 57%   |
+
+</details>
+
+[![pixel-perfect](docs/screenshots/retroshader-gba-pixel-perfect.png)](https://sinedied.github.io/retroshader-lab/#s=nZNvT9swEMa_inWv7S5N0iS11BcdqyYkYIhV2gtA0cW5hGiuE9luS0H97iglK7Ahgfb27nd_nnvsR9iAHHPoQEJHtiLlhSVvW3eHJVn3pWvuSYshNVJVDRwUghyPJhycAwl1gcDBVSDNWmsODyBDDt09yLBvvAMpIg5qBRLaDVmNO-DQKZARh86AvIa1IyupjApMKRWJCqcinkxRFJOwFEgqm8QKi6KIgD-z0xirMgwykWUViThIxwInKYoUyywIk7SclFO45bDuQF4_QlOChE_2N7gikGBx2wutapCwagxadZc7ZYlM7hTqxtRsxi7QNxu6MS8AasqrRnuyfXoxv1r8XN6YF8LYthouy2asrao-WeOqQO8pr4u8MZ6sQZ13qMl7YjO2_PU1iZlgl6h-s_AtPlC53xZJnIdHepxETLATjc41ip2dfHtbplrd2uYBfdMaNmN_hr6B1DOVq9ZaUgOJeos79wGXr9qyXxyVWlv0dGNgzwcXPuXc0YXD49Po6WMv5q4j5f_fi_Gr0kNwzGbsOH9Ua6f_Id5p_zfhrPK7rr-Ga9dW0TtEv-gHzLo7UD1x0N3LOL1YLq4uf5zNl4v89CI_O-13yL_Pz8_nvZxRELwWO9yLqv4b9wu35tWc4V8e47C_5VBuQF4HoyiKIh6MkiRJbzmoLcgsCDioO5BRFnNwJcgKtaP9Ew)
+
+<details>
+<summary><em>Comparison details</em></summary>
+
+Even with color correction enabled, pixel-perfect is still faster than pixellate, while allowing for more control over the output image.
+
+| Pipeline                                            | Perf. |
+| --------------------------------------------------- | ----- |
+| 1 pass · pixel-perfect.glsl | 100%  |
+| 1 pass · pixellate.glsl                 | 84%   |
+
+</details>
+
+[![pixel-perfect-tweaked](docs/screenshots/retroshader-gb-pixel-perfect-tweaked.png)](https://sinedied.github.io/retroshader-lab/#s=lZNRb5swEMe_inXPhkFISGopD1vXt6matkp7aCJ0mIOggrFskzSr-t0nQ9KStVI33nz3O-5_vr-fYA8i5iBBQFsrNHKXWYkNZWXdODJszW5vPv-4-Xm3URt1JpTpSrvDgoxlaxa_JsZgzNasaKtAkylJurBqbPOGeafB34Q10h01sTWzXW8kvUN4qR8wvR4oT0hDpPwghc4qUxdszaIwicYzaj9LGI1HX90dBiAdI7mpq51TZIeZw-XiVNa2OATmI-ao1WTQ9ca3DKIwHkFXK_camPTI8qY309aGiumx8qIHIavxT3nT01up2eNU7Cl2fKkDDgoETNYSuAPhAxXAwfr136Kr9wQcJIKIw3j4OFgLAqrcUxoEyK7pTI7G-kA5pAJHztQ21KoCDvpxMJQ-ggh8vWxBQLcn0-DRpyWIhINWIO7hrMSQM93JUJ-mzpGl_2VvyQgqkhyXtAxSObsK5osrDPLFrAiQ5Goxl5jneQJbDr0Gcf8EdQEC_qmGg8KWQIDBg5--rC7egr_9wWe1qrxZh1uauOw_H0tXlj5ZYZujc5RVeVYrR0Zhk2lvZud3e_frSzpnAfuO8oHNLvETlblDns6z2QsdpwkL2HWD1taSfbv-elk2LK7-ja7uvJvOTS8gOVKZ7IwheSKxOeDRfsBlbVd44Shlb9DRRsHzlkOxB3EfhUmSJDwK0zRdbjnIA4hVFHGQOxDJas7BFiBKbCw9_wE)
+
+#### crt-perfect
+
+<details>
+<summary><em>Comparison details</em></summary>
+
+While res-independant-scanlines is slightly faster than crt-shader, it doesn't provide uniform pixel scaling and produce moire patterns at non-integer scaling factors. crt-perfect also add RGB mask simulation and controls for compensating for the brightness loss of scanlines.
+
+| Pipeline                                                            | Perf. |
+| ------------------------------------------------------------------- | ----- |
+| 1 pass · crt-perfect.glsl                             | 100%  |
+| 1 pass · res-independent-scanlines.glsl | 119%  |
+
+</details>
+
+[![crt-perfect](docs/screenshots/retroshader-snes-crt-perfect.png)](https://sinedied.github.io/retroshader-lab/#s=nZLLbtswEEV_hZg16eodm4AXaZpdURRNgC7iQBhRI5soRQkkbdcJ8u8FZefVBkjQ7Z0znDtzeQ87kCmHESSM5DpSQTgKbvAbbMn5T8oFcSrMVLcGDj6yajCDa9B54DD-BpmmGYfxADJdZBxUDxKGHTmDhwgokDmH0YK8ga0nJ6nNGzyjM1GpbCGKcoGiKbNWIKl5WShsmiYHfmTnSYm0KHNRLLq5KLKqFU3RKVHNC2ybBqukJLjlsB1B3tyDbkHCB9-32BNIcLgHDnE7Cb226NSm9soR2dorNNqu2ZJ9w6B3tLLPABqqO20CuVi-PP9xeXW9ss-EdUN3OiNbsqHrYnGNfYMhUL1uam0DOYumHtFQCMSW7Prn56pggn1H9Ytlr_ETVYd9UxV19kSnVc4EuzDovVbs68WX121TVPoOgx4sW7LHoa8gdaRqNThH6kSi2ePBv8PV_dBG46jU1mGglYUHfkrhQ8k9p0BeaNvSSLZFG4RXaI225N_P5tyPpML_Z5O-aJ3ElC3ZSz_00s9sbbz5p-ONcX8T3qlwGOO1_LB1it4govF3mO04UZGY7hDXwn6Ma8yycmXHDfpYTWZlsjo6rhsT_1PUkidtv9HTl0snTfe4pit9F5UsKyYNt2F4nHXshIdbDu0O5E0yy_M858msqqqzWw5qD3KeJBzUBmQ-Lzj4FmSHxtPDHw)
+
+<details>
+<summary><em>Comparison details</em></summary>
+
+When comparing crt-perfect with the "old-tv" preset from NextUI which adds barrel distortion in addition to scaline, crt-perfect becomes faster even with all the effects enabled, including anti-aliased barrel distorsion, uniform pixel scaling and brightness + gamma correction.
+
+| Pipeline                                                                              | Perf. |
+| ------------------------------------------------------------------------------------- | ----- |
+| 1 pass · crt-perfect.glsl                                       | 100%  |
+| 2 passes · barrel-distortion.glsl → res-independent-scanlines.glsl | 73%   |
+
+</details>
+
+[![crt-perfect-tweaked](docs/screenshots/retroshader-snes-crt-perfect-tweaked.png)](https://sinedied.github.io/retroshader-lab/#s=zVRNb6MwFPwr1rsujgiYlFji0EOve9juramQMc9gFQyyTaJu1f--Apo03UVKetiPo8djv_G8eX6BPfB1ABI4tNoIK-vcSdFgrnTj0ZKMfL27_XZ3_31ndubIMLZTrhYlWkcysn7fmME1yYi0nvZoFUq_qhrX_MZZKPArw1npn3skGXHdYCUuMEapFzhDP7FGhrSIZnyI7MejptEGxxeEq5tkAm1V5K1wTxMWhRM2rvO3GtEqPAOd_jGC6xOoTd5rL2uSkfgIysHuhR8sTneGNxNYWF3V3qCb_DtWr0TbigkYS0MABjicGUn9AcUTlhBAdwC-YWEAXQ2cpWEAsgUO3R5tI54hgN4Af4DBoeUxK0ScMKQqDm8o2yaMpkykVMVbpTYqjpN4C8HMTcNE4DaJKduqlLJoU9KCKUk3KRNlUYhNmCA8BjD0wB9eQJfA4cr7jWgROBTCWmy-nOyHAKSqPsRv7NLUWm0qkpFb16P0Z439ZD6jpXzOMmipne-s153571L6kRGRjFh0VJsSezQlGk9PHi5qjy5qjy5qj67QHi1OmGj7OcnJzvS1cHP8k3A3K86LRsh5zMITdqi1fx8o3YoK7-cRiyI2YWLw3bHWfBJeg7cYXhXdUwzPvRTnXv75PC7-l5_r7b_9Pf9ebx8DcCVwJRqHrz8B)
+
+#### lcd-perfect
+
+<details>
+<summary><em>Comparison details</em></summary>
+
+lcd-perfect can reproduce the same output as lcd3x or lcd1x coupled with a pixellate pass, but with better performance and more visual controls. The preset pictured on the right corresponds to NextUI's "real-gba" preset.
+
+| Pipeline                                                 | Perf. |
+| -------------------------------------------------------- | ----- |
+| 1 pass · lcd-perfect.glsl                  | 100%  |
+| 2 passes · pixellate.glsl → lcd3x.glsl | 72%   |
+
+</details>
+
+[![lcd-perfect](docs/screenshots/retroshader-gba-lcd-perfect.png)](https://sinedied.github.io/retroshader-lab/#s=5ZNBbxoxEIX_ijXX2hR2lwUscaApqiIlaZUi9RCi1ezsLKxqvCvbQEiU_14toUmTIpFLT736fTN-fk9-gA3onoQGNDTsSqagHAdX-yUW7PxHQ4U6CB0qFyCBEHSv05fgPWhY5AgSfDtPtaldjs63B-WTpu7ZFKjCktWqspVfKsKm09h2UXMHejSQ0OxA95K-BFqBhnrDzuCu1Ql0LKGxoG9g7dlpLuIcBzxQKUUjlfRHqPJ-VChkGvYTwjzPY5BPLKWDknopKR71c5UMo0QNi8FIJYRxOky4JB7ArYR1A_rmAaoCNLxzv8UVgwaH2zaOcgEaVpVFR8vMk2O2mSc0lV2IsbjCUG14bl8ANJyVlQnsWnk6uZ5-n83tC2FdXR7SF2NRl2UrLnCVYwicLfKssoGdRZM1aDgEFmMx-_EpTYQS35B-iug1fqCysM3TJIue6V4aCyXODHpfkbg4-_x6bN9mdY-hqq0Yi9-XvoLoicqodo7pQKLZ4s6f4LJVXbTGkWjtMPDcwqM8tPCu5p5baKo7NgYDfzBUxHf_vpHoj9H9YU-MxbOLzsJ48xdxZP1bwjsKu6bNxNdrR3yEaI2eYNbNnmqJ_bvfEm39-5yO-oxO-oxO-oze4TM64nNuz69m0-tvXy8ms2l2fpVdnLcesi-Ty8uJGItep9v9X37CrYRiA_qm24njOJbdTpqmg1sJtAU97HYl0BJ0PEwk-AJ0icbz4y8)
+
+<details>
+<summary><em>Comparison details</em></summary>
+
+You can tune the horizontal/vertical grid balance (tip: 0.8 is lcd1x) with added RGB subpixel simulation and brightness compensation. Set the RGB subpixels order to BGR for proper Game Boy Advance screen simulation, all while still keeping better performance.
+
+| Pipeline                                                 | Perf. |
+| -------------------------------------------------------- | ----- |
+| 1 pass · lcd-perfect.glsl          | 100%  |
+| 2 passes · pixellate.glsl → lcd3x.glsl | 87%   |
+
+</details>
+
+[![lcd-perfect-tweaked](docs/screenshots/retroshader-gba-lcd-perfect-tweaked.png)](https://sinedied.github.io/retroshader-lab/#s=5ZNRa9swFIX_irivk01iO04iyEPWhVFou7IF9tAUc30tO6aybCQlaVr634fjNku2QLqHwWCPPvpkHV2d8wxrEH0OBAKqUqOhZWIJlUzyUjlp2ITdzKZfZ9_mC73Qb4Q2dW6XmElj2YT1fy50Yp9NmKLMa6TJJTm_UFb9xpw44FfCGnLbRrIJs_XKkDxBtFbPMKtmR7UEGSl1exHVJIUpMzZhPT_s7b5TVKhJ7qRRJ1WlTprS0ZJNWOj3OtGu0qZ8lMoebla4rVeuncUblpqyWDot7W5C_rBTC6wq3AlBb6GBgwYBB6Py3Ebig8yAAyGIvj_gYC0IKFIEDrYBAVSr2qRobCvk3Zr3JFWGnltKryp1aZceYeM3ugAOzSOI8ZBDswXRjwYcqAIB9Voahdt2nUCEHBoN4g5WVhpB8TCnfkyeHA9SLxoFkTfKhmMvIgzjUSRzkkPgHSuzMMWhHHoxBWMvGozRSwdB5qGk0SAiTNM0hHsOqwbE3TOUWXuD9_1fYyVBwG7aCp38oCgLH9vR5MVRXNtX3UWh1EWbJ3Tl-jAIf5jn4FSe9y7-uTQfE0HXvfDxpM_grM_grM_gHT6Dk627vJnPvt5-uZrOZ8nlTXJ12XpIPk-vr6f76ix0gVWKzsmkSJNSO2k0qqRpT3Tt7-bfP8YR89gt0kP7VIf4K5W4TRpHSbCn-3HIPHah0NqS2NXFp-Ntu0aVT-jKWrMJezv0CKKOSqg2RtIriWqDW3uGS6o6a40j0cqgkwsNL_y1Ce9qz74JBjd_P_11nv8vr3DPIVuDuOv5YRiGvOfHcTy850AbEKNejwMtQYSjiIPNQOSorHz5AQ)
+
+#### dmg-perfect
+
+<details>
+<summary><em>Comparison details</em></summary>
+
+Not exactly a fair comparison here as the NextUI "real-gameboy" preset is based on lcd3x which cannot reproduce the lighter grid gap of the DMG screen. dmg-perfect simulates the dot-matrix grid with light gaps and uniform upscaling, while still keeping better performance.
+
+| Pipeline                                                 | Perf. |
+| -------------------------------------------------------- | ----- |
+| 1 pass · dmg-perfect.glsl          | 100%  |
+| 2 passes · pixellate.glsl → lcd3x.glsl | 92%   |
+
+</details>
+
+[![dmg-perfect](docs/screenshots/retroshader-gb-dmg-perfect.png)](https://sinedied.github.io/retroshader-lab/#s=jZPbbtswDEB_ReDrZC--zEkF-CHrgqFA2xVdgD00haDQtGtMkQ1JSZsV_fdBTtbbAqR6FA_JQwp6hA2IhEMPAnqyNaGPLHnbuTtVkXWfq1UT7QMx1g1wcAgCLpVvNwQcUIFI4mQ4HJwDAc0yUKEidrqzS2VduKiHUOTJ29bFvQm1-odd9y2IKOTjCgR0G7JabUMYQWQcegPixqy15rB2ZAUW4xqTAiM6-bKM8kmaR5NqfBLlqLJiklONNIZbDusexM0jtFVQ-UgOB6NWFFbRPpDWytMnjVX2EOasGxCwao2yeCcdWiIjHSrdmoaVbLePhXkBlCZZt9qTDeHZ9Hr2c74wL4SxXb1fMitZ-ip1uExYyZ4t4kY7_R9xoPx7wln0255YyVy3tkgHiCB6hFn3AxWIYe73RMpKNuzpoGd61DM96pl-wDM94LkwZ5fz2fXVj_PpfCbPLuX5WXCQ36cXF1NWsiQejQLVqNVSeU-yWcrWeLJGadmHjj6Um__6WuQsYlcKf4eneo3vKenvl0Uu02c6KTIWsVOtnGuRnZ9-e5s2fI32j_JtZ1jJ_jV9A-GOkthZS7gnlb5XW3eEk6uuCuIKcW2Vp4WBp1sO1QbEzSjOsizjo7goivEtB7wHMRmNOOAdiGySc3AViFppR09_AQ)
+
+<details>
+<summary><em>Comparison details</em></summary>
+
+Even with all features enabled, including the dots cast shadow and colour correction, dmg-perfect maintains a similar performace as the 2-pass pixellate + lcd3x, while producing a way more accurate DMG look.
+
+| Pipeline                                                 | Perf. |
+| -------------------------------------------------------- | ----- |
+| dmg-perfect-tweaked · 1 pass · dmg-perfect.glsl          | 100%  |
+| pixellate+lcd3x · 2 passes · pixellate.glsl → lcd3x.glsl | 102%  |
+
+</details>
+
+[![dmg-perfect](docs/screenshots/retroshader-gb-dmg-perfect-tweaked.png)](https://sinedied.github.io/retroshader-lab/#s=lZNRb5swEMe_inXPhkFISGopD1vXt6matkp7aCJ0mIOggrFskzSr-t0nQ9KStVI33nz3O-5_vr-fYA8i5iBBQFsrNHKXWYkNZWXdODJszW5vPv-4-Xm3URt1JpTpSrvDgoxlaxa_JsZgzNasaKtAkylJurBqbPOGeafB34Q10h01sTWzXW8kvUN4qR8wvR4oT0hDpPwghc4qUxdszaIwicYzaj9LGI1HX90dBiAdI7mpq51TZIeZw-XiVNa2OATmI-ao1WTQ9ca3DKIwHkFXK_camPTI8qY309aGiumx8qIHIavxT3nT01up2eNU7Cl2fKkDDgoETNYSuAPhAxXAwfr136Kr9wQcJIKIw3j4OFgLAqrcUxoEyK7pTI7G-kA5pAJHztQ21KoCDvpxMJQ-ggh8vWxBQLcn0-DRpyWIhINWIO7hrMSQM93JUJ-mzpGl_2VvyQgqkhyXtAxSObsK5osrDPLFrAiQ5Goxl5jneQJbDr0Gcf8EdQEC_qmGg8KWQIDBg5--rC7egr_9wWe1qrxZh1uauOw_H0tXlj5ZYZujc5RVeVYrR0Zhk2lvZud3e_frSzpnAfuO8oHNLvETlblDns6z2QsdpwkL2HWD1taSfbv-elk2LK7-ja7uvJvOTS8gOVKZ7IwheSKxOeDRfsBlbVd44Shlb9DRRsHzlkOxB3EfhUmSJDwK0zRdbjnIA4hVFHGQOxDJas7BFiBKbCw9_wE)
+
 
 ### Parameters
 
-Every shader ships ready to use, so the defaults are the recommendation: only reach for these if you want to change the look. Any control set to its neutral value costs nothing at all, not just visually but in GPU time.
+Every shader ships ready to use, so the defaults are the best balance between fidelity and performance: only reach for these if you want to change the look.
 
 #### pixel-perfect
 
