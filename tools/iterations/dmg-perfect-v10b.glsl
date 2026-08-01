@@ -195,34 +195,24 @@ void main()
     vec3 area = mix(mix(t11, t01, wA.x), mix(t10, t00, wA.x), wA.y);
     vec3 dotm = mix(mix(t11, t01, wL.x), mix(t10, t00, wL.x), wL.y);
 
-    // The grade, as one factor: balance first so it is not undone by anything
-    // after it, then brightness. Entirely uniform-derived, so the driver folds
-    // it to a constant and it costs one multiply per term.
-    //
-    // It scales the SUBSTRATE too, which is the whole point. Multiplication
-    // commutes with the pattern but a mix with a constant does not, so grading
-    // only the taps lifted the dots and left the panel paper behind - the
-    // brighter the setting, the flatter the panel looked.
-    //
-    // area stays raw: the shadow reads opacity as a ratio of two source
-    // levels, so an output gain has to cancel out of it.
+    // One factor: balance then brightness, uniform-derived so it folds. It
+    // must scale the SUBSTRATE too - a mix with a constant does not commute.
+    // `area` itself stays ungraded: the shadow below reads it as a ratio.
     vec3 grade = (1.0 + dp_temperature * vec3(1.0, 0.0, -1.0)
                       + dp_tint        * vec3(-0.5, 1.0, -0.5)) * dp_brightness;
 
-    // Before the pattern, so gamma grades the picture and leaves the grid's
-    // designed contrast alone. v10 puts it after instead, where a gamma above
-    // 1 deepens the grid as a side effect of a colour control.
-    // pow(0, g) returns NaN on real drivers, hence the clamp.
-    vec3 src = area, dot_ = dotm, sub = vec3(DMG_SUBSTRATE);
+    // Before the pattern, so gamma leaves the grid's contrast alone. v10 puts
+    // it after, where it deepens the grid too. Both blends, since the pattern
+    // mixes both; not the SUBSTRATE, where pow(1.0, g) is 1.0.
+    vec3 src = area, dot_ = dotm;
     if (abs(dp_gamma - 1.0) > 0.001) {
         vec3 g_ = vec3(dp_gamma);
         src  = pow(max(src,  1e-8), g_);
         dot_ = pow(max(dot_, 1e-8), g_);
-        sub  = pow(max(sub,  1e-8), g_);
     }
 
     vec3 col = mix(src * grade,
-                   mix(sub * grade, dot_ * grade, dot2d),
+                   mix(vec3(DMG_SUBSTRATE) * grade, dot_ * grade, dot2d),
                    dp_grid);
 
     // A cast shadow, so the dots sit above the panel rather than printed on
