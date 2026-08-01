@@ -191,24 +191,8 @@ neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1
 # recorded here because the default skips the branch entirely - v5 and v4 are
 # byte-identical there. A deliberate trade, judged by eye at 1.40 on real
 # content, where the two are indistinguishable.
-
-[[shader]]
-name = "lcd-perfect-v6b.glsl"
-family = "lcd-perfect"
-role = ["archive"]
-pattern = "whole-cell"
-# Row/column balance ships at 0.60 rather than 0.50, leaning the mesh towards
-# columns. A column mesh shares its pitch with the RGB stripes, so the two
-# correlate and the beat rises with it: 0.365 at 0.50, 0.432 at 0.60, 0.620 at
-# the 0.80 that matches lcd1x. Only the densest case is affected, only on a 1px
-# checkerboard, and it is invisible on real content. An owner decision.
-moire_allow = [{ case = [480, 272, 1024, 768], value = 0.432 }]
-neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
-# Gamma moved after the blend, which halves its SFU and costs moire once it is
-# turned up: 0.294 at the 1.00 default, 1.918 at 1.20, 3.622 at 1.40. Nothing is
-# recorded here because the default skips the branch entirely - v5 and v4 are
-# byte-identical there. A deliberate trade, judged by eye at 1.40 on real
-# content, where the two are indistinguishable.
+# v6 also moves gamma before the pattern, so it grades the picture without
+# deepening the grid. v5 applies it after.
 
 [[shader]]
 name = "lcd-perfect-v5.glsl"
@@ -284,6 +268,23 @@ moire_allow = [
 ]
 # No un-suffixed file exists; v9 is what the README links, so it is both what
 # ships and what a default run gates on.
+role = ["archive"]
+neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
+
+[[shader]]
+name = "dmg-perfect-v10c.glsl"
+family = "dmg-perfect"
+# v10 with the substrate fix reverted, and nothing else: the grade reaches the
+# taps and the dots but not the panel paper, exactly as v9 did. It exists to
+# isolate what that one fix does, so it is the defective version on purpose.
+#
+# Figures are on a real Game Boy palette, not a black-and-white checkerboard,
+# whose light square is white - which no DMG ever displays.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 0.443 },
+    { case = [480, 272, 1024, 768], value = 0.422 },
+    { case = [480, 272,  640, 480], value = 0.485 },
+]
 role = ["archive"]
 neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
 
@@ -683,6 +684,18 @@ sampler = "linear"
 "480x272->1024x768" = "d484740e9da07b33"
 "480x272->640x480" = "2a3f89bc92b4cdf9"
 
+[golden."dmg-perfect-v10c.glsl"]
+"160x144->1024x768" = "74cca56d82d07df0"
+"240x160->1024x768" = "56813361d5b8398b"
+"256x192->1024x768" = "7990a5b901c9afb0"
+"256x192->640x480" = "41ac3c742b8ac72e"
+"256x224->1024x768" = "c29d5a0c1e908140"
+"320x240->1024x768" = "4e401848ea36119f"
+"320x240->1280x720" = "42751732b4bc4e41"
+"320x240->640x480" = "4b70df91e81661fb"
+"480x272->1024x768" = "db66aeebbfcf266b"
+"480x272->640x480" = "771414784ea228a7"
+
 [golden."dmg-perfect-v2.glsl"]
 "160x144->1024x768" = "d2262d4faade7d59"
 "240x160->1024x768" = "8609b03d6741721f"
@@ -864,18 +877,6 @@ sampler = "linear"
 "480x272->640x480" = "f3c3131b338766bd"
 
 [golden."lcd-perfect-v6.glsl"]
-"160x144->1024x768" = "7320fd88c5ca9205"
-"240x160->1024x768" = "f8d5528822c9249e"
-"256x192->1024x768" = "daee5d79e0338303"
-"256x192->640x480" = "beb71fd034ba4877"
-"256x224->1024x768" = "cf674f53abdcaa6d"
-"320x240->1024x768" = "24df9501d32f885e"
-"320x240->1280x720" = "b1cd9ac57aab46f7"
-"320x240->640x480" = "66094074cae772a0"
-"480x272->1024x768" = "ac867203cbd29d99"
-"480x272->640x480" = "f3c3131b338766bd"
-
-[golden."lcd-perfect-v6b.glsl"]
 "160x144->1024x768" = "7320fd88c5ca9205"
 "240x160->1024x768" = "f8d5528822c9249e"
 "256x192->1024x768" = "daee5d79e0338303"
