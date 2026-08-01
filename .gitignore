@@ -6,3 +6,4 @@ preview/
 TODO
 .DS_Store
 .pytest_cache/
+tools/device/build/

@@ -257,6 +257,11 @@ def run(names, report, also_compile=None):
     errors = c.check_baseline()
     report.check(not errors, "baseline.toml matches the tree",
                  "" if not errors else "; ".join(errors))
+
+    errors = c.check_pipelines()
+    report.check(not errors, "device pipelines resolve",
+                 f"{len(c.PIPELINES)} pipelines" if not errors
+                 else "; ".join(errors))
     return report
 
 

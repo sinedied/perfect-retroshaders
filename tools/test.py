@@ -22,6 +22,7 @@ negative controls.
 It runs, in order:
 
   check       compiles, and the header still describes the shader
+  device      the C benchmark in tools/device renders the same picture
   contracts   parameter endpoints, no extinguished pixels, and the scaler anchor
   properties  the per-family claims in tools/tests/, each with its control
   measure     moire against the limits in baseline.toml
@@ -129,6 +130,8 @@ def main():
                         "its own context, so everything after it is suspect")
 
     phase("self-test", lambda: measure.self_test(report))
+    phase("device", lambda: importlib.import_module("tests.device").run(
+        gated, ctx, progs, report, cases))
     phase("contracts",
           lambda: importlib.import_module("tests.contracts").run(
               gated, ctx, progs, report, cases))

@@ -3,7 +3,7 @@
 GLSL retro shaders for cheap handhelds: CRT, LCD, Game Boy DMG, and a plain
 pixel scaler. MIT.
 
-**Target: Trimui Brick — 1024x768, Mali G31 MP2, GLES 3.2, 60fps.** Single pass,
+**Target: Trimui Brick — 1024x768, PowerVR Rogue GE8300, GLES 3.2, 60fps.** Single pass,
 ESSL 1.00, `#pragma parameter` uniforms, loaded by a RetroArch-style frontend
 (NextUI/minarch). Expected to work down to a 640x480 output.
 
@@ -22,6 +22,8 @@ does not read GLSL.
 | `tools/common.py` | paths, shader text, GL, sources, reporting |
 | `tools/tests/` | per-family behavioural properties, each with its control |
 | `tools/vendor/` | third-party shaders, comparison only, not ours and not edited |
+| `tools/device/` | the on-device benchmark, in C. Cross-built, run on the Brick |
+| `tools/report.py` | a device run's TSV as the README's performance table |
 | `docs/<shader>.md` | design record: what was measured, what was rejected, why |
 
 ### Release and iteration
@@ -123,12 +125,21 @@ Four layers, deliberately:
   only that nothing moved since somebody last looked at it. A mismatch is a
   question, not a verdict.
 
-**Not covered: the device.** Everything here runs desktop GL 4.10 on an Apple
-GPU, and the two cost signals disagree on it. `crt-perfect` has less than half
-`pixellate`'s SFU (14 against 30), 70% more ALU ops (501 against 292), and comes
-out slower — so on this GPU time tracks ops and SFU is not the bottleneck. On a
-Mali G31 it may well be the other way round. Treat SFU as the device signal and
-timings as the desktop one, and assume neither predicts the other.
+**Not covered: the device — but no longer unmeasurable.** Everything in the
+Python tools runs desktop GL 4.10 on an Apple GPU, and the two cost signals
+disagree on it. `crt-perfect` has less than half `pixellate`'s SFU (14 against
+30), 70% more ALU ops (501 against 292), and comes out slower — so on this GPU
+time tracks ops and SFU is not the bottleneck. Whether the device ranks them the
+other way round is now a question with an answer: `tools/device` runs on the
+Brick. Until its numbers are in, treat SFU as the device signal and timings as
+the desktop one, and assume neither predicts the other.
+
+**The target GPU was misidentified here as a Mali G31 MP2** until it was
+checked. It is an Imagination PowerVR Rogue GE8300 on an Allwinner A133 Plus —
+NextUI's own `generic_video.c` says so where it disables vsync (`// No effect on
+Ge8300`), and 68 driver dumps agree. It matters: the two architectures differ on
+overdraw removal and on whether GPU timer queries exist at all. See
+`docs/device-perf.md`.
 
 **Perf is not a gate**, deliberately: GPU timing moves a few percent with laptop
 thermals, so it would fail for reasons that have nothing to do with the shader.

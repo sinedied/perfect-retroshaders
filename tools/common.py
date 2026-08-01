@@ -62,6 +62,10 @@ SCALER_REFERENCE = SETTINGS["scaler_reference"]
 SHADERS_DECLARED = {s["name"]: s for s in _DOC["shader"]}
 GOLDEN = _DOC.get("golden", {})
 
+DEVICE = SETTINGS["device"]
+PIPELINES = _DOC.get("pipeline", [])
+PIPELINES_DIR = os.path.join(TOOLS, "device", "pipelines")
+
 
 def _resolve_releases():
     """Give every release its source's keys, once, before anything reads them.
@@ -252,6 +256,90 @@ def check_baseline():
                               f"header says it is a copy of")
         except FileNotFoundError:
             errors.append(f"{name}: header claims v{v} but {src} does not exist")
+    return errors
+
+
+# --------------------------------------------------------------------------
+# device pipelines
+#
+# A pipeline is a minarch .cfg, the same file a user installs. Only the keys
+# tools/device reads are understood here; anything else in the file is a core
+# option and is ignored, exactly as it is on the device.
+
+_CFG_PASS = re.compile(
+    r"^minarch_shader([123])(_filter|_srctype|_scaletype|_upscale)?$")
+
+
+def parse_cfg(path):
+    """{"scaling", "scale_filter", "passes": [...], "params": {...}}."""
+    passes, params = {}, {}
+    scaling, scale_filter = "Aspect", "NEAREST"
+    with open(path) as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = (p.strip() for p in line.split("=", 1))
+            key = key.lstrip("-")  # a locked option, in NextUI's sense
+            if key == "minarch_screen_scaling":
+                scaling = value
+            elif key == "minarch_scale_filter":
+                scale_filter = value.upper()
+            elif key == "minarch_nrofshaders":
+                pass
+            elif m := _CFG_PASS.match(key):
+                slot = passes.setdefault(int(m.group(1)), {})
+                slot[(m.group(2) or "_shader").lstrip("_")] = value
+            elif re.fullmatch(r"-?\d+(\.\d+)?", value):
+                params[key] = float(value)
+    ordered = [passes[i] for i in sorted(passes)]
+    return dict(scaling=scaling, scale_filter=scale_filter,
+                passes=ordered, params=params)
+
+
+def pipeline_cfg(entry):
+    return os.path.join(PIPELINES_DIR, entry["cfg"])
+
+
+def check_pipelines():
+    """Every declared pipeline resolves, and runs its shaders as declared.
+
+    The sampler check is the one that earns its place. A pipeline naming a
+    one-tap shader through NEAREST does not measure that shader, it measures
+    nearest-neighbour - the same defect tools/vendor/README.md records costing
+    a comparison table its meaning once already.
+    """
+    errors = []
+    for entry in PIPELINES:
+        path = pipeline_cfg(entry)
+        if not os.path.exists(path):
+            errors.append(f"{entry['label']}: {entry['cfg']} does not exist")
+            continue
+        cfg = parse_cfg(path)
+        if not cfg["passes"]:
+            errors.append(f"{entry['label']}: names no shader pass")
+        for i, p in enumerate(cfg["passes"], 1):
+            name = p.get("shader")
+            if name is None:
+                errors.append(f"{entry['label']} pass {i}: no shader")
+                continue
+            if name not in SHADERS_DECLARED:
+                errors.append(f"{entry['label']} pass {i}: {name} is not "
+                              f"declared in baseline.toml")
+                continue
+            try:
+                shader_path(name)
+            except FileNotFoundError:
+                errors.append(f"{entry['label']} pass {i}: {name} not on disk")
+                continue
+            want = "LINEAR" if sampler_is_linear(name) else "NEAREST"
+            got = p.get("filter", "NEAREST").upper()
+            if got != want:
+                errors.append(f"{entry['label']} pass {i}: {name} runs "
+                              f"{got} but baseline.toml declares {want}")
+    labels = [e["label"] for e in PIPELINES]
+    for dup in {l for l in labels if labels.count(l) > 1}:
+        errors.append(f"{dup}: declared twice")
     return errors
 
 

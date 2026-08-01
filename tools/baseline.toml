@@ -71,6 +71,58 @@ tolerance = 1
 [settings.preview]
 cp_curvature = 0.10
 
+# The device benchmark's one case. Everything tools/device measures runs at this
+# size: a 320x240 source into a 1024x768 output, which is the Brick's panel and
+# the scale factor the README screenshots use.
+#
+# budget_ms is one frame at 60fps. It is what makes an absolute figure mean
+# anything - "4.1ms" says nothing on its own, "25% of the frame" says whether
+# there is room for an emulator underneath it.
+[settings.device]
+source = [320, 240]
+output = [1024, 768]
+budget_ms = 16.6667
+
+
+# The pipelines the device benchmark runs, in table order.
+#
+# A pipeline is a minarch .cfg in tools/device/pipelines, which is the same file
+# a user installs - not a benchmark-only format that could drift away from what
+# the device actually runs. Adding a row is a file and a stanza here, never a
+# code change.
+#
+# THE FIRST ENTRY IS THE REFERENCE every relative percentage is measured against,
+# and it is deliberately pixellate rather than one of ours: it ships on the
+# target and holds 60fps, so it is the budget, and a row reading 130% means the
+# same frame time buys 30% more than the thing already known to fit.
+[[pipeline]]
+label = "pixellate"
+cfg = "pixellate.cfg"
+
+[[pipeline]]
+label = "pixellate -> lcd3x"
+cfg = "pixellate-lcd3x.cfg"
+
+[[pipeline]]
+label = "pixel-perfect"
+cfg = "pixel-perfect.cfg"
+
+[[pipeline]]
+label = "crt-perfect"
+cfg = "crt-perfect.cfg"
+
+[[pipeline]]
+label = "lcd-perfect"
+cfg = "lcd-perfect.cfg"
+
+[[pipeline]]
+label = "dmg-perfect"
+cfg = "dmg-perfect.cfg"
+
+[[pipeline]]
+label = "sharp-shimmerless"
+cfg = "sharp-shimmerless.cfg"
+
 
 [[shader]]
 name = "pixel-perfect-v1.glsl"
