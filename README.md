@@ -246,21 +246,23 @@ An original Game Boy look: the dot matrix grid with its pale gaps, over a clean 
 
 Measured against [`pixellate`](tools/vendor/pixellate.glsl), the shader most people already use for clean upscaling, at 320x240 into 1024x768. Two rows per shader: as it ships, and with every effect it has turned up.
 
-| Shader                         | Active instructions | Texture taps | Speed vs `pixellate` |
-| ------------------------------ | ------------------- | ------------ | -------------------- |
-| `pixellate` (baseline)         | 240                 | 4            | 100%                 |
-| **`pixel-perfect`**, defaults  | **112**             | 4            | **127%**             |
-| `pixel-perfect`, everything on | 141                 | 4            | 123%                 |
-| `dmg-perfect`, defaults        | 267                 | 4            | 97%                  |
-| `dmg-perfect`, everything on   | 443                 | 8            | 78%                  |
-| `lcd-perfect`, defaults        | 334                 | 4            | 94%                  |
-| `lcd-perfect`, everything on   | 339                 | 4            | 94%                  |
-| `crt-perfect`, defaults        | 428                 | 4            | 93%                  |
-| `crt-perfect`, everything on   | 503                 | 4            | 86%                  |
+| Shader                         | Active instructions | SFU slots | Texture taps | Speed vs `pixellate` |
+| ------------------------------ | ------------------- | --------- | ------------ | -------------------- |
+| `pixellate` (baseline)         | 240                 | 30        | 4            | 100%                 |
+| **`pixel-perfect`**, defaults  | **112**             | **0**     | 4            | **127%**             |
+| `pixel-perfect`, everything on | 141                 | 6         | 4            | 123%                 |
+| `dmg-perfect`, defaults        | 267                 | 6         | 4            | 97%                  |
+| `dmg-perfect`, everything on   | 443                 | 6         | 8            | 78%                  |
+| `lcd-perfect`, defaults        | 334                 | 17        | 4            | 94%                  |
+| `lcd-perfect`, everything on   | 339                 | 23        | 4            | 94%                  |
+| `crt-perfect`, defaults        | 428                 | 8         | 4            | 93%                  |
+| `crt-perfect`, everything on   | 503                 | 14        | 4            | 86%                  |
 
 `pixel-perfect` is a drop-in replacement for `pixellate` that produces the same image with better performance. The three effect shaders do considerably more and still stay within a tenth of it at their defaults, because the expensive part of all four is the same scaler underneath.
 
 *Active instructions* are what survives once the parameters are fixed at those settings and the branches they control are resolved: every optional feature sits behind a check on its own parameter, so a control left alone can be skipped rather than computed and thrown away. That is why the two rows differ, and why turning curvature or the dot shadow off costs almost nothing. A driver compiling against live uniforms may keep more than this, so read the two rows as the span between them rather than as a literal count.
+
+*SFU slots* are the subset of that work which needs the special-function unit — `pow`, `sqrt`, `sin`, `cos` — counted per component, with `pow` costing two because it compiles to a log and an exp. It is a separate and much narrower pipe than ordinary arithmetic, so on a small mobile GPU it can bind before the instruction count does. The two columns disagree here: `pixellate` spends 30 slots on its gamma round trip where `pixel-perfect` at its defaults spends none, yet the gap in measured time is nothing like 30 to 0. Timings on this desktop GPU track the instruction count; a handheld may weigh the other column more heavily.
 
 Speed is throughput: 127% means the same GPU time buys 27% more frames than `pixellate` does. The counts come from the compiled shader; the timings are from a desktop GPU, not a handheld, so consider them a rough guide rather than a prediction.
 
