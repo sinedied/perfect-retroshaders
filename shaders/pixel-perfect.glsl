@@ -1,4 +1,4 @@
-// pixel-perfect v6 - uniform pixel blocks and colour controls, at minimal cost.
+// pixel-perfect v7 - uniform pixel blocks and colour controls, at minimal cost.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
@@ -173,11 +173,6 @@ void main()
         float gb = 0.5 - 0.5 * pp_contrast;
         col = col * (ga * pp_saturation)
             + (dot(col, LUMA) * (ga * (1.0 - pp_saturation)) + gb);
-
-        // Inside the guard because only a grade can leave 0 to 1: the scaler's
-        // own output is a convex blend of taps already in range. It is also
-        // what makes a balance safe to push negative.
-        col = clamp(col, 0.0, 1.0);
     }
 
     // The branch is uniform across the draw, so a gamma of 1 costs nothing. The
@@ -189,7 +184,8 @@ void main()
         col = pow(max(col, 1e-8), vec3(pp_gamma));
     }
 
-    FragColor = vec4(col, 1.0);
+    // Last, always: a grade or a gamma can leave 0 to 1, the blend cannot.
+    FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }
 
 #endif

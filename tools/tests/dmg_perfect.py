@@ -4,7 +4,7 @@ import numpy as np
 
 import common as c
 
-CURRENT = "dmg-perfect-v9.glsl"
+CURRENT = c.current("dmg-perfect")
 
 
 def _palette(w=64, h=48):

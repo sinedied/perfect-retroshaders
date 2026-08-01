@@ -127,7 +127,7 @@ role = ["released"]
 [[shader]]
 name = "crt-perfect-v11.glsl"
 family = "crt-perfect"
-role = ["current"]
+role = ["archive"]
 pattern = "output-locked"
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
 # v10 is bit-identical to the released shader at equal parameters - measured
@@ -145,7 +145,7 @@ moire_allow = [
 [[shader]]
 name = "crt-perfect-v10.glsl"
 family = "crt-perfect"
-role = ["archive"]
+role = ["current"]
 pattern = "output-locked"
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
 # v10 is bit-identical to the released shader at equal parameters - measured
@@ -244,7 +244,7 @@ moire_allow = [
 ]
 # No un-suffixed file exists; v9 is what the README links, so it is both what
 # ships and what a default run gates on.
-role = ["current"]
+role = ["archive"]
 neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
 
 
@@ -274,9 +274,12 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 [[shader]]
 name = "dmg-perfect-v10c.glsl"
 family = "dmg-perfect"
-# v10 with the substrate fix reverted, and nothing else: the grade reaches the
-# taps and the dots but not the panel paper, exactly as v9 did. It exists to
-# isolate what that one fix does, so it is the defective version on purpose.
+# v10 with the substrate fix left out: the grade reaches the taps and the dots
+# but not the panel paper. Written to isolate what that fix does, then chosen
+# by the owner on looks - brightening lifts the dots towards a fixed paper, so
+# the grid softens as the panel gets brighter, which is the wanted behaviour.
+# Identical to v10 at the shipped brightness of 1.00; they diverge only once a
+# grade is moved. v10 keeps the fix and is archived beside it.
 #
 # Figures are on a real Game Boy palette, not a black-and-white checkerboard,
 # whose light square is white - which no DMG ever displays.
@@ -285,7 +288,7 @@ moire_allow = [
     { case = [480, 272, 1024, 768], value = 0.422 },
     { case = [480, 272,  640, 480], value = 0.485 },
 ]
-role = ["archive"]
+role = ["current"]
 neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
 
 

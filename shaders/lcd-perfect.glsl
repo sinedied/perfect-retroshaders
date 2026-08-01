@@ -1,4 +1,4 @@
-// lcd-perfect v5 - an LCD matrix and RGB stripes over a pixel-perfect scale.
+// lcd-perfect v6 - an LCD matrix and RGB stripes over a pixel-perfect scale.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
@@ -269,17 +269,13 @@ void main()
     // whole decode, modulate and re-encode round trip.
     vec3 m = sqrt(max(stripe * (gain * lp_brightness), 0.0));
 
-    vec3 outc = color * m;
-
-    // After the blend, one pow instead of four on the taps: half the SFU when
-    // gamma is on, and nothing either way at the 1.00 default, where the
-    // uniform branch is skipped. The trade is moire once it is turned up, since
-    // a non-linearity after the blend shifts partial-coverage pixels by an
-    // amount that depends on their coverage. pow(0, g) returns NaN on real
-    // drivers, hence the clamp.
+    // Before the pattern, so gamma leaves the grid's contrast alone. v5 puts
+    // it after, where it deepens the grid too.
     if (abs(lp_gamma - 1.0) > 0.001) {
-        outc = pow(max(outc, 1e-8), vec3(lp_gamma));
+        color = pow(max(color, 1e-8), vec3(lp_gamma));
     }
+
+    vec3 outc = color * m;
 
     FragColor = vec4(clamp(outc, 0.0, 1.0), 1.0);
 }

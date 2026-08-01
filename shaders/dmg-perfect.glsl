@@ -1,4 +1,4 @@
-// dmg-perfect v9 - a Game Boy dot matrix over a pixel-perfect scale.
+// dmg-perfect v10c - a Game Boy dot matrix over a pixel-perfect scale.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
@@ -195,10 +195,14 @@ void main()
     vec3 area = mix(mix(t11, t01, wA.x), mix(t10, t00, wA.x), wA.y);
     vec3 dotm = mix(mix(t11, t01, wL.x), mix(t10, t00, wL.x), wL.y);
 
-    // area stays raw: the shadow reads opacity as a ratio of two source
-    // levels, so an output gain has to cancel out of it.
-    vec3 col = mix(area * dp_brightness,
-                   mix(vec3(DMG_SUBSTRATE), dotm * dp_brightness, dot2d),
+    // One factor: balance then brightness, uniform-derived so it folds. Not
+    // applied to `area` (the shadow reads it as a ratio) nor to the SUBSTRATE,
+    // so brightening lifts the dots toward a fixed paper and softens the grid.
+    vec3 grade = (1.0 + dp_temperature * vec3(1.0, 0.0, -1.0)
+                      + dp_tint        * vec3(-0.5, 1.0, -0.5)) * dp_brightness;
+
+    vec3 col = mix(area * grade,
+                   mix(vec3(DMG_SUBSTRATE), dotm * grade, dot2d),
                    dp_grid);
 
     // A cast shadow, so the dots sit above the panel rather than printed on
@@ -259,17 +263,6 @@ void main()
         col *= 1.0 - dp_shadow * opacity * covS.x * covS.y;
     }
 
-
-    // White balance. Affine, and the blend weights sum to one, so doing it
-    // here is identical to doing it to the four taps at a quarter of the cost.
-    // On the finished colour, so the substrate takes the same tint.
-    //
-    // Tested separately, not summed, or a warm temperature could cancel a cool
-    // tint into a false neutral. Uniform branch, so free when left alone.
-    if (dp_temperature != 0.0 || dp_tint != 0.0) {
-        col *= 1.0 + dp_temperature * vec3(1.0, 0.0, -1.0)
-                   + dp_tint        * vec3(-0.5, 1.0, -0.5);
-    }
 
     // pow(0, g) returns NaN on real drivers, hence the clamp; 1e-8 rather than
     // 1e-5, which would lift pure black to 1/255 at the lowest gamma.

@@ -10,7 +10,7 @@ import numpy as np
 
 import common as c
 
-CURRENT = "pixel-perfect-v6.glsl"
+CURRENT = c.current("pixel-perfect")
 
 # The two halves of the grade, as they appear in the shader. Used to build the
 # negative control by swapping them back.
@@ -19,7 +19,10 @@ BALANCE = """        col *= 1.0 + pp_temperature * vec3(1.0, 0.0, -1.0)
 
 """
 MIX = """        float ga = pp_brightness * pp_contrast;"""
-CLAMP = """        col = clamp(col, 0.0, 1.0);"""
+# Where the folded mix ends. Anchoring the control here rather than on the
+# clamp keeps it working across versions: v6 clamped inside the grade guard,
+# v7 clamps once at the end, so the clamp line is not a stable landmark.
+END_OF_MIX = """            + (dot(col, LUMA) * (ga * (1.0 - pp_saturation)) + gb);"""
 
 MOVED = [("pp_brightness", 1.0, 1.4),
          ("pp_contrast", 1.0, 1.4),
@@ -67,10 +70,11 @@ def run(names, ctx, progs, report, cases=None):
     # order is swapped in the source and compiled on the spot, which is the only
     # way to show the check is measuring the order and not something else.
     src_txt = c.read(CURRENT)
-    assert src_txt.count(BALANCE) == 1 and src_txt.count(MIX) == 1, \
-        "the grade block moved; fix the control"
+    assert src_txt.count(BALANCE) == 1 and src_txt.count(MIX) == 1 \
+        and src_txt.count(END_OF_MIX) == 1, "the grade block moved; fix the control"
     swapped = src_txt.replace(BALANCE + MIX, MIX)
-    swapped = swapped.replace(CLAMP, BALANCE.rstrip() + "\n\n" + CLAMP)
+    swapped = swapped.replace(END_OF_MIX,
+                              END_OF_MIX + "\n\n" + BALANCE.rstrip())
     assert swapped != src_txt
     prog = ctx.program(vertex_shader=c.stage_source(swapped, "vert"),
                        fragment_shader=c.stage_source(swapped, "frag"))

@@ -173,7 +173,6 @@ void main()
         float gb = 0.5 - 0.5 * pp_contrast;
         col = col * (ga * pp_saturation)
             + (dot(col, LUMA) * (ga * (1.0 - pp_saturation)) + gb);
-
     }
 
     // The branch is uniform across the draw, so a gamma of 1 costs nothing. The

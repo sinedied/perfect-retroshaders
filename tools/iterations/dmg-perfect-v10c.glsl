@@ -195,9 +195,9 @@ void main()
     vec3 area = mix(mix(t11, t01, wA.x), mix(t10, t00, wA.x), wA.y);
     vec3 dotm = mix(mix(t11, t01, wL.x), mix(t10, t00, wL.x), wL.y);
 
-    // One factor: balance then brightness, uniform-derived so it folds.
-    // `area` stays ungraded: the shadow below reads it as a ratio. The
-    // SUBSTRATE is ungraded too - that is the v10 fix, left out here on purpose.
+    // One factor: balance then brightness, uniform-derived so it folds. Not
+    // applied to `area` (the shadow reads it as a ratio) nor to the SUBSTRATE,
+    // so brightening lifts the dots toward a fixed paper and softens the grid.
     vec3 grade = (1.0 + dp_temperature * vec3(1.0, 0.0, -1.0)
                       + dp_tint        * vec3(-0.5, 1.0, -0.5)) * dp_brightness;
 

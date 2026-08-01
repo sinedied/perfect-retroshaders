@@ -249,10 +249,10 @@ Measured against [`pixellate`](tools/vendor/pixellate.glsl), the shader most peo
 | Shader                         | Active instructions | Texture taps | Speed vs `pixellate` |
 | ------------------------------ | ------------------- | ------------ | -------------------- |
 | `pixellate` (baseline)         | 240                 | 4            | 100%                 |
-| **`pixel-perfect`**, defaults  | **111**             | 4            | **127%**             |
-| `pixel-perfect`, everything on | 143                 | 4            | 123%                 |
-| `dmg-perfect`, defaults        | 265                 | 4            | 97%                  |
-| `dmg-perfect`, everything on   | 447                 | 8            | 78%                  |
+| **`pixel-perfect`**, defaults  | **112**             | 4            | **127%**             |
+| `pixel-perfect`, everything on | 141                 | 4            | 123%                 |
+| `dmg-perfect`, defaults        | 267                 | 4            | 97%                  |
+| `dmg-perfect`, everything on   | 443                 | 8            | 78%                  |
 | `lcd-perfect`, defaults        | 334                 | 4            | 94%                  |
 | `lcd-perfect`, everything on   | 339                 | 4            | 94%                  |
 | `crt-perfect`, defaults        | 428                 | 4            | 93%                  |

@@ -11,7 +11,7 @@ import numpy as np
 import common as c
 
 FLAT = "crt-perfect-v5b.glsl"
-CURRENT = "crt-perfect-v10.glsl"
+CURRENT = c.current("crt-perfect")
 CURVED = ["crt-perfect-v6.glsl", "crt-perfect-v8.glsl",
           "crt-perfect-v9.glsl", "crt-perfect-v10.glsl"]
 # Normalised its warp by the corner value, which put the entire image border
