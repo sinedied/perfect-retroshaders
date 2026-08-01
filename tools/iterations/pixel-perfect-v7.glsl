@@ -185,9 +185,7 @@ void main()
         col = pow(max(col, 1e-8), vec3(pp_gamma));
     }
 
-    // Last, always. The scaler alone cannot leave 0 to 1 - its output is a
-    // convex blend of taps already in range - but a grade or a gamma can, and
-    // clamping between them left whatever ran last unbounded.
+    // Last, always: a grade or a gamma can leave 0 to 1, the blend cannot.
     FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }
 

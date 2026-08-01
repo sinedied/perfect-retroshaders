@@ -195,17 +195,9 @@ void main()
     vec3 area = mix(mix(t11, t01, wA.x), mix(t10, t00, wA.x), wA.y);
     vec3 dotm = mix(mix(t11, t01, wL.x), mix(t10, t00, wL.x), wL.y);
 
-    // The grade, as one factor: balance first so it is not undone by anything
-    // after it, then brightness. Entirely uniform-derived, so the driver folds
-    // it to a constant and it costs one multiply per term.
-    //
-    // It scales the SUBSTRATE too, which is the whole point. Multiplication
-    // commutes with the pattern but a mix with a constant does not, so grading
-    // only the taps lifted the dots and left the panel paper behind - the
-    // brighter the setting, the flatter the panel looked.
-    //
-    // area stays raw: the shadow reads opacity as a ratio of two source
-    // levels, so an output gain has to cancel out of it.
+    // One factor: balance then brightness, uniform-derived so it folds. It
+    // must scale the SUBSTRATE too - a mix with a constant does not commute.
+    // `area` itself stays ungraded: the shadow below reads it as a ratio.
     vec3 grade = (1.0 + dp_temperature * vec3(1.0, 0.0, -1.0)
                       + dp_tint        * vec3(-0.5, 1.0, -0.5)) * dp_brightness;
 

@@ -270,11 +270,8 @@ void main()
 
     vec3 outc = color * gain * tube;
 
-    // After the pattern, so gamma grades the finished picture. It therefore
-    // also grades the scanlines: (colour * scan)^g = colour^g * scan^g, so a
-    // gamma above 1 deepens them. At scanlines 0.60 a gamma of 1.20 pulls the
-    // trough from 0.40 to 0.33. v11b puts it before the pattern instead, where
-    // the two stay independent.
+    // After the pattern, so it grades the scanlines too:
+    // (colour * scan)^g = colour^g * scan^g. v11b puts it before.
     if (abs(cp_gamma - 1.0) > 0.001) {
         outc = pow(max(outc, 1e-8), vec3(cp_gamma));
     }

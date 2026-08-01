@@ -269,9 +269,8 @@ void main()
     // whole decode, modulate and re-encode round trip.
     vec3 m = sqrt(max(stripe * (gain * lp_brightness), 0.0));
 
-    // Before the pattern, so gamma grades the picture and leaves the mesh's
-    // designed contrast alone. v6 puts it after instead, where a gamma above 1
-    // deepens the grid as a side effect of a colour control.
+    // Before the pattern, so gamma leaves the grid's contrast alone. v6 puts
+    // it after, where it deepens the grid too.
     if (abs(lp_gamma - 1.0) > 0.001) {
         color = pow(max(color, 1e-8), vec3(lp_gamma));
     }

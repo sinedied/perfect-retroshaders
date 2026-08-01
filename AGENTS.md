@@ -199,13 +199,16 @@ lines, gated; `lcd-perfect` reached 22 before anything stopped it.
 Then `Notes:`, for the handful of things a *user* needs: how to run it, and any
 setting that behaves surprisingly.
 
-**Comments in the body are short and local.** It is a shader, not a research
-paper. The test: **keep a comment only if it stops a misreading of that line.**
-"`mix()` returns y at t == 1, so the low-side tap goes second" earns its place;
-the optics of a reflective panel does not. Measurements, rejected approaches and
-the argument for a design belong in `docs/<family>.md`, which is where anyone
-looking for them will go. A shader that was 184 comment lines against 153 of
-code was not better documented, it was harder to read.
+**Body comments: short, local, 3 lines maximum.** Keep one only if it stops a
+misreading of *that line*. "`mix()` returns y at t == 1, so the low-side tap
+goes second" earns its place; the reasoning behind the design does not — that
+goes in `docs/<family>.md`, along with history, measurements, rejected
+approaches and comparisons to other versions.
+
+Two tells that a comment has become a story: it runs past 3 lines, or it
+contains a blank `//` separator. Both mean move it to the docs. Diff a new
+iteration against its predecessor and read what you added before committing —
+this is the single most-repeated correction in this repo.
 
 ## GLSL traps that actually bit
 
