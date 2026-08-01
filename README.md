@@ -89,7 +89,7 @@ While res-independant-scanlines is slightly faster than crt-shader, it doesn't p
 <details>
 <summary><em>Comparison details</em></summary>
 
-When comparing crt-perfect with the "old-tv" preset from NextUI which adds barrel distortion in addition to scaline, crt-perfect becomes faster even with all the effects enabled, including anti-aliased barrel distorsion, uniform pixel scaling and brightness + gamma correction.
+When comparing crt-perfect with the "old-tv" preset from NextUI which adds barrel distortion in addition to scanlines, crt-perfect becomes faster even with all the effects enabled, including anti-aliased barrel distorsion, uniform pixel scaling and brightness + gamma correction.
 
 | Pipeline                                                           | Perf. |
 | ------------------------------------------------------------------ | ----- |
