@@ -143,24 +143,6 @@ moire_allow = [
 ]
 
 [[shader]]
-name = "crt-perfect-v11b.glsl"
-family = "crt-perfect"
-role = ["archive"]
-pattern = "output-locked"
-neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
-# v10 is bit-identical to the released shader at equal parameters - measured
-# both ways, 0.249 and 0.434 to three decimals. Both exceedances are entirely
-# its retuned defaults: scanlines 0.55 -> 0.60 and mask 0.40 -> 0.20 beat harder.
-# Neither was visible before, because the tool used to pick a shader's pattern
-# rule by filename prefix and never matched v6-v10. The 256x224 case has a floor
-# of 0.000, so that one is all shader; the PSP case is the same pre-existing
-# fault the released shader has. Owner's tuning: pinned and surfaced, not changed.
-moire_allow = [
-    { case = [480, 272, 640, 480], value = 0.466 },
-    { case = [256, 224, 1024, 768], value = 0.434 },
-]
-
-[[shader]]
 name = "crt-perfect-v10.glsl"
 family = "crt-perfect"
 role = ["archive"]
@@ -534,18 +516,6 @@ sampler = "linear"
 "480x272->640x480" = "bf57cc916774758e"
 
 [golden."crt-perfect-v11.glsl"]
-"160x144->1024x768" = "2070509be3242835"
-"240x160->1024x768" = "08ced6bc8ca20f45"
-"256x192->1024x768" = "17e35cea4cbeaa08"
-"256x192->640x480" = "e7f4e5f23d140c4f"
-"256x224->1024x768" = "fc3e48b9cfec24fa"
-"320x240->1024x768" = "370516b207afc5c8"
-"320x240->1280x720" = "618ac0a5eca82f69"
-"320x240->640x480" = "3585a090a3e354f2"
-"480x272->1024x768" = "682de10fd3304f8e"
-"480x272->640x480" = "bf57cc916774758e"
-
-[golden."crt-perfect-v11b.glsl"]
 "160x144->1024x768" = "2070509be3242835"
 "240x160->1024x768" = "08ced6bc8ca20f45"
 "256x192->1024x768" = "17e35cea4cbeaa08"
