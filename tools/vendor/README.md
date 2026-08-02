@@ -16,6 +16,8 @@ Third-party shaders, kept **only** as benchmark and comparison references.
 | `sharp-shimmerless.glsl` | zadpos — public domain | **The one-tap scaler.** Same area average as `pixellate` from a SINGLE tap: it solves for the texcoord whose bilinear fetch already is the weighted sum. 50 ops, 0 SFU, the cheapest thing here — and the construction this repo prototyped and rejected, because it needs `filter_linear0 = true` and leans on the GPU's subtexel precision. `equivalence.py` section 6 measures it. |
 | `sharp-shimmerless-grid.glsl` | zadpos — public domain | **Prior art for the core idea.** Treats pixels as ideal rectangles and computes the exact area an input pixel occupies on an output pixel, transcendental-free. `lcd-perfect` uses the separable antiderivative form of the same maths. |
 | `dmg_dot_matrix.glsl` | Status_Librarian_313, modified by sinedied | The naive `step()`-on-`mod()` grid with a **post-blend output gamma** — the exact construction AGENTS.md measures at a beat of 1.53 (γ=1.4) / 3.06 (γ=2.0). Kept as the moiré counter-example. |
+| `res-independent-scanlines.glsl` | RiskyJumps — public domain | **A scanline pass that costs almost nothing.** One `sin()` on a resolution-independent phase, no prefilter and no mask. Half of the `sharp-shimmerless + scanlines` reference stack `crt-turbo` has to beat. |
+| `image-adjustment.glsl` | hunterk — public domain | **The grading pass the reference stacks bolt on.** Brightness, contrast, saturation, gamma and a full colour-temperature model as a separate pass, which is what makes "how much does grading cost on its own" answerable against something real. |
 
 ## Adding one
 

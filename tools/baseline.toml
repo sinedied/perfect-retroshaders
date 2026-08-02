@@ -132,6 +132,19 @@ crt-perfect = [
     { cp_rgb_mask = 1.00, cp_brightness = 1.00 },
 ]
 
+# Same two regimes for the *-turbo line, and measured at the same settings so
+# the pair is comparable. The turbo shaders cannot clamp per source pixel - one
+# tap means the texture unit has already blended - so brightness is a curve
+# rather than a gain there, and this is where that has to prove itself.
+lcd-turbo = [
+    { lp_subpixels = 0.20, lp_brightness = 2.00 },
+    { lp_subpixels = 1.00, lp_brightness = 1.00 },
+]
+crt-turbo = [
+    { cp_rgb_mask = 0.20, cp_brightness = 2.00 },
+    { cp_rgb_mask = 1.00, cp_brightness = 1.00 },
+]
+
 # The device benchmark's one case. Everything tools/device measures runs at this
 # size: a 320x240 source into a 1024x768 output, which is the Brick's panel and
 # the scale factor the README screenshots use.
@@ -185,6 +198,56 @@ label = "sharp-shimmerless"
 cfg = "sharp-shimmerless.cfg"
 
 
+# The reference stacks: what a user can already run today, measured the same way
+# so the *-turbo rows have something real to be read against. Each is the
+# cheapest thing of its kind, assembled the way the frontend assembles it.
+[[pipeline]]
+label = "shimmerless -> lcd1x"
+cfg = "shimmerless-lcd1x.cfg"
+
+[[pipeline]]
+label = "shimmerless -> lcd3x"
+cfg = "shimmerless-lcd3x.cfg"
+
+[[pipeline]]
+label = "shimmerless -> scanlines"
+cfg = "shimmerless-scanlines.cfg"
+
+[[pipeline]]
+label = "shimmerless -> adjust"
+cfg = "shimmerless-adjust.cfg"
+
+[[pipeline]]
+label = "shimmerless -> lcd1x -> adjust"
+cfg = "shimmerless-lcd1x-adjust.cfg"
+
+[[pipeline]]
+label = "dmg_dot_matrix"
+cfg = "dmg-dot-matrix.cfg"
+
+[[pipeline]]
+label = "dmg_dot_matrix -> adjust"
+cfg = "dmg-dot-matrix-adjust.cfg"
+
+
+# The *-turbo line.
+[[pipeline]]
+label = "pixel-turbo"
+cfg = "pixel-turbo.cfg"
+
+[[pipeline]]
+label = "dmg-turbo"
+cfg = "dmg-turbo.cfg"
+
+[[pipeline]]
+label = "lcd-turbo"
+cfg = "lcd-turbo.cfg"
+
+[[pipeline]]
+label = "crt-turbo"
+cfg = "crt-turbo.cfg"
+
+
 [[shader]]
 name = "pixel-perfect-v1.glsl"
 family = "pixel-perfect"
@@ -215,6 +278,81 @@ role = ["archive"]
 equivalent_to = "pixellate.glsl"
 # At a neutral grade it must still be the plain scaler.
 neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
+
+
+# --- the *-turbo line: the same pictures, rebuilt for the device -------------
+#
+# One LINEAR tap instead of four NEAREST ones. The texture unit computes the
+# same weighted sum the four-tap blend did, so these are the same scaler by
+# construction - and a different, much worse one if anything runs them through
+# NEAREST, which is why every one of them declares its sampler here.
+
+[[shader]]
+name = "pixel-turbo-v1.glsl"
+family = "pixel-turbo"
+role = ["current"]
+sampler = "linear"
+neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
+
+[[shader]]
+name = "crt-turbo-v1.glsl"
+family = "crt-turbo"
+role = ["current"]
+sampler = "linear"
+pattern = "output-locked"
+# No curvature and one mask type. Brightness shallows the patterns instead of
+# gaining the picture, for the reason lcd-turbo records - identical to
+# crt-perfect-v12 at any brightness of 1.00 or below, max 1/255 over the whole
+# case matrix.
+#
+# The exception is therefore inherited, not new: at full mask depth these are
+# v12's own figures to three decimals. Both of v12's MOIRE exceptions are gone,
+# and no new one is needed - the worst case reads 0.306 against a limit of 0.40.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 1.41 },
+    { case = [160, 144, 853, 768], value = 0.92 },
+]
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0 }
+
+[[shader]]
+name = "lcd-turbo-v1.glsl"
+family = "lcd-turbo"
+role = ["current"]
+sampler = "linear"
+pattern = "whole-cell"
+# Brightness shallows the mesh instead of gaining the picture: one tap cannot
+# clamp per source pixel, the texture unit having already blended, and a clamp
+# on the blend measured 1.860 of moire. Identical to lcd-perfect-v8 at any
+# brightness of 1.00 or below - max 1/255 over the whole case matrix.
+#
+# The exception is therefore inherited, not new: at full stripe depth these are
+# v8's own figures to three decimals, and v8 carries the same ones. It is the
+# stripe's aperture error, which lcd-perfect-v7 fixed at +40% ops and was
+# rejected for. Nothing here made it worse.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 1.27 },
+    { case = [160, 144, 853, 768], value = 0.79 },
+]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
+name = "dmg-turbo-v1.glsl"
+family = "dmg-turbo"
+role = ["current"]
+sampler = "linear"
+# The shadow's caster luma is a second LINEAR tap: dot() is linear, so the four
+# -tap bilinear of lumas and the luma of one bilinear tap are the same number.
+#
+# The exceptions are dp_gamma, which ships at 1.20 and is a pow() after the
+# blend - the same cause, the same cases and within noise of the same figures as
+# dmg-perfect, which reads 0.443 / 0.422 / 0.485 against these. Measured on a
+# real Game Boy palette, not a white checkerboard.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 0.458 },
+    { case = [480, 272, 1024, 768], value = 0.400 },
+    { case = [480, 272,  640, 480], value = 0.459 },
+]
+neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
 
 [[shader]]
 name = "crt-perfect-v5b.glsl"
@@ -699,6 +837,16 @@ role = ["vendor"]
 preview = { GRID_RATIO_X = 0.3, GRID_RATIO_Y = 0.3, GRID_OPACITY_X = 0.3, GRID_OPACITY_Y = 0.3 }
 sampler = "linear"
 
+[[shader]]
+name = "res-independent-scanlines.glsl"
+family = "vendor"
+role = ["vendor"]
+
+[[shader]]
+name = "image-adjustment.glsl"
+family = "vendor"
+role = ["vendor"]
+
 # --- goldens, generated by tools/test.py --record ---
 
 [golden."crt-perfect-v1.glsl"]
@@ -869,6 +1017,18 @@ sampler = "linear"
 "480x272->1024x768" = "682de10fd3304f8e"
 "480x272->640x480" = "bf57cc916774758e"
 
+[golden."crt-turbo-v1.glsl"]
+"160x144->1024x768" = "99784ef5c80312f2"
+"240x160->1024x768" = "84c7ea508d2fbd23"
+"256x192->1024x768" = "40367b7e1ba1ecae"
+"256x192->640x480" = "c2ea607152dd7e8e"
+"256x224->1024x768" = "6dbd6f7b9e56b105"
+"320x240->1024x768" = "c4d5c1470c4c5e4a"
+"320x240->1280x720" = "695cccdc993a1e17"
+"320x240->640x480" = "8d68c23f20aeb533"
+"480x272->1024x768" = "65a83896d8f339a3"
+"480x272->640x480" = "1b67912909a15707"
+
 [golden."dmg-perfect-v1.glsl"]
 "160x144->1024x768" = "e22ec3f3352ac64e"
 "240x160->1024x768" = "e62bdef64b9c20fa"
@@ -1025,6 +1185,18 @@ sampler = "linear"
 "480x272->1024x768" = "db66aeebbfcf266b"
 "480x272->640x480" = "771414784ea228a7"
 
+[golden."dmg-turbo-v1.glsl"]
+"160x144->1024x768" = "e999d2faf969671e"
+"240x160->1024x768" = "2a0ad2d6d918e5eb"
+"256x192->1024x768" = "7990a5b901c9afb0"
+"256x192->640x480" = "f74fc99cb2bd92eb"
+"256x224->1024x768" = "311a6c22e9153f04"
+"320x240->1024x768" = "166f936e32da4c5f"
+"320x240->1280x720" = "5514f206c3fdf08e"
+"320x240->640x480" = "4b70df91e81661fb"
+"480x272->1024x768" = "06da4ac9797b605b"
+"480x272->640x480" = "592d2ab23284bff2"
+
 [golden."lcd-perfect-v1.glsl"]
 "160x144->1024x768" = "9c4d71137a4c1aff"
 "240x160->1024x768" = "46c202d6f53c97f3"
@@ -1145,6 +1317,18 @@ sampler = "linear"
 "480x272->1024x768" = "ac867203cbd29d99"
 "480x272->640x480" = "f3c3131b338766bd"
 
+[golden."lcd-turbo-v1.glsl"]
+"160x144->1024x768" = "ad3b1fdd39e94366"
+"240x160->1024x768" = "74e88e00c8329e08"
+"256x192->1024x768" = "00878193f3c3642c"
+"256x192->640x480" = "566fd995bc84c22b"
+"256x224->1024x768" = "e290b95331f4ac3c"
+"320x240->1024x768" = "4c5e85cf31961ff5"
+"320x240->1280x720" = "18d2cc4910a1b40c"
+"320x240->640x480" = "734f5833c44bcbb4"
+"480x272->1024x768" = "f460f038bb38f643"
+"480x272->640x480" = "20cc604d4ace0c7d"
+
 [golden."pixel-perfect-v1.glsl"]
 "160x144->1024x768" = "784dcd47f347a0dd"
 "240x160->1024x768" = "506f628fc855ea34"
@@ -1240,3 +1424,15 @@ sampler = "linear"
 "320x240->640x480" = "4f3e542cb493ab79"
 "480x272->1024x768" = "ca81cdba01150f6e"
 "480x272->640x480" = "7cc33d9020ae59cc"
+
+[golden."pixel-turbo-v1.glsl"]
+"160x144->1024x768" = "8fadb9103618b7c9"
+"240x160->1024x768" = "6a021d7a7bb36191"
+"256x192->1024x768" = "14fde0bf677a8ec7"
+"256x192->640x480" = "dba8d2d5f0603e18"
+"256x224->1024x768" = "9b155a8cec6c345f"
+"320x240->1024x768" = "1bbadaa071700ad2"
+"320x240->1280x720" = "6ef196867a147d60"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "4c44e1ce03cdf6ad"
+"480x272->640x480" = "01fea07c6e9b2681"
