@@ -304,3 +304,81 @@ by multiple-angle, so it need not cost another transcendental. Untried.
 
 Until then the figures are recorded as `crawl_allow` in `baseline.toml`: not
 approval, a ceiling, so the number cannot get worse while the fix is worked out.
+
+## v8: the clamp was the artifact, not the covariance
+
+The section above is wrong about which term the owner was seeing, and it is left
+standing because the reasoning is sound and the measurement stands — it just was
+not the dominant thing. Device testing settled it:
+
+| observed on a Brick | measured here |
+|---|---|
+| absent at `lp_brightness` 1.0 | crawl 0.128 |
+| worse with every step above it | 1.4 → 0.312, 1.7 → 0.483, 2.0 → 0.702 |
+| **absent at an integer scale at any brightness** | **0.006–0.008, flat** |
+| X grid beats vertical scrolling, Y grid horizontal | the modulated axis is the one that beats |
+| `pixellate → lcd1x → image-adjustment` does it too | it is not this shader; it is boost-then-clamp |
+
+The integer-scale result is decisive, and it is the design rule in `AGENTS.md`
+naming its own cause. At a non-integer scale the count of partial-coverage
+pixels varies block to block, so **any non-linearity after the blend** shifts
+them by an amount that depends on their coverage. At an integer scale every
+output pixel has full coverage and there is nothing to beat against — which is
+why brightness can be pushed as far as you like there.
+
+**The non-linearity is `clamp()`.** `lp_brightness` multiplied the blended colour
+*and* the pattern, and the product was clipped at the end.
+
+### The fix
+
+Brightness moves to the four taps and is clamped there:
+
+```glsl
+float sb = pow(max(lp_brightness, 1e-4), 0.5 / max(lp_gamma, 1e-3));
+vec3 a = min(COMPAT_TEXTURE(Texture, vec2(lo.x, lo.y)).rgb * sb, 1.0);
+```
+
+A clamp per tap is a clamp per *source pixel*: identical for every output pixel
+covering it, so it cannot vary with coverage and cannot beat. The blend of four
+clamped taps is a linear interpolation, and a linear operation after the blend is
+safe. The exponent carries brightness through both the encoding and the gamma, so
+the look is unchanged wherever nothing clips; its argument is uniform-only, so
+the driver hoists it out of the fragment shader.
+
+The peak-normalised stripe is the other half of the same invariant — **nothing
+may exceed 1 by the time the blend is done**, which needs the content ≤ 1 *and*
+the pattern ≤ 1. The stripe was `1 + ac·cos`, peaking near 2, and was the only
+pattern in either shader not already peak-normalised.
+
+Measured, GBA aspect, on bright content:
+
+| | v6 | v8 |
+|---|---|---|
+| stripes off, brightness 2.0 — the clamp alone | 0.302 | **0.000** |
+| owner's settings, brightness 1.7 | 0.483 | **0.048** |
+| shipped stripe 0.20, brightness 2.0 | 0.541 | **0.023** |
+| stripe at maximum 1.0, brightness 2.0 | 2.811 | 1.540 |
+
+The last row is the covariance term from the section above, which v8 does not
+address and v7 does at +40% ops. Everywhere a user actually goes, the clamp was
+the whole story.
+
+Cost: 396 → 422 ops, +6.6%.
+
+### What it costs in brightness, and why that is the point
+
+Brightness can no longer be bought by clipping the product, so it buys less: the
+image saturates around 170 mean where v6 reached 228. That gap is not brightness
+the fix destroys, it is brightness v6 was manufacturing by clipping — which is
+the rainbow. Read by artifact instead: v6 needs about 1.35 to reach 168 and pays
+0.3 for it; v8 reaches 170 and pays nothing.
+
+**The ceiling is the pattern's own light loss.** A grid removing 16% of the light
+caps a clean image at 84% of source brightness. Going brighter means removing
+less light — a shallower `lp_grid` or a shallower stripe — not a bigger
+multiplier.
+
+And it is not only a loss. Under v6 a bright area clips to flat white and the
+grid vanishes with it; under v8 the content clips at the source and the pattern
+is applied afterwards, so **the LCD structure survives in highlights** instead of
+being washed out. That is visible in a still, not just in a number.

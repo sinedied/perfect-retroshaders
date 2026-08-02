@@ -98,17 +98,39 @@ tolerance = 1
 [settings.preview]
 cp_curvature = 0.10
 
-# The parameter that draws a shader's COLOUR pattern, per family. Crawl is
-# measured with this at its maximum, so it has to be named somewhere; keyed by
-# family rather than by filename, because listing versions by name is how the
-# preview overrides silently stopped applying the moment a v9 existed.
+# What crawl is measured at, per family. Each entry is a list of parameter sets,
+# and the worst of them is the figure; a shader is measured at every one.
 #
-# A family with no entry has no colour pattern and is not measured for crawl.
-# dmg-perfect is deliberately absent: its grid is neutral, and it has a crawl of
-# its own from a different cause that nobody has looked at yet.
-[settings.colour]
-lcd-perfect = "lp_subpixels"
-crt-perfect = "cp_rgb_mask"
+# BRIGHTNESS IS IN HERE, and it is the point. The artifact is the output clamp,
+# so it does not exist until the gain drives content past 1 - measured on a
+# device, invisible at 1.0 and worse with every step above it. Measuring at the
+# shipped default would have called both shaders clean. Same reasoning as MAXED
+# in perf.py: a control that guards a cost only shows it when it is turned on.
+#
+# Both entries are measured, not just the second: the fix for the clamp is
+# NON-MONOTONIC in brightness - it reads 0.047 at 1.0 and 0.000 at 2.0, because
+# heavy clipping is uniform clipping - so a high value alone would miss what the
+# pattern does on its own.
+#
+# Keyed by family rather than by filename, because listing versions by name is
+# how the preview overrides silently stopped applying the moment a v9 existed. A
+# family with no entry is not measured: dmg-perfect is deliberately absent, its
+# grid being neutral, and it has a crawl of its own from a cause nobody has
+# looked at yet.
+[settings.crawl_at]
+# Two regimes, because two different defects live here and one set cannot see
+# both. The first is the clamp: the pattern at its SHIPPED depth with the
+# brightness turned up, which is what a user actually runs into. The second is
+# the pattern's own aperture error at full depth with no clamp at all, which is
+# a separate and much more expensive thing to fix - see docs/lcd-perfect.md.
+lcd-perfect = [
+    { lp_subpixels = 0.20, lp_brightness = 2.00 },
+    { lp_subpixels = 1.00, lp_brightness = 1.00 },
+]
+crt-perfect = [
+    { cp_rgb_mask = 0.20, cp_brightness = 2.00 },
+    { cp_rgb_mask = 1.00, cp_brightness = 1.00 },
+]
 
 # The device benchmark's one case. Everything tools/device measures runs at this
 # size: a 320x240 source into a 1024x768 output, which is the Brick's panel and
@@ -234,21 +256,45 @@ moire_allow = [
 ]
 
 [[shader]]
-name = "crt-perfect-v10.glsl"
+name = "crt-perfect-v12.glsl"
 family = "crt-perfect"
-# CRAWL, RECORDED AND NOT YET FIXED. The RGB mask are multiplied on after the
-# scaler's blend, so at maximum visibility they paint a low-frequency colour
-# band that walks with a horizontal scroll - the defect the owner reported.
-# Measured against a limit of 0.35. It is a bug and not a limit of the design:
-# the same shader supersampled and averaged down, which is what it is trying to
-# approximate, reads 0.319 on the worst case. These allowances stop it getting
-# worse while the remaining error is worked out. See docs/lcd-perfect.md.
+role = ["current"]
+pattern = "output-locked"
+# These ceilings describe the SHIPPED release, which still carries the defect;
+# this version measures far under them on the clamp regime (0.037 against 0.541
+# at GBA) and they drop the moment it is promoted. A ceiling is not approval.
 crawl_allow = [
-    { case = [240, 160, 1024, 682], value = 1.134 },
-    { case = [160, 144, 853, 768], value = 0.745 }
+    { case = [240, 160, 1024, 682], value = 1.45 },
+    { case = [160, 144, 853, 768], value = 0.95 },
+    { case = [256, 224, 1024, 768], value = 1.55 }
+]
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
+# v11 exists and is archived, so the next free number is v12.
+#
+# Brightness applied per tap before the blend and clamped there.
+#
+# The 256x224 exception is inherited from the release and NOT earned: that 0.434
+# is this very defect at the shipped brightness of 1.25, and this version reads
+# 0.070. It is here because contracts.py requires the release and the current
+# version to be measured alike, and the release still has the bug. Delete it on
+# promotion.
+moire_allow = [
+    { case = [480, 272, 640, 480], value = 0.466 },
+    { case = [256, 224, 1024, 768], value = 0.434 },
 ]
 
-role = ["current"]
+[[shader]]
+name = "crt-perfect-v10.glsl"
+family = "crt-perfect"
+role = ["archive"]
+# CRAWL, SUPERSEDED BY v12. Brightness multiplies the scanlines and mask as well
+# as the colour and the product is clamped, so above 1.0 the clamp becomes a
+# non-linearity past the blend and beats. Kept as the negative control.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 1.45 },
+    { case = [160, 144, 853, 768], value = 0.95 },
+    { case = [256, 224, 1024, 768], value = 1.55 }
+]
 pattern = "output-locked"
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
 # v10 is bit-identical to the released shader at equal parameters - measured
@@ -278,20 +324,39 @@ family = "lcd-perfect"
 role = ["released"]
 
 [[shader]]
+name = "lcd-perfect-v8.glsl"
+family = "lcd-perfect"
+role = ["current"]
+pattern = "whole-cell"
+# These ceilings describe the SHIPPED release, which still carries the defect;
+# this version measures far under them on the clamp regime (0.037 against 0.541
+# at GBA) and they drop the moment it is promoted. A ceiling is not approval.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 2.10 },
+    { case = [160, 144, 853, 768], value = 1.25 },
+    { case = [256, 224, 1024, 768], value = 0.52 }
+]
+# Brightness applied per tap before the blend and clamped there, and the stripe
+# peak-normalised: together they keep everything at or under 1 by the time the
+# blend is done, so the output clamp is never reached and cannot beat.
+moire_allow = [{ case = [480, 272, 1024, 768], value = 0.432 }]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
 name = "lcd-perfect-v7.glsl"
 family = "lcd-perfect"
 role = ["archive"]
 pattern = "whole-cell"
-# CRAWL, RECORDED AND NOT YET FIXED. The RGB stripes are multiplied on after the
-# scaler's blend, so at maximum visibility they paint a low-frequency colour
-# band that walks with a horizontal scroll - the defect the owner reported.
-# Measured against a limit of 0.35. It is a bug and not a limit of the design:
-# the same shader supersampled and averaged down, which is what it is trying to
-# approximate, reads 0.319 on the worst case. These allowances stop it getting
-# worse while the remaining error is worked out. See docs/lcd-perfect.md.
+# CRAWL, SUPERSEDED BY v8. Brightness multiplies the pattern as well as the
+# colour and the product is clamped, so above 1.0 the clamp becomes a
+# non-linearity past the blend and beats as a rainbow that walks with the
+# scroll. Kept as the negative control. Confirmed on a device: absent at
+# brightness 1.0, worse with every step above it, and absent at an integer
+# scale at any brightness.
 crawl_allow = [
-    { case = [240, 160, 1024, 682], value = 1.606 },
-    { case = [160, 144, 853, 768], value = 1.038 }
+    { case = [240, 160, 1024, 682], value = 2.10 },
+    { case = [160, 144, 853, 768], value = 1.25 },
+    { case = [256, 224, 1024, 768], value = 0.52 }
 ]
 
 # Row/column balance ships at 0.60 rather than 0.50, leaning the mesh towards
@@ -315,18 +380,18 @@ neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1
 [[shader]]
 name = "lcd-perfect-v6.glsl"
 family = "lcd-perfect"
-role = ["current"]
+role = ["archive"]
 pattern = "whole-cell"
-# CRAWL, RECORDED AND NOT YET FIXED. The RGB stripes are multiplied on after the
-# scaler's blend, so at maximum visibility they paint a low-frequency colour
-# band that walks with a horizontal scroll - the defect the owner reported.
-# Measured against a limit of 0.35. It is a bug and not a limit of the design:
-# the same shader supersampled and averaged down, which is what it is trying to
-# approximate, reads 0.319 on the worst case. These allowances stop it getting
-# worse while the remaining error is worked out. See docs/lcd-perfect.md.
+# CRAWL, SUPERSEDED BY v8, and this is what the release still copies. Brightness
+# multiplies the pattern as well as the colour and the product is clamped, so
+# above 1.0 the clamp is a non-linearity past the blend and beats as a rainbow
+# that walks with the scroll. Confirmed on a device: absent at brightness 1.0,
+# worse with every step above it, and absent at an integer scale at any
+# brightness. Kept as the negative control.
 crawl_allow = [
-    { case = [240, 160, 1024, 682], value = 1.606 },
-    { case = [160, 144, 853, 768], value = 1.038 }
+    { case = [240, 160, 1024, 682], value = 2.10 },
+    { case = [160, 144, 853, 768], value = 1.25 },
+    { case = [256, 224, 1024, 768], value = 0.52 }
 ]
 
 # Superseded by v7. Kept as the negative control for crawl: its RGB stripes are
@@ -671,6 +736,18 @@ sampler = "linear"
 "320x240->640x480" = "3585a090a3e354f2"
 "480x272->1024x768" = "682de10fd3304f8e"
 "480x272->640x480" = "bf57cc916774758e"
+
+[golden."crt-perfect-v12.glsl"]
+"160x144->1024x768" = "152e57b4508b6776"
+"240x160->1024x768" = "343db15f4893c2cd"
+"256x192->1024x768" = "e80df9925779044f"
+"256x192->640x480" = "ff96374d0983b332"
+"256x224->1024x768" = "8dd1860335612c81"
+"320x240->1024x768" = "17fcf515f79135d7"
+"320x240->1280x720" = "194985d70ae5ca86"
+"320x240->640x480" = "2a76f43ad8c863d5"
+"480x272->1024x768" = "6bc6e37321fc3dd0"
+"480x272->640x480" = "cc8c4f335f68e1ba"
 
 [golden."crt-perfect-v2.glsl"]
 "160x144->1024x768" = "716692d3ac007c25"
@@ -1043,6 +1120,18 @@ sampler = "linear"
 "320x240->640x480" = "86c5ae12c92953d4"
 "480x272->1024x768" = "fdeb8a2a402b506f"
 "480x272->640x480" = "81ce998f71071b5a"
+
+[golden."lcd-perfect-v8.glsl"]
+"160x144->1024x768" = "a5670a7546a5e5b8"
+"240x160->1024x768" = "5e47259158eb968b"
+"256x192->1024x768" = "31a9ff6e4236960f"
+"256x192->640x480" = "38374854e7770ec1"
+"256x224->1024x768" = "ddb8ad95823e1fcd"
+"320x240->1024x768" = "c34beaccdf3fdf5b"
+"320x240->1280x720" = "a97e7e8ddd32ecc6"
+"320x240->640x480" = "d2654a62364014fc"
+"480x272->1024x768" = "9b0c7f4a8c50e41a"
+"480x272->640x480" = "8be3a9ecc6fcaf29"
 
 [golden."lcd-perfect.glsl"]
 "160x144->1024x768" = "7320fd88c5ca9205"

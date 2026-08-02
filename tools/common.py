@@ -115,17 +115,21 @@ def sampler_is_linear(name):
     return SHADERS_DECLARED.get(name, {}).get("sampler") == "linear"
 
 
-def colour_param(name):
-    """The parameter drawing this shader's colour pattern, or None.
+def crawl_params(name):
+    """The parameter sets crawl measures this shader at, or [].
 
-    Declared per family in baseline.toml. Returns None when the family has no
-    colour pattern, and also when this particular version predates the one it
-    declares - the archive reaches back to versions with no such control, and a
-    crawl measurement that silently passed an unknown parameter would be
-    measuring the shipped default while claiming to measure the maximum.
+    Declared per family in baseline.toml. Anything the shader does not declare
+    is dropped rather than passed: the archive reaches back to versions with no
+    such control, and silently passing an unknown parameter would measure the
+    shipped default while claiming to measure the sweep.
     """
-    p = SETTINGS.get("colour", {}).get(family(name))
-    return p if p and p in parameters(name) else None
+    have = parameters(name)
+    out = []
+    for entry in SETTINGS.get("crawl_at", {}).get(family(name), []):
+        kept = {k: v for k, v in entry.items() if k in have}
+        if kept and kept not in out:
+            out.append(kept)
+    return out
 
 
 def by_role(*want):

@@ -183,18 +183,28 @@ even a plain `clamp()` from a gain above 1 have each done it. A soft shoulder
 does not rescue it — measured worse than the hard clamp. See
 `docs/crt-perfect.md`.
 
-**And nothing spatially varying either, which is the same rule and was missed.**
-A multiply is linear, so `lcd-perfect`'s RGB stripes looked legal and shipped as
-a plain multiply after the blend. They are not: the blend has already collapsed
+**The clamp is the one that keeps being missed.** `lcd-perfect` and
+`crt-perfect` both multiplied brightness into the blended colour *and* the
+pattern and then clamped the product, which is a non-linearity after the blend
+and beats exactly as this rule says. It is invisible at brightness 1.0, worse
+with every step above it, and **absent at an integer scale at any brightness** —
+that last one being the signature to look for, since at an integer scale every
+output pixel has full coverage and there is nothing to beat against. The fix is
+to apply brightness to the taps and clamp it there, where a clamp is per source
+pixel and cannot vary with coverage. See `docs/lcd-perfect.md`.
+
+**The invariant, stated once:** nothing may exceed 1 by the time the blend is
+done. That needs the content clamped before the blend AND every pattern
+multiplied in afterwards peak-normalised to 1. `lcd-perfect`'s RGB stripe was the
+one pattern in the repo that was not, peaking near 2.
+
+**And nothing spatially varying either.** A multiply is linear, so a pattern
+applied after the blend looks legal. It is not: the blend has already collapsed
 the footprint to one number, so multiplying by a pattern that varies *inside*
 that footprint computes `average(content) × average(pattern)` where the answer is
-`average(content × pattern)`. The covariance it drops depends on where the cell
-boundary falls in the pixel, which repeats once per denominator of the scale — 15
-cells at 1024/240 — and so appears as a slow colour band that walks whenever the
-picture scrolls. Invisible in a still frame, and the reason `measure.py` now has
-`crawl()`. A pattern that varies within a pixel belongs *inside* the blend,
-weighted by its own aperture, the way the mesh already is. See
-`docs/lcd-perfect.md`.
+`average(content × pattern)`. This is a real but much smaller term than the
+clamp - it is what `lcd-perfect-v7` was written to fix, at +40% ops, and was
+rejected. Recorded so the next person does not re-derive it.
 
 ## Shader header and comments
 

@@ -100,8 +100,15 @@ def run(names, ctx, progs, report, cases=None):
 
     # Disabling a feature must give back the shader without it. v10 is
     # bit-identical; the earlier ones differ by rounding.
+    #
+    # AT NEUTRAL BRIGHTNESS, and that qualifier is load-bearing from v12 on.
+    # v12 applies brightness to the taps before the blend rather than to the
+    # blended product, so above 1.0 it deliberately differs from every earlier
+    # version everywhere, curvature or not - that difference is the fix for the
+    # scrolling rainbow, not a curvature fault. At 1.0 the two paths are the
+    # same arithmetic and the comparison still says what it is meant to say.
     src = c.border_grid(320, 240)
-    base = c.defaults(FLAT)
+    base = dict(c.defaults(FLAT), cp_brightness=1.0)
     a = c.render(ctx, progs, FLAT, src, 512, 384, params=base)
     for name in CURVED:
         p = {k: v for k, v in c.defaults(name).items() if k in base}

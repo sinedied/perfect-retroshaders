@@ -292,3 +292,57 @@ did — which is the thing being simulated. Peak normalisation is about where th
 *pattern* sits, not about how the user is told to brighten. `lp_brightness` and
 `cp_brightness` are legitimate controls; the headers state what they cost and stop
 there.
+
+## v12: brightness before the blend
+
+Reported from a device: at `cp_brightness` above 1.0, SNES content aspect-scaled
+to 1024x768 shows a pattern — **without scrolling**, so this one is static and
+`moire` sees it rather than `crawl`. At brightness 1.0 it is absent, and
+`res-independent-scanlines` does the same thing when its amplitude is raised.
+
+Same cause as `lcd-perfect` v8, written up in `docs/lcd-perfect.md`: brightness
+multiplied the blended colour *and* the scanlines and mask, and the product was
+clamped. A clamp after the blend is a non-linearity after the blend, which at a
+non-integer scale beats against the pixel grid — the design rule in `AGENTS.md`
+doing exactly what it says. 224 into 768 is 3.43, so the vertical axis is where
+it lands, which is why the scanlines carry it.
+
+The fix is to apply brightness to the four taps and clamp it there, so the clamp
+is per source pixel and cannot vary with coverage. crt's mask is already
+peak-normalised, so unlike lcd it needed no second change.
+
+Measured, 256x224 → 1024x768, static moire:
+
+| `cp_brightness` | v10 | v12 |
+|---|---|---|
+| 1.00 | 0.070 | 0.070 |
+| 1.25 (shipped default) | 0.434 | **0.070** |
+| 1.75 | 0.950 | **0.070** |
+| 2.00 | 1.347 | **0.070** |
+
+Flat at every brightness. Cost: 610 → 640 ops, +4.9%.
+
+**This retires a recorded exception.** `crt-perfect`'s `moire_allow` of 0.434 at
+256x224 → 1024x768 was this defect at the shipped default brightness, and it
+reads 0.070 under the fix. The entry survives only because `contracts.py`
+requires the release and the current version to be measured alike and the
+release still has the bug; it should be deleted when v12 is promoted.
+
+**It also beats the workaround.** Raising `cp_min_pitch` does remove the pattern,
+but it gives up the lock to the source grid — the pattern stops following the
+cells, which is the thing this family exists to do. The fix keeps the lock.
+
+Note that the `moire` metric reads the min-pitch workaround as *worse* rather
+than better, which contradicts the eye that judged it. The likely reason is the
+documented band trap in `docs/measurement.md`: the band is derived from the
+pattern frequency, so a coarser pattern narrows it and the pattern's own energy
+starts to leak in. Not chased further, because the fix removes the reason to use
+the workaround at all.
+
+### The property that had to move with it
+
+`tests/crt_perfect.py` asserts that curvature switched off gives back the flat
+shader exactly. From v12 that holds only at **neutral brightness**: above 1.0 v12
+deliberately differs from every earlier version everywhere, curvature or not,
+because the brightness path changed. The comparison now pins brightness to 1.0,
+where the two are the same arithmetic and the claim still means what it meant.

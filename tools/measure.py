@@ -190,21 +190,28 @@ def moire(ctx, progs, name, case, source=None, **override):
 # crawl
 #
 # Every other metric in this file takes ONE frame and converts it to luminance.
-# Both of those throw away exactly what a scrolling colour artifact is made of,
-# which is how one shipped: lcd-perfect's subpixel stripes measured clean on
-# every static luminance metric here while painting a visible colour band that
-# walked across the screen whenever the game scrolled.
+# Both of those throw away exactly what a scrolling artifact is made of, which is
+# how one shipped: at a raised brightness lcd-perfect paints a rainbow band that
+# walks across the screen whenever the game scrolls, and every static luminance
+# metric here called it clean.
 #
-# What goes wrong is that the shader computes
+# WHAT GOES WRONG IS THE CLAMP, and it is the one design rule in AGENTS.md doing
+# exactly what that rule says it will. Brightness multiplies the blended colour
+# and the pattern together, and the product is clipped at the end. A clamp is a
+# non-linearity applied after the blend, so at a non-integer scale - where the
+# count of partial-coverage pixels varies block to block - it shifts those pixels
+# by an amount that depends on their coverage, and that beats against the pixel
+# grid.
 #
-#     average(content) x average(pattern)
+# Four things follow, and all four were confirmed on a device before this metric
+# was trusted:
 #
-# where the answer it wants is average(content x pattern). The two differ by a
-# covariance term whose size depends on where the cell boundary falls inside an
-# output pixel. That phase comes round once per denominator of the scale - 15
-# cells at 1024/240, 160 at 853/160 - so the error is not fine noise, it is a
-# very slow band. Held still it reads as texture; scroll the content and each
-# cell holds something different, so the band changes and walks.
+#   - it vanishes at brightness 1.0, where nothing clips
+#   - it grows with brightness, monotonically
+#   - it VANISHES AT AN INTEGER SCALE at any brightness, because every output
+#     pixel then has full coverage and there is nothing to beat against
+#   - a grid modulated along one axis beats when the content scrolls along THAT
+#     axis, so a horizontal-only test cannot see a scanline at all
 #
 # The measurement: scrolling one source pixel moves the picture by exactly
 # `scale` output pixels and changes nothing else, so shift each frame back by
@@ -232,23 +239,30 @@ def moire(ctx, progs, name, case, source=None, **override):
 CRAWL_STEPS = 8
 
 
-def _fourier_shift(img, dx):
-    """Shift an image horizontally by a fractional number of pixels, exactly.
+def _fourier_shift(img, dx, axis=1):
+    """Shift an image along one axis by a fractional number of pixels, exactly.
 
     Exact for a periodic signal, which is what a wrapped scroll produces. An
     interpolated shift would leave a residual of its own, and the residual IS
     the measurement - so the compensation has to be the one step that
     contributes nothing to it.
     """
-    n = img.shape[1]
-    f = np.fft.fft(img, axis=1)
+    n = img.shape[axis]
+    f = np.fft.fft(img, axis=axis)
     k = np.fft.fftfreq(n) * n
-    return np.real(np.fft.ifft(f * np.exp(-2j * np.pi * k * dx / n)[None, :],
-                               axis=1))
+    phase = np.exp(-2j * np.pi * k * dx / n)
+    phase = phase[:, None] if axis == 0 else phase[None, :]
+    return np.real(np.fft.ifft(f * phase, axis=axis))
 
 
 def crawl_source(w, h, seed=7):
-    """Blocks with hard vertical edges, which is what a scrolling game has.
+    """Blocks with hard edges, BRIGHT, which is what a scrolling game has.
+
+    Bright is not a detail. The artifact is the clamp, so it only exists where
+    the gain drives content past 1: on a 40-240 source the metric read 0.259 at
+    the settings a user was actually running and called them acceptable, while
+    the same settings on 150-255 read 0.524 and reproduced the device report
+    exactly.
 
     Not the checkerboard the other metrics use: at one pixel per square it is
     its own Nyquist limit, so scrolling it one pixel replaces it with its own
@@ -259,34 +273,42 @@ def crawl_source(w, h, seed=7):
     src = np.zeros((h, w, 3), np.uint8)
     for x0 in range(0, w, 8):
         for y0 in range(0, h, 8):
-            src[y0:y0 + 8, x0:x0 + 8] = rng.integers(40, 240, 3)
+            src[y0:y0 + 8, x0:x0 + 8] = rng.integers(150, 255, 3)
     return src
 
 
-def crawl_raw(ctx, progs, name, case, source=None, **override):
+def crawl_raw(ctx, progs, name, case, source=None, axis=1, **override):
     """Band-limited luma and chroma that the scroll changes, in levels.
+
+    `axis` is the scroll direction, 1 for horizontal and 0 for vertical, and
+    both have to be measured: a pattern modulated along one axis only beats when
+    the content moves along that same axis, so a horizontal-only test is blind
+    to a scanline by construction.
 
     Chroma is reported separately and is not a refinement: it is the larger of
     the two here, and it is the half that averaging the channels destroys.
     """
     sw, sh, ow, oh = case
     src = (source or crawl_source)(sw, sh)
+    step = (ow / sw) if axis == 1 else (oh / sh)
     frames = []
     for s in range(CRAWL_STEPS):
-        img = c.render(ctx, progs, name, np.roll(src, s, axis=1), ow, oh,
+        img = c.render(ctx, progs, name, np.roll(src, s, axis=axis), ow, oh,
                        **override).astype(np.float64)
-        frames.append(np.stack([_fourier_shift(img[..., ch], -s * ow / sw)
+        frames.append(np.stack([_fourier_shift(img[..., ch], -s * step, axis)
                                 for ch in range(3)], axis=-1))
     f = np.stack(frames)
     # The sampler clamps at the edges, so the wrap the shift assumes is not true
-    # there. Drop an eighth from each side rather than let that dominate.
-    f = f[:, :, ow // 8:ow - ow // 8, :]
+    # there. Drop an eighth from every side rather than let that dominate.
+    cy, cx = oh // 8, ow // 8
+    f = f[:, cy:oh - cy, cx:ow - cx, :]
     d = f - f.mean(axis=0, keepdims=True)
 
     fx = np.abs(np.fft.fftfreq(d.shape[2]))
-    fy = np.abs(np.fft.fftfreq(oh))
-    band = _band(d.shape[2], oh, sw, sh,
-                 pattern_freq(name, sw, sh, ow, oh), fx, fy)
+    fy = np.abs(np.fft.fftfreq(d.shape[1]))
+    # ow and oh, not the cropped size: the band is a property of the scale being
+    # rendered, and the crop only decides which samples it is estimated from.
+    band = _band(ow, oh, sw, sh, pattern_freq(name, sw, sh, ow, oh), fx, fy)
 
     def energy(plane):
         # forward normalisation, so a band sum is that band's variance
@@ -300,7 +322,7 @@ def crawl_raw(ctx, progs, name, case, source=None, **override):
 _CRAWL_FLOORS = {}
 
 
-def crawl_floor(ctx, progs, case, source=None):
+def crawl_floor(ctx, progs, case, source=None, axis=1):
     """What the plain scaler alone leaves at this scale.
 
     Content moving a non-integer number of output pixels cannot render
@@ -310,14 +332,14 @@ def crawl_floor(ctx, progs, case, source=None):
     The reference is the one baseline.toml declares, never a name written here:
     hardcoding it is how a reference silently stops moving when the family does.
     """
-    key = (case, (source or crawl_source).__name__)
+    key = (case, (source or crawl_source).__name__, axis)
     if key not in _CRAWL_FLOORS:
         _CRAWL_FLOORS[key] = crawl_raw(ctx, progs, c.SCALER_REFERENCE, case,
-                                       source)
+                                       source, axis)
     return _CRAWL_FLOORS[key]
 
 
-def crawl(ctx, progs, name, case, source=None, **override):
+def crawl(ctx, progs, name, case, source=None, axis=1, **override):
     """What the SHADER adds to the scroll, over what the scale makes unavoidable.
 
     IN QUADRATURE, like moire(), and for the same reason: measured by sweeping
@@ -332,12 +354,13 @@ def crawl(ctx, progs, name, case, source=None, **override):
     highest is where the stripe correction stops being small; between them the
     quadrature model holds to within 9%.
     """
-    raw = crawl_raw(ctx, progs, name, case, source, **override)
-    floor = crawl_floor(ctx, progs, case, source)
+    raw = crawl_raw(ctx, progs, name, case, source, axis, **override)
+    floor = crawl_floor(ctx, progs, case, source, axis)
     return tuple(float(np.sqrt(max(r * r - f * f, 0.0)))
                  for r, f in zip(raw, floor))
 
 
+# --------------------------------------------------------------------------
 # moire under curvature
 #
 # Measuring a curved render directly does not work, and the reason is worth
@@ -769,26 +792,35 @@ def run(names, report, ctx=None, progs=None, cases=None, verbose=False):
                      f"worst {worst:.3f} at {worst_at}")
 
     for name in names:
-        param = c.colour_param(name)
-        if param is None:
+        sets = c.crawl_params(name)
+        if not sets:
             continue
-        hi = c.parameters(name)[param][3]  # the top of its declared range
         worst, worst_at, worst_luma = 0.0, "", 0.0
         for case in c.CRAWL_CASES:
-            luma, chroma = crawl(ctx, progs, name, case, **{param: hi})
+            for params in sets:
+                # Both axes. A pattern modulated along one axis beats only when
+                # the content moves along that axis, so a horizontal-only test
+                # cannot see a scanline at all.
+                for axis, tag in ((1, "scroll x"), (0, "scroll y")):
+                    luma, chroma = crawl(ctx, progs, name, case, axis=axis,
+                                         **params)
+                    at = (f"{c.golden_key(case)} {tag} "
+                          + " ".join(f"{k}={v:g}" for k, v in params.items()))
+                    allowed = c.crawl_allowance(name, case)
+                    if allowed is not None:
+                        if chroma > worst and chroma > allowed + 0.05:
+                            worst, worst_at, worst_luma = (
+                                chroma, at + " (over its exception)", luma)
+                    elif chroma > worst:
+                        worst, worst_at, worst_luma = chroma, at, luma
+        for case in c.CRAWL_CASES:
             allowed = c.crawl_allowance(name, case)
             if allowed is not None:
-                report.note(f"{name} {c.golden_key(case)}: crawl {chroma:.3f} "
-                            f"chroma, recorded exception at {allowed:.3f}")
-                if chroma > allowed + 0.05:
-                    worst, worst_at, worst_luma = (
-                        chroma, c.golden_key(case) + " (over its exception)",
-                        luma)
-            elif chroma > worst:
-                worst, worst_at, worst_luma = chroma, c.golden_key(case), luma
+                report.note(f"{name} {c.golden_key(case)}: crawl exception "
+                            f"recorded at {allowed:.3f}")
         report.check(worst <= c.CRAWL, f"{name} crawl",
-                     f"worst {worst:.3f} chroma ({worst_luma:.3f} luma) at "
-                     f"{worst_at}, {param}={hi:g}")
+                     f"worst {worst:.3f} chroma ({worst_luma:.3f} luma) "
+                     f"at {worst_at}" if worst_at else "clean")
 
     if verbose:
         for name in names:

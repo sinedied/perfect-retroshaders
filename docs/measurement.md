@@ -399,3 +399,39 @@ features genuinely change width as they scroll. That is the shimmer this repo's
 scaler exists to remove, not the artifact under test. Wanting the number to rank
 lcd1x last is what kept three of the four wrong metrics alive longer than they
 deserved.
+
+## Crawl, part two: the metric was right and its test source was wrong
+
+The crawl metric found a real defect and then said the shipped shaders were
+acceptable at the settings a user was actually running. They were not. Three
+things were wrong with how it was applied, and none with the idea:
+
+**The test source was too dark to clip.** The artifact turned out to be the
+output clamp, which does not exist until the gain drives content past 1. On a
+40–240 source the metric read 0.259 at the owner's settings and called them fine;
+the same settings on a 150–255 source read 0.524 and reproduced the device report
+exactly, including its brightness dependence and its absence at integer scales.
+A metric whose test signal cannot reach the regime under test measures nothing
+about it.
+
+**It only scrolled horizontally.** A pattern modulated along one axis beats only
+when the content moves along *that* axis — reported from the device before it was
+measured here, and obvious in hindsight. A horizontal-only test cannot see a
+scanline at all, which is exactly why `crt-perfect`'s version of the same bug was
+missed.
+
+**It ran at the shipped default.** The defect is a function of brightness, so it
+has to be swept with the control turned up, the same reasoning that gives
+`perf.py` its `MAXED` table. Measuring at the default called both shaders clean.
+
+A fourth, subtler point: the sweep now measures **two regimes** rather than one
+maximum, because two different defects live here and one parameter set cannot see
+both. At the shipped pattern depth with brightness raised, the clamp dominates.
+At full pattern depth with brightness neutral, what is left is the aperture
+covariance error, whose fix was measured and rejected on cost. A single "turn
+everything up" set reads the sum and cannot say which moved.
+
+**And clipping suppresses the score.** Clipped pixels cannot vary, so a shader
+that clips harder scores *better* on any frame-difference metric. That is why the
+gate now measures at a fixed brightness rather than searching for a worst case:
+the worst case by this metric is not the worst case by eye.
