@@ -69,6 +69,11 @@ Within noise everywhere, better at the hardest scale. The three exceptions over
 the 0.40 limit are `dp_gamma`, which ships at 1.20 and is a `pow` after the
 blend — the same cause and the same cases as the released line's.
 
+Whole-shader difference from `dmg-perfect-v10c` at the shipped defaults, over
+the case matrix: **max 73/255, RMS 1.05, and 0.8% of pixels differ by more than
+4.** It is a sub-pixel shift of the dot grid at awkward scales — worst at
+480x272 → 1024x768, a 2.13x — not a different picture.
+
 Per-effect cost, each measured on its own over the plain scaler:
 
 | stage | ops | tex | % of the shader with everything on |
@@ -76,11 +81,31 @@ Per-effect cost, each measured on its own over the plain scaler:
 | one LINEAR tap | 140 | 1 | 51% |
 | dot aperture over the substrate | 21 | 0 | 8% |
 | cast shadow | 106 | +1 | 39% |
-| gamma | 6 | 0 | 2% |
+| brightness · gamma | 6 | 0 | 2% |
 | white balance | 0 | 0 | 0% |
 
 The shadow is the only expensive effect and the only thing still needing a
 second tap. It is off by default, so the shipped configuration is 168 ops.
+
+## Brightness, in v2
+
+`dp_brightness` now rides the gamma exponent, as it does in the other three
+turbo shaders, so the control means the same thing everywhere:
+
+```glsl
+if (abs(dp_gamma - 1.0) > 0.001 || abs(dp_brightness - 1.0) > 0.001)
+    col = pow(max(col, 1e-8), vec3(dp_gamma / max(dp_brightness, 1e-3)));
+```
+
+**At the shipped defaults `dmg-turbo-v2` is byte-identical to v1** on every case
+in the matrix — `dp_brightness` ships at 1.00, so nothing moved. The difference
+only appears when the control is used, and there it lifts the midtones instead
+of shallowing the dot pattern.
+
+`dp_gamma` ships at 1.20, so this shader already had a `pow` after the blend and
+already carried the exceptions for it. Raising brightness makes that exponent
+further from 1 and the beat proportionally larger; the numbers and the two-pass
+route that avoids it are in `docs/optimized.md`.
 
 ## The measurement trap this hit
 

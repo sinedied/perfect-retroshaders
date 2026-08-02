@@ -1,7 +1,8 @@
 # pixel-turbo
 
 The substrate. Everything else in the turbo line is this scaler with a pattern
-multiplied in afterwards.
+multiplied in afterwards, and `colour-mini` is this shader with the scaler taken
+out.
 
 ## The one-tap identity
 
@@ -32,6 +33,29 @@ aperture weighting and still use one tap.
 Edge behaviour is unchanged. At `w = 0` the sample lands on texel `B`; at
 `w = 1` on `B−1`; outside the image `CLAMP_TO_EDGE` gives the same result the
 four-tap form did, because both ask for texels the sampler clamps identically.
+
+## It is `sharp-shimmerless`
+
+Found by accident, when two device pipelines that differed only in their first
+pass dumped byte-identical images. Rendered through the harness at every case in
+the matrix:
+
+| | worst difference over the matrix |
+|---|---:|
+| `pixel-turbo` vs `sharp-shimmerless` | **1/255**, and 0/255 on 9 of the 10 cases |
+| `pixel-turbo` vs `pixel-perfect` | 1/255 |
+
+The vendored `sharp-shimmerless` reaches the same place by a different route —
+it clamps the subtexel offset into a `region_range` derived from the scale
+rather than deriving a footprint weight — but the function is the same one-tap
+box filter. That is useful rather than a problem:
+
+- **The reference-stack rows transfer.** Anything measured as `shimmerless → X`
+  is also `pixel-turbo → X`, picture for picture.
+- **The grading is what `pixel-turbo` adds**, and it adds it for 4 ops: 53
+  against 49 at the shipped defaults, both 1 tap and 0 SFU.
+- It is independent corroboration of the identity above, from a shader nobody
+  here wrote.
 
 ## What it cost to verify
 
@@ -64,9 +88,9 @@ re-checked once there is a device render to diff.
 
 ## Grading
 
-Unchanged from `pixel-perfect`, deliberately: same folded affine, same guarded
-`pow`, same order (balance before saturation, so saturation 0 really is
-monochrome). Measured cost with each control on its own, over the plain scaler:
+Same folded affine as `pixel-perfect`, same order (balance before saturation, so
+saturation 0 really is monochrome). Measured cost with each control on its own,
+over the plain scaler:
 
 | control | ops | % of the shader with everything on |
 |---|---:|---:|
@@ -78,8 +102,26 @@ They overlap: the balance and the affine live in the same guarded block, so the
 whole grade is 29 ops, not 44. At the shipped defaults the guard is false and
 the grade folds away entirely — 53 ops, 0 SFU.
 
-`pixel-turbo` keeps the gain-and-clamp form of brightness rather than the
-pattern-shallowing the other three use, because it has no pattern to shallow.
-Its moiré at the shipped defaults is 0.044 against a limit of 0.40; with
-everything on, gamma at 1.40 takes it to 5.784 — and `pixel-perfect` reads 5.788
-on the same setting, so this is the released line's behaviour, not a regression.
+**Brightness changed in v2**, from a gain-and-clamp to a midtone push folded
+into the gamma exponent, so the control means the same thing in all four turbo
+shaders:
+
+```glsl
+if (abs(pp_gamma - 1.0) > 0.001 || abs(pp_brightness - 1.0) > 0.001)
+    col = pow(max(col, 1e-8), vec3(pp_gamma / max(pp_brightness, 1e-3)));
+```
+
+The guard is on the two parameters separately, not on their ratio. `max()` of
+two literals does not constant-fold in `spirv-opt`, so a guard reading
+`abs(gamma / max(brightness, 1e-3) - 1.0) > 0.001` kept the `pow` in the shader
+at settings where it does nothing — 68 ops at the defaults instead of 53.
+
+`pp_brightness` ships at 1.00, so the moiré exception in `docs/optimized.md`
+does not apply to `pixel-turbo` at its defaults: 0.044 against a limit of 0.40.
+With everything on, gamma at 1.40 takes it to 5.784 — and `pixel-perfect` reads
+5.788 on the same setting, so that is the released line's behaviour, not a
+regression.
+
+If you raise brightness or gamma and the scale is not an integer, the clean
+place to do it is `colour-mini` at source resolution in front of this shader.
+See `docs/optimized/colour-mini.md`.

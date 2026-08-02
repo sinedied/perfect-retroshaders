@@ -165,6 +165,43 @@ is used — which is the check that the error model is right, not just convenien
 
 **Rule: never quote a number from a sampled reference without showing it converged.**
 
+### The checkerboard is a worst case, and it is not a picture
+
+`moire()` renders a 1px checkerboard because that is maximum energy at the source
+pixel grid — the hardest input that exists for a scaler. That makes it the right
+gate and the wrong estimate of what a player sees.
+
+Measured while deciding whether to accept a `pow()` after the blend at the
+`*-turbo` line's default brightness of 1.25, isolating the artifact exactly
+(curve-after-blend minus curve-before-blend) at 1024x768:
+
+| source | figure |
+|---|---:|
+| the metric's 1px checkerboard, band-limited | 4.169 |
+| 18 real screenshots, RMS in levels | **1.50** |
+| the same, 99th percentile | 7 |
+| the same, worst pixel | 21 |
+| PICO-8 at 128 → 768, an integer scale | **0.000** |
+
+Two things follow, and both generalise beyond that one decision:
+
+- **A band-limited figure and a level count are different units.** They order
+  shaders the same way and do not convert. Quote the metric for the gate and a
+  level count for the decision.
+- **Real content is not flat at the pixel grid.** The artifact is confined to
+  transition pixels, so a metric that fills the frame with transitions reports
+  something no game reaches. That is not a reason to soften the gate — it is a
+  reason to measure real frames before *accepting* a gate failure.
+
+The integer-scale zero is the useful control: it is the mechanism confirming
+itself, since every output pixel then has full coverage and nothing can beat.
+Any number that does not vanish there is measuring something else.
+
+**Raw `beat()` on a real screenshot is useless** — the metric band is full of
+legitimate picture, reading 10 to 78 before a shader touches it. The artifact
+has to be isolated by differencing against the correct construction, never read
+off the shaded frame.
+
 ## Assumptions this session got wrong
 
 Do not re-derive these.
