@@ -292,6 +292,12 @@ same:
 **One point of frame time buys the exception back.** The turbo line takes it so
 that one shader is enough; the mini line exists so it does not have to be taken.
 
+To look at it rather than read it, render any shader twice — once at the shipped
+brightness, once with the same curve applied to the source and brightness at
+1.00 — and difference the two with a gain of 8. The artifact is a one-pixel
+outline on hard edges and nothing at all in flat areas, which is why 21 levels
+at the worst pixel reads as 1.5 RMS over the frame.
+
 ## Rejected, with the measurement
 
 | Idea | Verdict |
