@@ -15,6 +15,7 @@ may rank it the other way round, and nothing here can say.
     python tools/perf.py crt-perfect         one family
     python tools/perf.py --static            skip the timing, SPIR-V only
     python tools/perf.py --max               each shader at defaults and all on
+    python tools/perf.py --cost lcd-perfect  what each effect costs, on its own
     python tools/perf.py --sweep cp_curvature=0,0.1 crt-perfect-v10.glsl
 """
 
@@ -281,6 +282,122 @@ MAXED = {
     "pp_tint": 0.5,
 }
 
+# Modes rather than intensities. A slot mask is not "more mask", so it does not
+# belong in MAXED or in the README's "everything on" row - but it is a whole
+# branch, and a breakdown that never prices it is not a breakdown. --cost reads
+# these on top of MAXED and nothing else does.
+COST_MODES = {"cp_mask_type": 2.0}
+
+
+# --------------------------------------------------------------------------
+# per-effect cost
+#
+# What a feature costs is the difference between everything being on and
+# everything being on but that one thing, which is not the same as what it costs
+# on its own: features share setup, and the sum of the marginals is reported
+# next to the true total so the gap is visible rather than implied.
+
+def _off_value(name, param):
+    """The setting at which a parameter does nothing.
+
+    baseline.toml's `neutral` block is the authority - it is the same block the
+    scaler anchor uses, and tests/contracts.py proves it covers everything that
+    acts. A parameter it omits does not act at all, so its own default is
+    already neutral.
+    """
+    neutral = c.declared(name).get("neutral") or {}
+    if param in neutral:
+        return float(neutral[param])
+    return c.parameters(name)[param][1]
+
+
+def cost_cases(name):
+    """[(label, name, params)]: the plain scaler, everything on, and each
+    feature both alone on top of neutral and subtracted from everything on.
+
+    Both, because either on its own lies. Alone misses what a feature adds to
+    machinery something else has already paid for; marginal misses everything it
+    shares - crt's scanlines read 2 ops marginally, because with a slot mask on,
+    the pitch and lock terms they need are already there.
+    """
+    params = c.parameters(name)
+    on = {k: v[1] for k, v in params.items()}
+    on.update({k: v for k, v in MAXED.items() if k in params})
+    on.update({k: v for k, v in COST_MODES.items() if k in params})
+    neutral = {k: _off_value(name, k) for k in params}
+
+    cases = [("neutral", name, neutral), ("all on", name, on)]
+    for p in params:
+        if abs(on[p] - neutral[p]) <= 1e-9:
+            continue
+        cases.append((f"+{p}", name, dict(neutral, **{p: on[p]})))
+        cases.append((f"-{p}", name, dict(on, **{p: neutral[p]})))
+    return cases
+
+
+def cost_report(name, timed):
+    """One shader's breakdown. `timed` maps a case label to milliseconds."""
+    cases = cost_cases(name)
+    counts = {label: static(name, at_defaults=True, optimise=True, values=p)
+              for label, _n, p in cases}
+    full, floor = counts["all on"], counts["neutral"]
+    span = max(full['ops'] - floor['ops'], 1)
+    feats = [lab[1:] for lab, _n, _p in cases if lab.startswith("+")]
+
+    def ms(label):
+        return timed.get(label, 0.0)
+
+    print(f"\n{name}")
+    print(f"  plain scaler {floor['ops']:>4d} ops, {floor['tex']} tex, "
+          f"{floor['slots']} SFU" + (f", {ms('neutral'):.4f} ms" if timed else "")
+          + f"   |   everything on {full['ops']:>4d} ops, {full['tex']} tex, "
+          f"{full['slots']} SFU" + (f", {ms('all on'):.4f} ms" if timed else ""))
+    head = (f"  {'feature':<16s} {'alone':>6s} {'%eff':>6s} {'marg':>6s} "
+            f"{'%eff':>6s} {'SFU':>4s} {'tex':>4s}")
+    if timed:
+        head += f" {'ms':>8s} {'%all':>6s}"
+    print(head)
+
+    alone_sum = marg_sum = 0
+    for p in feats:
+        alone = counts[f"+{p}"]['ops'] - floor['ops']
+        marg = full['ops'] - counts[f"-{p}"]['ops']
+        alone_sum += alone
+        marg_sum += marg
+        line = (f"  {p:<16s} {alone:6d} {alone / span * 100:5.1f}% "
+                f"{marg:6d} {marg / span * 100:5.1f}% "
+                f"{counts[f'+{p}']['slots'] - floor['slots']:4d} "
+                f"{counts[f'+{p}']['tex'] - floor['tex']:4d}")
+        if timed:
+            d = ms(f"+{p}") - ms("neutral")
+            line += f" {d:8.4f} {d / max(ms('all on'), 1e-9) * 100:5.1f}%"
+        print(line)
+
+    # Neither column has to add up to the span, and that is the useful part:
+    # alone over it is shared setup paid twice, marginal under it is shared
+    # setup nobody is charged for.
+    print(f"  {'sum':<16s} {alone_sum:6d} {alone_sum / span * 100:5.1f}% "
+          f"{marg_sum:6d} {marg_sum / span * 100:5.1f}%   "
+          f"(effects span {span} ops over the plain scaler)")
+
+
+def run_cost(names, static_only):
+    cases = []
+    for name in names:
+        cases += [(f"{name}::{lab}", n, p) for lab, n, p in cost_cases(name)]
+    timed = {}
+    if not static_only:
+        med, _iqr = time_cases(cases)
+        timed = {lab: m for (lab, _n, _p), m in zip(cases, med)}
+    for name in names:
+        cost_report(name, {k.split("::", 1)[1]: v for k, v in timed.items()
+                           if k.startswith(name + "::")})
+    print("\n  alone: that feature on top of the plain scaler. marginal:"
+          "\n  everything on, minus that one. %eff is against what the effects"
+          "\n  add over the plain scaler; ms is the alone figure, against the"
+          "\n  whole shader with everything on.")
+    return 0
+
 
 def build_cases(names, sweep, maxed=False):
     """One row per shader, plus one per swept value where the shader has it."""
@@ -314,6 +431,9 @@ def main():
             sweep = (param, [float(v) for v in vals.split(",")])
 
     names = c.resolve(args)
+    if "--cost" in sys.argv:
+        return run_cost(names, "--static" in sys.argv)
+
     for r in REFERENCES:
         if r not in names:
             names = [r] + names if r == REFERENCES[0] else names + [r]

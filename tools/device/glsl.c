@@ -142,6 +142,75 @@ static int version_is_replaced(const char *version_line, size_t len)
     return 0;
 }
 
+#if !defined(BENCH_GLES)
+// Desktop only, and it has to be: the device compiles ESSL 1.00 as written, so
+// rewriting there would measure a shader nobody runs. macOS offers no context
+// old enough to take one, and tools/common.py carries the same rewrite for the
+// same reason. Shaders with the COMPAT_* macro block already compile at either
+// version and are left alone.
+
+static int is_word_char(char ch)
+{
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
+        || (ch >= '0' && ch <= '9') || ch == '_';
+}
+
+static char *replace_word(const char *src, const char *from, const char *to)
+{
+    size_t fl = strlen(from), tl = strlen(to), sl = strlen(src);
+    size_t cap = sl + (sl / fl) * (tl > fl ? tl - fl : 0) + 64;
+    char *out = malloc(cap);
+    if (!out)
+        return NULL;
+    size_t w = 0;
+    for (size_t i = 0; i < sl; ) {
+        if (strncmp(src + i, from, fl) == 0
+            && (i == 0 || !is_word_char(src[i - 1]))
+            && !is_word_char(src[i + fl])) {
+            memcpy(out + w, to, tl);
+            w += tl;
+            i += fl;
+        } else {
+            out[w++] = src[i++];
+        }
+    }
+    out[w] = '\0';
+    return out;
+}
+
+// NULL means "nothing to do", not failure: the caller keeps the original body.
+static char *rewrite_essl1(const char *body, int is_vertex)
+{
+    if (strstr(body, "COMPAT_VARYING"))
+        return NULL;
+    char *a = replace_word(body, "attribute", "in");
+    if (!a)
+        return NULL;
+    char *b = replace_word(a, "varying", is_vertex ? "out" : "in");
+    free(a);
+    if (!b)
+        return NULL;
+    char *cc = replace_word(b, "texture2D", "texture");
+    free(b);
+    if (!cc || is_vertex || !strstr(cc, "gl_FragColor"))
+        return cc;
+    // gl_ is a reserved prefix, so this one cannot be done with a #define.
+    char *d = replace_word(cc, "gl_FragColor", "FragColor");
+    free(cc);
+    if (!d)
+        return NULL;
+    size_t n = strlen(d) + 32;
+    char *e = malloc(n);
+    if (!e) {
+        free(d);
+        return NULL;
+    }
+    snprintf(e, n, "out vec4 FragColor;\n%s", d);
+    free(d);
+    return e;
+}
+#endif
+
 // Assembles one stage. `is_vertex` picks which define and whether the precision
 // block goes in.
 static char *stage_source(const char *body, int is_vertex)
@@ -173,15 +242,24 @@ static char *stage_source(const char *body, int is_vertex)
         rest = body;
     }
 
+    char *rewritten = NULL;
+#if !defined(BENCH_GLES)
+    rewritten = rewrite_essl1(rest, is_vertex);
+    if (rewritten)
+        rest = rewritten;
+#endif
+
     size_t total = strlen(header) + strlen(define) + strlen(precision)
                  + strlen(rest) + 1;
     char *out = malloc(total);
-    if (!out)
+    if (!out) {
+        free(rewritten);
         return NULL;
+    }
     snprintf(out, total, "%s%s%s%s", header, define, precision, rest);
+    free(rewritten);
     return out;
 }
-
 static GLuint compile_stage(const char *src, GLenum type, const char *name)
 {
     GLuint shader = glCreateShader(type);

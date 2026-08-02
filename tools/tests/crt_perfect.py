@@ -11,7 +11,7 @@ import numpy as np
 import common as c
 
 FLAT = "crt-perfect-v5b.glsl"
-CURRENT = c.current("crt-perfect")
+FAMILY = "crt-perfect"
 CURVED = ["crt-perfect-v6.glsl", "crt-perfect-v8.glsl",
           "crt-perfect-v9.glsl", "crt-perfect-v10.glsl"]
 # Normalised its warp by the corner value, which put the entire image border
@@ -63,16 +63,29 @@ def scanline_cycles(ctx, progs, name, sw, sh, ow, oh, **over):
     return per_line[band][np.argmax(mag[band])]
 
 
-def run(names, ctx, progs, report, cases=None):
-    for name in CURVED:
-        r = border_retention(ctx, progs, name)
-        report.check(r > 0.5, f"{name} keeps the source border under curvature",
-                     f"{r:.2f} of it survives")
+def run(names, ctx, progs, report, cases=None, family=FAMILY):
+    CURRENT = c.current(family)
+    # Everything below that names an archived version is a claim about the
+    # crt-perfect line and its controls, so it runs once for that family. The
+    # scanline lock is a claim about whatever is current, so it runs for both -
+    # with the curved half only where there is a curvature control to turn on.
+    # A missing uniform is silently dropped by draw(), so a curvature check on a
+    # shader without one would compare a render against itself and pass.
+    archive = family == FAMILY
+    curvature = "cp_curvature" in c.parameters(CURRENT)
 
-    # v7's defect, kept executable. If this ever passes, the check has rotted.
-    r = border_retention(ctx, progs, CROPS_THE_BORDER)
-    report.check(r < 0.2, f"control: {CROPS_THE_BORDER} still crops the border",
-                 f"{r:.2f} survives, want < 0.2")
+    if archive:
+        for name in CURVED:
+            r = border_retention(ctx, progs, name)
+            report.check(r > 0.5,
+                         f"{name} keeps the source border under curvature",
+                         f"{r:.2f} of it survives")
+
+        # v7's defect, kept executable. If this passes, the check has rotted.
+        r = border_retention(ctx, progs, CROPS_THE_BORDER)
+        report.check(r < 0.2,
+                     f"control: {CROPS_THE_BORDER} still crops the border",
+                     f"{r:.2f} survives, want < 0.2")
 
     # The pattern stays locked to the source when the image is curved. Measured
     # down the centre of the frame, so what it reads is the tube-space rate
@@ -82,6 +95,11 @@ def run(names, ctx, progs, report, cases=None):
     for sw, sh, ow, oh in ((320, 240, 1024, 768), (256, 224, 1024, 768)):
         flat_rate = scanline_cycles(ctx, progs, CURRENT, sw, sh, ow, oh,
                                     cp_curvature=0.0)
+        if not curvature:
+            report.check(abs(flat_rate - 1.0) < 0.05,
+                         f"{CURRENT} keeps one scanline per source line "
+                         f"at {sw}x{sh}->{ow}x{oh}", f"flat {flat_rate:.3f}")
+            continue
         curved = scanline_cycles(ctx, progs, CURRENT, sw, sh, ow, oh,
                                  cp_curvature=K)
         want = flat_rate / (1.0 + K)
@@ -89,6 +107,9 @@ def run(names, ctx, progs, report, cases=None):
                      f"{CURRENT} keeps one scanline per source line "
                      f"at {sw}x{sh}->{ow}x{oh}",
                      f"flat {flat_rate:.3f}, curved {curved:.3f}, want {want:.3f}")
+
+    if not archive:
+        return report
 
     for name in BREAKS_THE_LOCK:
         curved = scanline_cycles(ctx, progs, name, 320, 240, 1024, 768,

@@ -17,6 +17,9 @@ REPO = os.path.dirname(TOOLS)
 SHADERS = os.path.join(REPO, "shaders")
 VENDOR = os.path.join(TOOLS, "vendor")
 ITERATIONS = os.path.join(TOOLS, "iterations")
+# The performance-first *-turbo line, iterated separately from the released set.
+OPTIMIZED = os.path.join(TOOLS, "optimized")
+FOLDERS = (SHADERS, VENDOR, ITERATIONS, OPTIMIZED)
 BASELINE = os.path.join(TOOLS, "baseline.toml")
 PREVIEW = os.path.join(TOOLS, "preview")
 
@@ -27,20 +30,21 @@ RELEASED, CURRENT, ARCHIVE, VENDOR_ROLE = "released", "current", "archive", "ven
 # paths
 
 def shader_path(name):
-    """Resolve a bare filename against shaders/, then vendor/, then iterations/.
+    """Resolve a bare filename against shaders/, vendor/, iterations/, optimized/.
 
-    A shader can be moved between those three without rewriting any caller.
+    A shader can be moved between those without rewriting any caller.
     """
-    for folder in (SHADERS, VENDOR, ITERATIONS):
+    for folder in FOLDERS:
         path = os.path.join(folder, name)
         if os.path.isfile(path):
             return path
-    raise FileNotFoundError(f"{name} is in none of shaders/, vendor/, iterations/")
+    raise FileNotFoundError(
+        f"{name} is in none of " + ", ".join(os.path.basename(f) for f in FOLDERS))
 
 
 def files_on_disk():
     names = []
-    for folder in (SHADERS, VENDOR, ITERATIONS):
+    for folder in FOLDERS:
         if os.path.isdir(folder):
             names += sorted(f for f in os.listdir(folder) if f.endswith(".glsl"))
     return names

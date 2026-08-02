@@ -52,6 +52,14 @@ FAMILY_TESTS = {
     "lcd-perfect": "tests.lcd_perfect",
     "pixel-perfect": "tests.pixel_perfect",
     "dmg-perfect": "tests.dmg_perfect",
+    # The *-turbo line draws the same pictures, so it answers to the same
+    # claims. The modules take the family rather than naming a shader, and the
+    # negative controls stay the *-perfect archives - a control only has to be
+    # something the check can tell apart.
+    "crt-turbo": "tests.crt_perfect",
+    "lcd-turbo": "tests.lcd_perfect",
+    "pixel-turbo": "tests.pixel_perfect",
+    "dmg-turbo": "tests.dmg_perfect",
 }
 
 
@@ -140,8 +148,8 @@ def main():
         mod = FAMILY_TESTS.get(fam)
         if not mod or fam not in fams:
             continue
-        phase(fam, lambda mod=mod: importlib.import_module(mod).run(
-            gated, ctx, progs, report, cases))
+        phase(fam, lambda mod=mod, fam=fam: importlib.import_module(mod).run(
+            gated, ctx, progs, report, cases, fam))
 
     phase("measure", lambda: measure.run(gated, report, ctx, progs, cases))
 

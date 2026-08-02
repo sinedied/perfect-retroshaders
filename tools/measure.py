@@ -155,8 +155,14 @@ def source_for(name):
     than a lit pixel rather than darker. The palette source existed for this and
     was never wired up, so the DMG shaders were measured on the one input that
     cannot show their characteristic defect.
+
+    Keyed on the panel kind rather than the whole family name. `dmg-perfect` and
+    `dmg-turbo` draw the same panel and have the same blind spot, and an exact
+    match sent the second one back to the white checkerboard - where it scored
+    4.634 against the 0.485 the same picture reads on a real palette.
     """
-    return dmg_checkerboard if c.family(name) == "dmg-perfect" else c.checkerboard
+    return dmg_checkerboard if c.family(name).split("-")[0] == "dmg" \
+        else c.checkerboard
 
 
 def moire(ctx, progs, name, case, source=None, **override):

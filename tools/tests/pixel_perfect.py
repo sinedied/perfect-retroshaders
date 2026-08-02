@@ -10,7 +10,7 @@ import numpy as np
 
 import common as c
 
-CURRENT = c.current("pixel-perfect")
+FAMILY = "pixel-perfect"
 
 # The two halves of the grade, as they appear in the shader. Used to build the
 # negative control by swapping them back.
@@ -41,7 +41,8 @@ def _colour(w=64, h=48):
     return src
 
 
-def run(names, ctx, progs, report, cases=None):
+def run(names, ctx, progs, report, cases=None, family=FAMILY):
+    CURRENT = c.current(family)
     src = _colour()
     for param, neutral, moved in MOVED:
         a = c.render(ctx, progs, CURRENT, src, 256, 192, **{param: neutral})

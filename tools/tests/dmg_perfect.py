@@ -4,7 +4,7 @@ import numpy as np
 
 import common as c
 
-CURRENT = c.current("dmg-perfect")
+FAMILY = "dmg-perfect"
 
 
 def _palette(w=64, h=48):
@@ -16,7 +16,8 @@ def _palette(w=64, h=48):
     return src
 
 
-def run(names, ctx, progs, report, cases=None):
+def run(names, ctx, progs, report, cases=None, family=FAMILY):
+    CURRENT = c.current(family)
     # A cast shadow has a direction, and getting it backwards looks like a
     # lighting bug rather than an error. One driven cell on the substrate: the
     # darkening the shadow adds must sit below and right of it.

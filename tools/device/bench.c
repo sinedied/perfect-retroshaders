@@ -649,9 +649,14 @@ static int self_test(Bench *b, Case *cases, int n_cases, Case *floor_case)
     // 5. Direction. sharp-shimmerless takes one tap and no transcendental, so
     //    it cannot be the expensive one. Read per frame, which is the column
     //    the table publishes.
+    //
+    //    Matched exactly, not by substring. Substring matching took the LAST
+    //    label containing "shimmerless", which the moment the reference stacks
+    //    were declared was "shimmerless -> lcd1x -> adjust" - three passes, and
+    //    the check then failed for measuring something else entirely.
     Case *cheapest = NULL;
-    for (int i = 0; i < n_cases; i++)
-        if (strstr(cases[i].p.label, "shimmerless"))
+    for (int i = 0; i < n_cases && !cheapest; i++)
+        if (strcmp(cases[i].p.label, "sharp-shimmerless") == 0)
             cheapest = &cases[i];
     if (cheapest) {
         calibrate(b, cheapest);
@@ -755,10 +760,12 @@ int main(int argc, char **argv)
     b.budget_ms = 1000.0 / 60.0;
 
     char manifest[512], pipedir[512], vendordir[512], shaderdir[512];
+    char optimizeddir[512];
     snprintf(manifest, sizeof(manifest), "%s/tools/baseline.toml", root);
     snprintf(pipedir, sizeof(pipedir), "%s/tools/device/pipelines", root);
     snprintf(vendordir, sizeof(vendordir), "%s/tools/vendor", root);
     snprintf(shaderdir, sizeof(shaderdir), "%s/shaders", root);
+    snprintf(optimizeddir, sizeof(optimizeddir), "%s/tools/optimized", root);
 
     Declared declared[MAX_PIPELINES];
     int n_declared = load_manifest(manifest, declared, MAX_PIPELINES, &b);
@@ -844,7 +851,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    const char *dirs[3] = { shaderdir, vendordir, devicedir };
+    const char *dirs[4] = { shaderdir, vendordir, optimizeddir, devicedir };
     static Case cases[MAX_PIPELINES];
     int n_cases = 0;
     for (int i = 0; i < n_declared; i++) {
@@ -866,7 +873,7 @@ int main(int argc, char **argv)
             return 1;
         }
         b.dst = dst;
-        if (!pipeline_build(p, &b, dirs, 3))
+        if (!pipeline_build(p, &b, dirs, 4))
             return 1;
         n_cases++;
     }

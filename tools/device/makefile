@@ -75,7 +75,8 @@ pak: device
 	@rm -rf $(BUILD)/ShaderBench.pak
 	@mkdir -p $(BUILD)/ShaderBench.pak/shaders \
 	          $(BUILD)/ShaderBench.pak/tools/device/pipelines \
-	          $(BUILD)/ShaderBench.pak/tools/vendor
+	          $(BUILD)/ShaderBench.pak/tools/vendor \
+	          $(BUILD)/ShaderBench.pak/tools/optimized
 	cp $(BUILD)/$(TARGET).elf $(BUILD)/ShaderBench.pak/
 	cp launch.sh $(BUILD)/ShaderBench.pak/
 	chmod +x $(BUILD)/ShaderBench.pak/launch.sh
@@ -84,6 +85,7 @@ pak: device
 	cp $(REPO)/tools/baseline.toml $(BUILD)/ShaderBench.pak/tools/
 	cp $(REPO)/shaders/*.glsl $(BUILD)/ShaderBench.pak/shaders/
 	cp $(REPO)/tools/vendor/*.glsl $(BUILD)/ShaderBench.pak/tools/vendor/
+	cp $(REPO)/tools/optimized/*.glsl $(BUILD)/ShaderBench.pak/tools/optimized/
 	@echo "built $(BUILD)/ShaderBench.pak - copy it to Tools/tg5040/ on the card"
 
 clean:
