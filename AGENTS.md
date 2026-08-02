@@ -17,6 +17,7 @@ does not read GLSL.
 |---|---|
 | `shaders/` | **releases only.** Never edit one. Replace only when the owner says so |
 | `tools/iterations/` | every version, including the current candidate. Where the work happens |
+| `tools/optimized/` | the `*-turbo` line: the same four shaders rebuilt for the device |
 | `tools/baseline.toml` | **the one data file** — every shader's role, sampler and limits |
 | `tools/{check,measure,perf,test,preview}.py` | the five entry points |
 | `tools/common.py` | paths, shader text, GL, sources, reporting |
@@ -25,6 +26,7 @@ does not read GLSL.
 | `tools/device/` | the on-device benchmark, in C. Cross-built, run on the Brick |
 | `tools/report.py` | a device run's TSV as the README's performance table |
 | `docs/<shader>.md` | design record: what was measured, what was rejected, why |
+| `docs/optimized.md`, `docs/optimized/` | the same, for the `*-turbo` line. Kept separate on purpose |
 
 ### Release and iteration
 
@@ -205,6 +207,17 @@ that footprint computes `average(content) × average(pattern)` where the answer 
 `average(content × pattern)`. This is a real but much smaller term than the
 clamp - it is what `lcd-perfect-v7` was written to fix, at +40% ops, and was
 rejected. Recorded so the next person does not re-derive it.
+
+**One tap changes what is possible here.** The `*-turbo` line replaces the four
+NEAREST taps with one LINEAR tap — the texture unit computes the same weighted
+sum, for any separable weight pair, at `(B + 0.5 - w) / TextureSize`. The
+consequence is that *nothing non-linear can be applied per source pixel any
+more*, because the blend has already happened inside the sampler. So the fix
+above — brightness on the taps, clamped there — is unavailable, and every form
+that puts the clamp after the blend was measured and rejected. What works is
+shallowing the pattern instead of gaining the picture: both patterns are
+peak-normalised to 1, so reducing their depth gives back the light they cost
+with no knee and nothing to clip. See `docs/optimized.md`.
 
 ## Shader header and comments
 
