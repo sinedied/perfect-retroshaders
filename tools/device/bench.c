@@ -760,12 +760,13 @@ int main(int argc, char **argv)
     b.budget_ms = 1000.0 / 60.0;
 
     char manifest[512], pipedir[512], vendordir[512], shaderdir[512];
-    char optimizeddir[512];
+    char optimizeddir[512], iterdir[512];
     snprintf(manifest, sizeof(manifest), "%s/tools/baseline.toml", root);
     snprintf(pipedir, sizeof(pipedir), "%s/tools/device/pipelines", root);
     snprintf(vendordir, sizeof(vendordir), "%s/tools/vendor", root);
     snprintf(shaderdir, sizeof(shaderdir), "%s/shaders", root);
     snprintf(optimizeddir, sizeof(optimizeddir), "%s/tools/optimized", root);
+    snprintf(iterdir, sizeof(iterdir), "%s/tools/iterations", root);
 
     Declared declared[MAX_PIPELINES];
     int n_declared = load_manifest(manifest, declared, MAX_PIPELINES, &b);
@@ -851,7 +852,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    const char *dirs[4] = { shaderdir, vendordir, optimizeddir, devicedir };
+    const char *dirs[5] = { shaderdir, vendordir, optimizeddir, iterdir,
+                            devicedir };
     static Case cases[MAX_PIPELINES];
     int n_cases = 0;
     for (int i = 0; i < n_declared; i++) {
@@ -873,7 +875,7 @@ int main(int argc, char **argv)
             return 1;
         }
         b.dst = dst;
-        if (!pipeline_build(p, &b, dirs, 4))
+        if (!pipeline_build(p, &b, dirs, 5))
             return 1;
         n_cases++;
     }

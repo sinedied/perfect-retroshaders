@@ -27,7 +27,7 @@
 
 #define MAX_PASSES 3
 #define MAX_PARAMS 32
-#define MAX_PIPELINES 32
+#define MAX_PIPELINES 64
 #define MAX_NAME 128
 
 // srctype and scaletype, in the order the .cfg names them.
