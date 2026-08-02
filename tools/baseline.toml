@@ -169,6 +169,9 @@ budget_ms = 16.6667
 # and it is deliberately pixellate rather than one of ours: it ships on the
 # target and holds 60fps, so it is the budget, and a row reading 130% means the
 # same frame time buys 30% more than the thing already known to fit.
+#
+# EVERY ITERATION IS HERE, not just the head, so the table shows the progression
+# rather than a single number with nothing to read it against.
 [[pipeline]]
 label = "pixellate"
 cfg = "pixellate.cfg"
@@ -199,8 +202,8 @@ cfg = "sharp-shimmerless.cfg"
 
 
 # The reference stacks: what a user can already run today, measured the same way
-# so the *-turbo rows have something real to be read against. Each is the
-# cheapest thing of its kind, assembled the way the frontend assembles it.
+# so our rows have something real to be read against. Each is the cheapest thing
+# of its kind, assembled the way the frontend assembles it.
 [[pipeline]]
 label = "shimmerless -> lcd1x"
 cfg = "shimmerless-lcd1x.cfg"
@@ -230,48 +233,124 @@ label = "dmg_dot_matrix -> adjust"
 cfg = "dmg-dot-matrix-adjust.cfg"
 
 
-# The *-turbo line.
+# The unreleased *-perfect iterations. v12 and v8 clamp brightness per tap,
+# which is flat on every metric and bleaches highlights; v13 and v9a put the
+# released form back. v9b and v9c are the grid arms.
 [[pipeline]]
-label = "pixel-turbo"
-cfg = "pixel-turbo.cfg"
-
-[[pipeline]]
-label = "dmg-turbo"
-cfg = "dmg-turbo.cfg"
+label = "crt-perfect-v12"
+cfg = "crt-perfect-v12.cfg"
 
 [[pipeline]]
-label = "lcd-turbo"
-cfg = "lcd-turbo.cfg"
+label = "crt-perfect-v13"
+cfg = "crt-perfect-v13.cfg"
 
 [[pipeline]]
-label = "crt-turbo"
-cfg = "crt-turbo.cfg"
-
-
-# The *-mini line, each alone as pass 1. No scaler in any of them, so the
-# frontend's upscale is what the picture gets; the number is the pattern's own
-# cost, which is what these rows exist to price.
-[[pipeline]]
-label = "colour-mini"
-cfg = "colour-mini.cfg"
+label = "lcd-perfect-v8"
+cfg = "lcd-perfect-v8.cfg"
 
 [[pipeline]]
-label = "dmg-mini"
-cfg = "dmg-mini.cfg"
+label = "lcd-perfect-v9a"
+cfg = "lcd-perfect-v9a.cfg"
 
 [[pipeline]]
-label = "lcd-mini"
-cfg = "lcd-mini.cfg"
+label = "lcd-perfect-v9b"
+cfg = "lcd-perfect-v9b.cfg"
 
 [[pipeline]]
-label = "crt-mini"
-cfg = "crt-mini.cfg"
+label = "lcd-perfect-v9c"
+cfg = "lcd-perfect-v9c.cfg"
 
 
-# And assembled, which is how the mini line is meant to be run. Against the
-# matching *-turbo row these price composability; against the mini-alone rows
-# above they price a second pass, which one measurement so far put at nothing
-# and which the whole line depends on.
+# The *-turbo line, every iteration.
+[[pipeline]]
+label = "pixel-turbo-v1"
+cfg = "pixel-turbo-v1.cfg"
+
+[[pipeline]]
+label = "pixel-turbo-v2"
+cfg = "pixel-turbo-v2.cfg"
+
+[[pipeline]]
+label = "pixel-turbo-v3"
+cfg = "pixel-turbo-v3.cfg"
+
+[[pipeline]]
+label = "dmg-turbo-v1"
+cfg = "dmg-turbo-v1.cfg"
+
+[[pipeline]]
+label = "dmg-turbo-v2"
+cfg = "dmg-turbo-v2.cfg"
+
+[[pipeline]]
+label = "dmg-turbo-v3"
+cfg = "dmg-turbo-v3.cfg"
+
+[[pipeline]]
+label = "lcd-turbo-v1"
+cfg = "lcd-turbo-v1.cfg"
+
+[[pipeline]]
+label = "lcd-turbo-v2"
+cfg = "lcd-turbo-v2.cfg"
+
+[[pipeline]]
+label = "lcd-turbo-v3"
+cfg = "lcd-turbo-v3.cfg"
+
+[[pipeline]]
+label = "crt-turbo-v1"
+cfg = "crt-turbo-v1.cfg"
+
+[[pipeline]]
+label = "crt-turbo-v2"
+cfg = "crt-turbo-v2.cfg"
+
+[[pipeline]]
+label = "crt-turbo-v3"
+cfg = "crt-turbo-v3.cfg"
+
+
+# The *-mini line, every iteration, each alone as pass 1. No scaler in any of
+# them, so the frontend's upscale is what the picture gets; the number is the
+# pattern's own cost, which is what these rows exist to price.
+[[pipeline]]
+label = "colour-mini-v2"
+cfg = "colour-mini-v2.cfg"
+
+[[pipeline]]
+label = "colour-mini-v3"
+cfg = "colour-mini-v3.cfg"
+
+[[pipeline]]
+label = "dmg-mini-v2"
+cfg = "dmg-mini-v2.cfg"
+
+[[pipeline]]
+label = "dmg-mini-v3"
+cfg = "dmg-mini-v3.cfg"
+
+[[pipeline]]
+label = "lcd-mini-v2"
+cfg = "lcd-mini-v2.cfg"
+
+[[pipeline]]
+label = "lcd-mini-v3"
+cfg = "lcd-mini-v3.cfg"
+
+[[pipeline]]
+label = "crt-mini-v2"
+cfg = "crt-mini-v2.cfg"
+
+[[pipeline]]
+label = "crt-mini-v3"
+cfg = "crt-mini-v3.cfg"
+
+
+# And assembled at the head, which is how the mini line is meant to be run.
+# Against the matching *-turbo row these price composability; against the
+# mini-alone rows above they price a second pass, which one measurement so far
+# put at nothing and which the whole line depends on.
 [[pipeline]]
 label = "pixel-turbo -> colour-mini"
 cfg = "pixel-turbo-colour-mini.cfg"
@@ -293,10 +372,10 @@ label = "shimmerless -> lcd-mini"
 cfg = "shimmerless-lcd-mini.cfg"
 
 
-# And graded IN FRONT of the scaler, at source resolution. A curve applied after
-# the blend beats - it is the moire exception the turbo line takes - and applied
-# per source pixel it does not. These two price what that costs, which is one
-# pass and nothing else.
+# And graded IN FRONT of the scaler, at source resolution. A clip after the
+# blend beats - it is the exception the turbo line takes - and applied per
+# source pixel it does not. These two price what that costs, which is one pass
+# and nothing else.
 [[pipeline]]
 label = "colour-mini -> pixel-turbo"
 cfg = "colour-mini-pixel-turbo.cfg"
@@ -356,16 +435,54 @@ neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamm
 # renders.
 
 [[shader]]
-name = "pixel-turbo-v2.glsl"
+name = "pixel-turbo-v3.glsl"
 family = "pixel-turbo"
 role = ["current"]
+sampler = "linear"
+# No exceptions at all: brightness is pixel-perfect's folded affine again, so
+# this is that shader's grading exactly, on one tap instead of four.
+neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
+
+[[shader]]
+name = "pixel-turbo-v2.glsl"
+family = "pixel-turbo"
+role = ["archive"]
 sampler = "linear"
 neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
 
 [[shader]]
-name = "crt-turbo-v2.glsl"
+name = "crt-turbo-v3.glsl"
 family = "crt-turbo"
 role = ["current"]
+sampler = "linear"
+pattern = "output-locked"
+# BRIGHTNESS IS A PLAIN GAIN AGAIN, clamped before the pattern, because v2's
+# midtone form was just gamma wearing a different name - pow(c, g/b) divides the
+# same exponent. A clamp after the blend beats, and one tap has no per-source
+# clamp to use instead, so these are the price. Every one is zero at
+# cp_brightness 1.00; the default is 1.25. Worse than v2's, which is the honest
+# reading: a clip has a harder edge than a curve. See docs/optimized.md.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 3.743 },
+    { case = [256, 224, 1024, 768], value = 2.668 },
+    { case = [240, 160, 1024, 768], value = 2.190 },
+    { case = [160, 144, 1024, 768], value = 2.325 },
+    { case = [480, 272, 1024, 768], value = 3.621 },
+    { case = [480, 272,  640, 480], value = 7.256 },
+    { case = [256, 192,  640, 480], value = 0.924 },
+]
+# Unchanged from v2 to two decimals: this regime is measured at brightness 1.00,
+# where the gain is a no-op and v3 is bit-identical to v2.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 1.41 },
+    { case = [160, 144, 853, 768], value = 0.92 },
+]
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
+
+[[shader]]
+name = "crt-turbo-v2.glsl"
+family = "crt-turbo"
+role = ["archive"]
 sampler = "linear"
 pattern = "output-locked"
 # Curvature and the slot grille are back: measured at 449 ops with either
@@ -394,9 +511,31 @@ crawl_allow = [
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
 
 [[shader]]
-name = "lcd-turbo-v2.glsl"
+name = "lcd-turbo-v3.glsl"
 family = "lcd-turbo"
 role = ["current"]
+sampler = "linear"
+pattern = "whole-cell"
+# The plain gain, as in crt-turbo. Zero at lp_brightness 1.00.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 3.319 },
+    { case = [256, 224, 1024, 768], value = 2.856 },
+    { case = [240, 160, 1024, 768], value = 1.880 },
+    { case = [160, 144, 1024, 768], value = 2.124 },
+    { case = [480, 272, 1024, 768], value = 3.400 },
+    { case = [480, 272,  640, 480], value = 1.445 },
+]
+# Unchanged from v2: measured at brightness 1.00, where v3 is bit-identical.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 1.27 },
+    { case = [160, 144, 853, 768], value = 0.79 },
+]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
+name = "lcd-turbo-v2.glsl"
+family = "lcd-turbo"
+role = ["archive"]
 sampler = "linear"
 pattern = "whole-cell"
 # The midtone lift, as above. Zero at lp_brightness 1.00.
@@ -416,9 +555,24 @@ crawl_allow = [
 neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
 
 [[shader]]
-name = "dmg-turbo-v2.glsl"
+name = "dmg-turbo-v3.glsl"
 family = "dmg-turbo"
 role = ["current"]
+sampler = "linear"
+# NOT the brightness change - dp_brightness ships at 1.00 and, as in the
+# released shader, it is folded into the balance factor rather than clamped, so
+# it never reaches the substrate. These are dp_gamma at 1.20, the same
+# post-blend pow() and the same cases dmg-perfect carries. Unchanged from v2.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 0.458 },
+    { case = [480, 272,  640, 480], value = 0.459 },
+]
+neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
+
+[[shader]]
+name = "dmg-turbo-v2.glsl"
+family = "dmg-turbo"
+role = ["archive"]
 sampler = "linear"
 # NOT the midtone lift - dp_brightness ships at 1.00, so the lift is off. These
 # are dp_gamma at 1.20, the same post-blend pow() and the same cases dmg-perfect
@@ -444,17 +598,49 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 # a plain bilinear upscale, which is a legitimate choice and is documented.
 
 [[shader]]
-name = "colour-mini-v2.glsl"
+name = "colour-mini-v3.glsl"
 family = "colour-mini"
 role = ["current"]
+sampler = "linear"
+passthrough = true
+# No exceptions, as pixel-turbo.
+neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
+
+[[shader]]
+name = "colour-mini-v2.glsl"
+family = "colour-mini"
+role = ["archive"]
 sampler = "linear"
 passthrough = true
 neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
 
 [[shader]]
-name = "crt-mini-v2.glsl"
+name = "crt-mini-v3.glsl"
 family = "crt-mini"
 role = ["current"]
+sampler = "linear"
+passthrough = true
+pattern = "output-locked"
+# Measured STANDALONE, which is the mini line at its worst: with no scaler in
+# front the sampler does a bilinear upscale and the pattern rides that rather
+# than a box average. Far under the turbo figures either way, because a smooth
+# upscale gives the clip much less structure to beat against.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 0.802 },
+    { case = [256, 224, 1024, 768], value = 0.671 },
+    { case = [256, 192, 1024, 768], value = 0.434 },
+    { case = [240, 160, 1024, 768], value = 0.554 },
+    { case = [160, 144, 1024, 768], value = 0.498 },
+    { case = [480, 272, 1024, 768], value = 1.115 },
+    { case = [480, 272,  640, 480], value = 1.275 },
+    { case = [320, 240, 1280, 720], value = 0.427 },
+]
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
+
+[[shader]]
+name = "crt-mini-v2.glsl"
+family = "crt-mini"
+role = ["archive"]
 sampler = "linear"
 passthrough = true
 pattern = "output-locked"
@@ -470,9 +656,27 @@ moire_allow = [
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
 
 [[shader]]
-name = "lcd-mini-v2.glsl"
+name = "lcd-mini-v3.glsl"
 family = "lcd-mini"
 role = ["current"]
+sampler = "linear"
+passthrough = true
+pattern = "whole-cell"
+# Standalone, as above.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 0.787 },
+    { case = [256, 224, 1024, 768], value = 0.655 },
+    { case = [240, 160, 1024, 768], value = 0.501 },
+    { case = [160, 144, 1024, 768], value = 0.452 },
+    { case = [480, 272, 1024, 768], value = 1.062 },
+    { case = [480, 272,  640, 480], value = 0.662 },
+]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
+name = "lcd-mini-v2.glsl"
+family = "lcd-mini"
+role = ["archive"]
 sampler = "linear"
 passthrough = true
 pattern = "whole-cell"
@@ -483,9 +687,21 @@ moire_allow = [
 neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
 
 [[shader]]
-name = "dmg-mini-v2.glsl"
+name = "dmg-mini-v3.glsl"
 family = "dmg-mini"
 role = ["current"]
+sampler = "linear"
+passthrough = true
+# Standalone, as above. dp_gamma at 1.20, as in dmg-turbo. Unchanged from v2.
+moire_allow = [
+    { case = [480, 272, 1024, 768], value = 0.435 },
+]
+neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
+
+[[shader]]
+name = "dmg-mini-v2.glsl"
+family = "dmg-mini"
+role = ["archive"]
 sampler = "linear"
 passthrough = true
 # Standalone, as above. dp_gamma at 1.20, as in dmg-turbo.
@@ -602,9 +818,32 @@ moire_allow = [
 ]
 
 [[shader]]
-name = "crt-perfect-v12.glsl"
+name = "crt-perfect-v13.glsl"
 family = "crt-perfect"
 role = ["current"]
+pattern = "output-locked"
+# Brightness is back in the pattern gain, where v10 has it, with the one clamp
+# on the whole product. v12 clamped each tap instead, which is flat on every
+# metric and washes every highlight to white before the mask can shape it - the
+# owner reported it as the slider doing nothing but bleaching the picture.
+#
+# So the ceilings below are the SHIPPED release's again, and they are earned
+# rather than inherited: this version has the release's brightness.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 1.45 },
+    { case = [160, 144, 853, 768], value = 0.95 },
+    { case = [256, 224, 1024, 768], value = 1.55 }
+]
+moire_allow = [
+    { case = [480, 272,  640, 480], value = 0.466 },
+    { case = [256, 224, 1024, 768], value = 0.434 },
+]
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
+
+[[shader]]
+name = "crt-perfect-v12.glsl"
+family = "crt-perfect"
+role = ["archive"]
 pattern = "output-locked"
 # These ceilings describe the SHIPPED release, which still carries the defect;
 # this version measures far under them on the clamp regime (0.037 against 0.541
@@ -670,9 +909,60 @@ family = "lcd-perfect"
 role = ["released"]
 
 [[shader]]
-name = "lcd-perfect-v8.glsl"
+name = "lcd-perfect-v9a.glsl"
 family = "lcd-perfect"
 role = ["current"]
+pattern = "whole-cell"
+# Arm A of the grid comparison: v8's sinusoid and v8's half-output-pixel phase,
+# unchanged. What differs from v8 is brightness, back in the pattern gain where
+# v6 has it, with the one clamp on the whole product - v8 clamped each tap and
+# bleached every highlight before the mesh could shape it.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 2.10 },
+    { case = [160, 144, 853, 768], value = 1.25 },
+    { case = [256, 224, 1024, 768], value = 0.52 }
+]
+moire_allow = [{ case = [480, 272, 1024, 768], value = 0.432 }]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
+name = "lcd-perfect-v9b.glsl"
+family = "lcd-perfect"
+role = ["archive"]
+pattern = "whole-cell"
+# Arm B: phase 0, so the trough sits on the source-pixel boundary and the dark
+# line is shared by the two output pixels either side of it, which is where
+# lcd1x puts it. Costs depth at small integer pitches - the trade recorded in
+# docs/measurement.md - and buys a line that reads as being BETWEEN cells.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 2.10 },
+    { case = [160, 144, 853, 768], value = 1.25 },
+    { case = [256, 224, 1024, 768], value = 0.52 }
+]
+moire_allow = [{ case = [480, 272, 1024, 768], value = 0.432 }]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
+name = "lcd-perfect-v9c.glsl"
+family = "lcd-perfect"
+role = ["archive"]
+pattern = "whole-cell"
+# Arm C: the waveform changes. A narrow gap centred on the cell boundary,
+# thickness given in output pixels, replacing the sinusoid - a black matrix
+# rather than a soft mesh. A sinusoid is below its peak for three quarters of
+# its cycle at any phase, so no phase can make one draw a thin line.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 2.10 },
+    { case = [160, 144, 853, 768], value = 1.25 },
+    { case = [256, 224, 1024, 768], value = 0.52 }
+]
+moire_allow = [{ case = [480, 272, 1024, 768], value = 0.432 }]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
+name = "lcd-perfect-v8.glsl"
+family = "lcd-perfect"
+role = ["archive"]
 pattern = "whole-cell"
 # These ceilings describe the SHIPPED release, which still carries the defect;
 # this version measures far under them on the clamp regime (0.037 against 0.541
@@ -1069,6 +1359,18 @@ role = ["vendor"]
 "480x272->1024x768" = "b9344b959262013f"
 "480x272->640x480" = "5f05d33a0e9fff73"
 
+[golden."colour-mini-v3.glsl"]
+"160x144->1024x768" = "712be4b3018752e0"
+"240x160->1024x768" = "99a868c80a338afc"
+"256x192->1024x768" = "46aa1509e9400a9b"
+"256x192->640x480" = "de29cb063a673f41"
+"256x224->1024x768" = "a49d1c1146aa6afe"
+"320x240->1024x768" = "c10493efdfb5a10d"
+"320x240->1280x720" = "0aedddc73dee2f86"
+"320x240->640x480" = "e241213df0d19636"
+"480x272->1024x768" = "b9344b959262013f"
+"480x272->640x480" = "5f05d33a0e9fff73"
+
 [golden."crt-mini-v2.glsl"]
 "160x144->1024x768" = "c3ef396dedac2212"
 "240x160->1024x768" = "d3f1f59a6a46af58"
@@ -1080,6 +1382,18 @@ role = ["vendor"]
 "320x240->640x480" = "c0e77edc78acd6d3"
 "480x272->1024x768" = "4c2b2f8b5b7daeb3"
 "480x272->640x480" = "c2bad3c2ee15bd81"
+
+[golden."crt-mini-v3.glsl"]
+"160x144->1024x768" = "b003545b86b79ff5"
+"240x160->1024x768" = "4dd359211073fd83"
+"256x192->1024x768" = "c25bc1622de982a0"
+"256x192->640x480" = "393fe15b12faffd3"
+"256x224->1024x768" = "69358e19aea72360"
+"320x240->1024x768" = "0767387a033cd5df"
+"320x240->1280x720" = "8555467998fe0318"
+"320x240->640x480" = "5e19a2b5c6845c00"
+"480x272->1024x768" = "6977aaf8e02ad834"
+"480x272->640x480" = "4bf44473ea0cd93d"
 
 [golden."crt-perfect-v1.glsl"]
 "160x144->1024x768" = "4e461ed50882670f"
@@ -1128,6 +1442,18 @@ role = ["vendor"]
 "320x240->640x480" = "2a76f43ad8c863d5"
 "480x272->1024x768" = "6bc6e37321fc3dd0"
 "480x272->640x480" = "cc8c4f335f68e1ba"
+
+[golden."crt-perfect-v13.glsl"]
+"160x144->1024x768" = "2070509be3242835"
+"240x160->1024x768" = "08ced6bc8ca20f45"
+"256x192->1024x768" = "17e35cea4cbeaa08"
+"256x192->640x480" = "e7f4e5f23d140c4f"
+"256x224->1024x768" = "fc3e48b9cfec24fa"
+"320x240->1024x768" = "370516b207afc5c8"
+"320x240->1280x720" = "618ac0a5eca82f69"
+"320x240->640x480" = "3585a090a3e354f2"
+"480x272->1024x768" = "682de10fd3304f8e"
+"480x272->640x480" = "bf57cc916774758e"
 
 [golden."crt-perfect-v2.glsl"]
 "160x144->1024x768" = "716692d3ac007c25"
@@ -1273,7 +1599,31 @@ role = ["vendor"]
 "480x272->1024x768" = "42c1974a3428e8b6"
 "480x272->640x480" = "8bc3af487856fa39"
 
+[golden."crt-turbo-v3.glsl"]
+"160x144->1024x768" = "a1352a61d0f7a9c2"
+"240x160->1024x768" = "66d464947a68c9ef"
+"256x192->1024x768" = "6f2382e14943a028"
+"256x192->640x480" = "d67fcf2337deb2ca"
+"256x224->1024x768" = "71e60fd80622f459"
+"320x240->1024x768" = "0abf65e8b6cca986"
+"320x240->1280x720" = "fc9145b00e02ac39"
+"320x240->640x480" = "15d70cf0c6ab4c19"
+"480x272->1024x768" = "274b9565e8af4fe6"
+"480x272->640x480" = "eebe3dbeedee3080"
+
 [golden."dmg-mini-v2.glsl"]
+"160x144->1024x768" = "a1ddd5f79cee002d"
+"240x160->1024x768" = "925f03b5111bae07"
+"256x192->1024x768" = "4a2044d2ccb7b363"
+"256x192->640x480" = "1da3e6779de083f7"
+"256x224->1024x768" = "481c7a252ad0f26b"
+"320x240->1024x768" = "962c0cde7fde8069"
+"320x240->1280x720" = "09a4708d6907b255"
+"320x240->640x480" = "706335ff75cb403d"
+"480x272->1024x768" = "a3baf7c046400c2a"
+"480x272->640x480" = "7b0f4de7ac4f74b4"
+
+[golden."dmg-mini-v3.glsl"]
 "160x144->1024x768" = "a1ddd5f79cee002d"
 "240x160->1024x768" = "925f03b5111bae07"
 "256x192->1024x768" = "4a2044d2ccb7b363"
@@ -1465,6 +1815,18 @@ role = ["vendor"]
 "480x272->1024x768" = "06da4ac9797b605b"
 "480x272->640x480" = "592d2ab23284bff2"
 
+[golden."dmg-turbo-v3.glsl"]
+"160x144->1024x768" = "e999d2faf969671e"
+"240x160->1024x768" = "2a0ad2d6d918e5eb"
+"256x192->1024x768" = "7990a5b901c9afb0"
+"256x192->640x480" = "f74fc99cb2bd92eb"
+"256x224->1024x768" = "311a6c22e9153f04"
+"320x240->1024x768" = "166f936e32da4c5f"
+"320x240->1280x720" = "5514f206c3fdf08e"
+"320x240->640x480" = "4b70df91e81661fb"
+"480x272->1024x768" = "06da4ac9797b605b"
+"480x272->640x480" = "592d2ab23284bff2"
+
 [golden."lcd-mini-v2.glsl"]
 "160x144->1024x768" = "d7840722de03f003"
 "240x160->1024x768" = "228522a00c9ba2dc"
@@ -1476,6 +1838,18 @@ role = ["vendor"]
 "320x240->640x480" = "467be3c6495e5913"
 "480x272->1024x768" = "d05749e7956a441f"
 "480x272->640x480" = "92c4c4b5e5af383a"
+
+[golden."lcd-mini-v3.glsl"]
+"160x144->1024x768" = "01c01fb03f3d8374"
+"240x160->1024x768" = "d51afe269cd4f16f"
+"256x192->1024x768" = "8fd4e17522fc368c"
+"256x192->640x480" = "4111dd1b763cf8ae"
+"256x224->1024x768" = "dc7c899fa2dd5259"
+"320x240->1024x768" = "06445a08b22058a2"
+"320x240->1280x720" = "7ba757c7b78609fd"
+"320x240->640x480" = "d8d040ecfc070cda"
+"480x272->1024x768" = "98ba80ffbcd365fc"
+"480x272->640x480" = "8063c370eddf5280"
 
 [golden."lcd-perfect-v1.glsl"]
 "160x144->1024x768" = "9c4d71137a4c1aff"
@@ -1585,6 +1959,42 @@ role = ["vendor"]
 "480x272->1024x768" = "9b0c7f4a8c50e41a"
 "480x272->640x480" = "8be3a9ecc6fcaf29"
 
+[golden."lcd-perfect-v9a.glsl"]
+"160x144->1024x768" = "08eaa31d79fed618"
+"240x160->1024x768" = "6338dac58437eb0a"
+"256x192->1024x768" = "142c5062f068b7b4"
+"256x192->640x480" = "627f75b90bf18215"
+"256x224->1024x768" = "caf3cf14692a81fc"
+"320x240->1024x768" = "8ac7f5699a0e971a"
+"320x240->1280x720" = "707ff9c796eb9bc1"
+"320x240->640x480" = "6854ce7049651bb2"
+"480x272->1024x768" = "372fe1391dfa676a"
+"480x272->640x480" = "b62006fd6473cf6a"
+
+[golden."lcd-perfect-v9b.glsl"]
+"160x144->1024x768" = "2bf7c18d7f722892"
+"240x160->1024x768" = "1c6b3f0538700a87"
+"256x192->1024x768" = "4f8df4c3f52fd7af"
+"256x192->640x480" = "a681b1c1f2ee15c2"
+"256x224->1024x768" = "74b530126cb17efd"
+"320x240->1024x768" = "d9faf7e2149a31dc"
+"320x240->1280x720" = "be2946907ba865e0"
+"320x240->640x480" = "b656d333fd89a014"
+"480x272->1024x768" = "6a8e68a648c95f62"
+"480x272->640x480" = "123118300ace17c3"
+
+[golden."lcd-perfect-v9c.glsl"]
+"160x144->1024x768" = "3cd8d94a5b46a226"
+"240x160->1024x768" = "20d5378d257a47f4"
+"256x192->1024x768" = "e26be4ac7468fa81"
+"256x192->640x480" = "c532d8943c8799f2"
+"256x224->1024x768" = "a3ca49e63f35ad78"
+"320x240->1024x768" = "02f2911928014511"
+"320x240->1280x720" = "be9307a070296422"
+"320x240->640x480" = "c7cc5973fb826b81"
+"480x272->1024x768" = "1ac39f36018d4fd4"
+"480x272->640x480" = "9a29e5db3545da06"
+
 [golden."lcd-perfect.glsl"]
 "160x144->1024x768" = "7320fd88c5ca9205"
 "240x160->1024x768" = "f8d5528822c9249e"
@@ -1620,6 +2030,18 @@ role = ["vendor"]
 "320x240->640x480" = "9e114c62c78551fe"
 "480x272->1024x768" = "dbca3280e603b5fe"
 "480x272->640x480" = "8b38b25e15b27502"
+
+[golden."lcd-turbo-v3.glsl"]
+"160x144->1024x768" = "b362363bb6ab2a2b"
+"240x160->1024x768" = "3bc5ac069767ba33"
+"256x192->1024x768" = "a8f66c831a7139ba"
+"256x192->640x480" = "80ac54f89235fc92"
+"256x224->1024x768" = "337d44dd67828202"
+"320x240->1024x768" = "24ce5cfd85fa47c0"
+"320x240->1280x720" = "b8654f32094f1a7a"
+"320x240->640x480" = "b9989c19aa53c028"
+"480x272->1024x768" = "6dca4d701e9d7523"
+"480x272->640x480" = "ab26409c49680a8c"
 
 [golden."pixel-perfect-v1.glsl"]
 "160x144->1024x768" = "784dcd47f347a0dd"
@@ -1730,6 +2152,18 @@ role = ["vendor"]
 "480x272->640x480" = "01fea07c6e9b2681"
 
 [golden."pixel-turbo-v2.glsl"]
+"160x144->1024x768" = "8fadb9103618b7c9"
+"240x160->1024x768" = "6a021d7a7bb36191"
+"256x192->1024x768" = "14fde0bf677a8ec7"
+"256x192->640x480" = "dba8d2d5f0603e18"
+"256x224->1024x768" = "9b155a8cec6c345f"
+"320x240->1024x768" = "1bbadaa071700ad2"
+"320x240->1280x720" = "6ef196867a147d60"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "4c44e1ce03cdf6ad"
+"480x272->640x480" = "01fea07c6e9b2681"
+
+[golden."pixel-turbo-v3.glsl"]
 "160x144->1024x768" = "8fadb9103618b7c9"
 "240x160->1024x768" = "6a021d7a7bb36191"
 "256x192->1024x768" = "14fde0bf677a8ec7"
