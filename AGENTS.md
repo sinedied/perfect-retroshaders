@@ -118,7 +118,11 @@ Four layers, deliberately:
   `pixel-perfect` must equal the vendored `pixellate`. That chains all four
   families to a third-party implementation, for one render each.
 - **Properties** — measured from the render, never computed from the formula
-  under test.
+  under test. Two of them are worth naming because nothing else can see what
+  they see: `moire` is one still frame, and `crawl` is what changes when the
+  picture scrolls. Every metric here was single-frame and luminance-only until a
+  scrolling colour band was reported from a device that none of them could
+  detect. See `docs/measurement.md`.
 - **Negative controls** — each property must *fail* on the archived version that
   had the defect.
 - **Goldens** — a hash per shader per case. Proves nothing about correctness,
@@ -178,6 +182,19 @@ that beats against the pixel grid as moiré. Gamma round-trips, output gamma and
 even a plain `clamp()` from a gain above 1 have each done it. A soft shoulder
 does not rescue it — measured worse than the hard clamp. See
 `docs/crt-perfect.md`.
+
+**And nothing spatially varying either, which is the same rule and was missed.**
+A multiply is linear, so `lcd-perfect`'s RGB stripes looked legal and shipped as
+a plain multiply after the blend. They are not: the blend has already collapsed
+the footprint to one number, so multiplying by a pattern that varies *inside*
+that footprint computes `average(content) × average(pattern)` where the answer is
+`average(content × pattern)`. The covariance it drops depends on where the cell
+boundary falls in the pixel, which repeats once per denominator of the scale — 15
+cells at 1024/240 — and so appears as a slow colour band that walks whenever the
+picture scrolls. Invisible in a still frame, and the reason `measure.py` now has
+`crawl()`. A pattern that varies within a pixel belongs *inside* the blend,
+weighted by its own aperture, the way the mesh already is. See
+`docs/lcd-perfect.md`.
 
 ## Shader header and comments
 

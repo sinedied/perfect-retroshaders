@@ -228,3 +228,79 @@ to 435 and SFU to 43. The rule for this rewrite was "only changes that cut both
 signals", and a branch that a weaker driver might scalarise is exactly the kind
 of guess that rule exists to refuse. Recorded here because the measurement stands
 and the decision could reasonably go the other way on evidence from the device.
+
+## The scrolling colour band, and why v7 was not it
+
+Reported from a device: scrolling horizontally in GBC and GBA, aspect-scaled to
+1024x768, paints a large colour moiré that is invisible in a still frame and
+walks with the movement. lcd1x and lcd3x do not do it.
+
+Measured, at `lp_subpixels` maximum, as low-frequency chroma that a compensated
+scroll changes — `crawl()` in `measure.py`, which is new, because nothing here
+could see this: every other metric in that file takes one frame and converts it
+to luminance, and this artifact is neither.
+
+| | chroma crawl |
+|---|---|
+| plain scaler (the floor) | 0.00 |
+| `lp_grid` at maximum, stripes off | 0.54 |
+| `lp_subpixels` at maximum, mesh off | **3.68** |
+| both at maximum | **5.31** |
+
+The stripes, not the mesh. The mesh is aperture-weighted into the blend; the
+stripes are multiplied on after it. So the shader computes
+`average(content) x average(stripe)` where it wants `average(content x stripe)`,
+and the covariance it drops depends on where the cell boundary falls inside an
+output pixel. That phase repeats once per denominator of the scale — 15 cells at
+1024/240, 160 at 853/160 — so the error is a very slow band rather than noise.
+Held still it reads as texture. Scroll, and each cell holds different content, so
+the band changes and walks.
+
+**It is a bug, not a limit of the design.** The same shader rendered at 4x and
+averaged down — which is what the 1x path is approximating — reads **0.319**,
+against 1.606 as shipped. Five times better is available.
+
+### v7: right shape, wrong price
+
+v7 pulls the stripes inside the blend: it integrates `mesh x stripe` per channel
+across the column and uses the result as both the blend weight and the gain, so
+one formula replaces the point-sampled stripe and its `boxSinc` amplitude
+correction. The mesh is a trough (`1 - amp*cos`), so it enters the product with a
+negative amplitude; getting that sign wrong puts the colour cast correction on
+the wrong side of white. The second harmonic the product carries comes free from
+double-angle, and the only new transcendental is the boundary cosine.
+
+It works, and it is not worth it:
+
+| | chroma | luma | ops | SFU |
+|---|---|---|---|---|
+| v6 | 1.606 | 0.276 | 396 | 23 |
+| v7 | 1.504 | 0.000 | 556 | 20 |
+
+Luma is fixed outright. Chroma moves 6%, for **+40% ops**. The device says time
+tracks ops and not SFU, and lcd-perfect already uses 90% of a 60fps frame there,
+so v7 is unaffordable for what it buys. Kept as an archive rather than deleted,
+because the approach is sound and the measurement is the point.
+
+### What is actually left
+
+Two candidates were tested and eliminated first, which is why they are written
+down rather than tried again:
+
+- **The `sqrt` encode.** Applying the stripe linearly on the encoded value
+  instead made it worse: 1.828 against 1.623.
+- **Clipping.** At maximum visibility the stripe peaks near 2x, so bright content
+  clamps and the clamping is phase-dependent. Real, and partial: dimming the
+  content from 240 to 100 takes v6 from 1.519 to 0.570, so roughly a third of the
+  figure at maximum is clipping and the rest is not.
+
+What v7 removed is the error in linear space. What remains is in the encoded
+domain: the ideal averages `sqrt(pattern)` over the footprint while the shader
+takes `sqrt` of the average, and those differ by a term in the variance of the
+pattern across the pixel. That has a closed form to second order —
+`avg(sqrt(P)) ~ sqrt(Pbar)(1 - var(P)/(8 Pbar^2))` — and the variance of a
+product of two sinusoids at one pitch is reachable from the same sin/cos pairs
+by multiple-angle, so it need not cost another transcendental. Untried.
+
+Until then the figures are recorded as `crawl_allow` in `baseline.toml`: not
+approval, a ceiling, so the number cannot get worse while the fix is worked out.

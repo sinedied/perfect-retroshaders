@@ -58,6 +58,8 @@ MOIRE = SETTINGS["moire"]
 MIN_PITCH = SETTINGS["min_pitch"]
 TOLERANCE = SETTINGS["tolerance"]
 SCALER_REFERENCE = SETTINGS["scaler_reference"]
+CRAWL = SETTINGS["crawl"]
+CRAWL_CASES = [tuple(x) for x in SETTINGS["crawl_cases"]]
 
 SHADERS_DECLARED = {s["name"]: s for s in _DOC["shader"]}
 GOLDEN = _DOC.get("golden", {})
@@ -111,6 +113,19 @@ def roles(name):
 
 def sampler_is_linear(name):
     return SHADERS_DECLARED.get(name, {}).get("sampler") == "linear"
+
+
+def colour_param(name):
+    """The parameter drawing this shader's colour pattern, or None.
+
+    Declared per family in baseline.toml. Returns None when the family has no
+    colour pattern, and also when this particular version predates the one it
+    declares - the archive reaches back to versions with no such control, and a
+    crawl measurement that silently passed an unknown parameter would be
+    measuring the shipped default while claiming to measure the maximum.
+    """
+    p = SETTINGS.get("colour", {}).get(family(name))
+    return p if p and p in parameters(name) else None
 
 
 def by_role(*want):
@@ -207,6 +222,20 @@ def source_iteration(name):
 def moire_allowance(name, case):
     """A recorded exception to the moire limit, if one was granted for this case."""
     for entry in declared(name).get("moire_allow", []):
+        if tuple(entry["case"]) == tuple(case):
+            return entry["value"]
+    return None
+
+
+def crawl_allowance(name, case):
+    """A recorded exception to the crawl limit, if one was granted.
+
+    Same mechanism as moire_allow and used for the same reason: a figure that is
+    known, measured, written down and not yet fixed is better recorded than
+    either ignored or quietly relabelled as acceptable. An allowance stops the
+    number getting WORSE while the fix is worked out.
+    """
+    for entry in declared(name).get("crawl_allow", []):
         if tuple(entry["case"]) == tuple(case):
             return entry["value"]
     return None

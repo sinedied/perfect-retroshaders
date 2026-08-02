@@ -340,3 +340,62 @@ So it is usable to about 0.20 and not beyond, which is why it defaults to off. N
 the **1.0px column is the worst at every opacity** — a one pixel lobe has no
 guaranteed solid core, exactly as a one pixel line does not, so it wobbles cell to
 cell. The default offset was 1.00 until this table was measured; it is 1.50 now.
+
+## Crawl: four metrics that confidently said nothing was wrong
+
+A scrolling colour moiré was reported from a device and reproduced. Getting a
+number that agreed with the eye took five attempts, and the four failures are
+worth more than the one that worked.
+
+**The two blind spots that let it ship.** Every metric in `measure.py` took one
+frame, and every metric converted to luminance on its first line. The artifact is
+temporal and chromatic, so it was invisible twice over — not missed by a narrow
+margin, but structurally outside what the harness could express.
+
+**1. Beat, on a scrolled scene.** The obvious first move: run the existing
+`beat()` at a series of scroll offsets and watch it change. It does not change —
+0.0% across ten offsets for every shader, because a scene's own low-frequency
+content is 92 levels and swamps a 1-level artifact. A metric dominated by the
+content measures the content.
+
+**2. A scrolling line.** Track one bright column across the screen and measure
+how its centroid, energy and width wobble. Clean, direct, and it ranks our
+shaders *better* than lcd1x on every column — 1.28% energy variation against
+23%. True, and irrelevant: the defect is a large-scale field, and a single
+feature cannot show a field.
+
+**3. Pattern over content.** Divide the shader's output by the plain scaler's, on
+the grounds that the pattern must be a function of screen position alone, so the
+ratio must not depend on content phase. Also ranked ours better than lcd1x.
+Random noise excites the wrong thing: it has energy everywhere, including the
+band the artifact lives in, so the ratio is dominated by content that is not
+there in a game.
+
+**4. Per-pixel difference of compensated frames.** Shift each frame back by
+exactly `scale x offset` — a Fourier shift, exact for a wrapped scroll — and
+measure how much the picture still changes. This is the right idea and still
+ranks lcd1x worst, because it counts every spatial frequency equally and lcd1x
+point-samples its grid, so it shimmers at the pixel level. Nobody complains about
+lcd1x. **What people see is a big slow band, and a metric that weights a 2-pixel
+shimmer like a 60-pixel band is not measuring what anybody looks at.**
+
+**What worked** is 4 with the same band the moire metric already uses — strictly
+slower than both the content and the shader's own pattern — and with the plain
+scaler's own figure subtracted in quadrature, because content moving a
+non-integer number of output pixels cannot render identically twice and that
+floor belongs to the scale, not the shader. It reads 0.00 at an integer scale,
+0.00 for the plain scaler, and rises with the colour parameter.
+
+**A fifth, rejected for a different reason.** Comparing the shader against its own
+supersampled render is a sound *correctness* measure and a bad *crawl* measure:
+it reads 3.05 at an integer 4x scale, where scrolling provably changes nothing at
+all, because it also counts a static error that never moves. It is still the right
+tool for asking whether a fix is possible — it is how the 0.319 ceiling in
+`docs/lcd-perfect.md` was established — just not for gating.
+
+**The vendor shaders are not a control here.** lcd1x scores high for a reason it
+is entitled to: nearest-neighbour blocks are four pixels wide and then five, so
+features genuinely change width as they scroll. That is the shimmer this repo's
+scaler exists to remove, not the artifact under test. Wanting the number to rank
+lcd1x last is what kept three of the four wrong metrics alive longer than they
+deserved.

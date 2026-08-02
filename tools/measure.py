@@ -19,6 +19,11 @@
              because aliasing relocates pattern energy rather than removing it,
              so an aliased pattern measures perfectly healthy.
 
+  crawl      how much the picture changes, in LEVELS, when the content scrolls
+             and the scroll is compensated exactly. Everything above is a single
+             still frame in luminance; this one is neither, which is why it sees
+             a class of artifact none of the others can.
+
     python tools/measure.py                  the working set
     python tools/measure.py crt-perfect      one family
     python tools/measure.py --self-test      check the metric, not the shaders
@@ -182,6 +187,157 @@ def moire(ctx, progs, name, case, source=None, **override):
 
 
 # --------------------------------------------------------------------------
+# crawl
+#
+# Every other metric in this file takes ONE frame and converts it to luminance.
+# Both of those throw away exactly what a scrolling colour artifact is made of,
+# which is how one shipped: lcd-perfect's subpixel stripes measured clean on
+# every static luminance metric here while painting a visible colour band that
+# walked across the screen whenever the game scrolled.
+#
+# What goes wrong is that the shader computes
+#
+#     average(content) x average(pattern)
+#
+# where the answer it wants is average(content x pattern). The two differ by a
+# covariance term whose size depends on where the cell boundary falls inside an
+# output pixel. That phase comes round once per denominator of the scale - 15
+# cells at 1024/240, 160 at 853/160 - so the error is not fine noise, it is a
+# very slow band. Held still it reads as texture; scroll the content and each
+# cell holds something different, so the band changes and walks.
+#
+# The measurement: scrolling one source pixel moves the picture by exactly
+# `scale` output pixels and changes nothing else, so shift each frame back by
+# that much and every frame must be identical. Whatever differs was manufactured
+# by the shader.
+#
+# Two things this is NOT, both of which were tried and are written up in
+# docs/measurement.md:
+#
+#   - a per-pixel difference. It counts every spatial frequency equally, and by
+#     that measure lcd1x is the worst shader here because it point-samples its
+#     grid and shimmers at the pixel level. What people see is a BIG slow band.
+#   - a comparison against the shader's own supersampled render. That is a
+#     sound correctness measure and a bad crawl measure: it reads 3.0 at an
+#     INTEGER scale, where scrolling provably changes nothing at all.
+#
+# The vendor shaders are not a control for this. lcd1x scores high for a
+# different and openly accepted reason - nearest-neighbour blocks are 4 pixels
+# wide then 5, so features genuinely change width as they scroll. That is the
+# shimmer this repo's scaler exists to remove, not the artifact being measured.
+
+# Source pixels of scroll. A full cycle of the beat needs the denominator of the
+# scale - 160 frames at GBC geometry - so this samples the cycle rather than
+# completing it, which is enough to see the variation and cheap enough to gate.
+CRAWL_STEPS = 8
+
+
+def _fourier_shift(img, dx):
+    """Shift an image horizontally by a fractional number of pixels, exactly.
+
+    Exact for a periodic signal, which is what a wrapped scroll produces. An
+    interpolated shift would leave a residual of its own, and the residual IS
+    the measurement - so the compensation has to be the one step that
+    contributes nothing to it.
+    """
+    n = img.shape[1]
+    f = np.fft.fft(img, axis=1)
+    k = np.fft.fftfreq(n) * n
+    return np.real(np.fft.ifft(f * np.exp(-2j * np.pi * k * dx / n)[None, :],
+                               axis=1))
+
+
+def crawl_source(w, h, seed=7):
+    """Blocks with hard vertical edges, which is what a scrolling game has.
+
+    Not the checkerboard the other metrics use: at one pixel per square it is
+    its own Nyquist limit, so scrolling it one pixel replaces it with its own
+    complement rather than moving anything. Not noise either - noise carries
+    energy in the very band the artifact lives in.
+    """
+    rng = np.random.default_rng(seed)
+    src = np.zeros((h, w, 3), np.uint8)
+    for x0 in range(0, w, 8):
+        for y0 in range(0, h, 8):
+            src[y0:y0 + 8, x0:x0 + 8] = rng.integers(40, 240, 3)
+    return src
+
+
+def crawl_raw(ctx, progs, name, case, source=None, **override):
+    """Band-limited luma and chroma that the scroll changes, in levels.
+
+    Chroma is reported separately and is not a refinement: it is the larger of
+    the two here, and it is the half that averaging the channels destroys.
+    """
+    sw, sh, ow, oh = case
+    src = (source or crawl_source)(sw, sh)
+    frames = []
+    for s in range(CRAWL_STEPS):
+        img = c.render(ctx, progs, name, np.roll(src, s, axis=1), ow, oh,
+                       **override).astype(np.float64)
+        frames.append(np.stack([_fourier_shift(img[..., ch], -s * ow / sw)
+                                for ch in range(3)], axis=-1))
+    f = np.stack(frames)
+    # The sampler clamps at the edges, so the wrap the shift assumes is not true
+    # there. Drop an eighth from each side rather than let that dominate.
+    f = f[:, :, ow // 8:ow - ow // 8, :]
+    d = f - f.mean(axis=0, keepdims=True)
+
+    fx = np.abs(np.fft.fftfreq(d.shape[2]))
+    fy = np.abs(np.fft.fftfreq(oh))
+    band = _band(d.shape[2], oh, sw, sh,
+                 pattern_freq(name, sw, sh, ow, oh), fx, fy)
+
+    def energy(plane):
+        # forward normalisation, so a band sum is that band's variance
+        F = np.fft.fft2(plane, axes=(1, 2)) / plane[0].size
+        return float(np.sqrt((np.abs(F[:, band]) ** 2).sum(axis=1)).mean())
+
+    return energy(d.mean(axis=3)), max(energy(d[..., 0] - d[..., 1]),
+                                       energy(d[..., 2] - d[..., 1]))
+
+
+_CRAWL_FLOORS = {}
+
+
+def crawl_floor(ctx, progs, case, source=None):
+    """What the plain scaler alone leaves at this scale.
+
+    Content moving a non-integer number of output pixels cannot render
+    identically twice, so there is a floor here that no shader can go under and
+    that has nothing to do with the pattern painted on top.
+
+    The reference is the one baseline.toml declares, never a name written here:
+    hardcoding it is how a reference silently stops moving when the family does.
+    """
+    key = (case, (source or crawl_source).__name__)
+    if key not in _CRAWL_FLOORS:
+        _CRAWL_FLOORS[key] = crawl_raw(ctx, progs, c.SCALER_REFERENCE, case,
+                                       source)
+    return _CRAWL_FLOORS[key]
+
+
+def crawl(ctx, progs, name, case, source=None, **override):
+    """What the SHADER adds to the scroll, over what the scale makes unavoidable.
+
+    IN QUADRATURE, like moire(), and for the same reason: measured by sweeping
+    the pattern amplitude and asking which model leaves the shader's share
+    proportional to it, as it must be. At GBA geometry, chroma:
+
+        amplitude   0.20   0.40   0.60   0.80   1.00
+        linear/amp  1.601  1.641  1.885  2.161  2.868   ramps 1.8x
+        quad/amp    4.422  3.376  3.197  3.226  3.783   flat bar the ends
+
+    The lowest amplitude is dominated by the floor it is read against and the
+    highest is where the stripe correction stops being small; between them the
+    quadrature model holds to within 9%.
+    """
+    raw = crawl_raw(ctx, progs, name, case, source, **override)
+    floor = crawl_floor(ctx, progs, case, source)
+    return tuple(float(np.sqrt(max(r * r - f * f, 0.0)))
+                 for r, f in zip(raw, floor))
+
+
 # moire under curvature
 #
 # Measuring a curved render directly does not work, and the reason is worth
@@ -611,6 +767,28 @@ def run(names, report, ctx=None, progs=None, cases=None, verbose=False):
                 worst, worst_at = r, c.golden_key(case)
         report.check(worst <= c.MOIRE, f"{name} moire",
                      f"worst {worst:.3f} at {worst_at}")
+
+    for name in names:
+        param = c.colour_param(name)
+        if param is None:
+            continue
+        hi = c.parameters(name)[param][3]  # the top of its declared range
+        worst, worst_at, worst_luma = 0.0, "", 0.0
+        for case in c.CRAWL_CASES:
+            luma, chroma = crawl(ctx, progs, name, case, **{param: hi})
+            allowed = c.crawl_allowance(name, case)
+            if allowed is not None:
+                report.note(f"{name} {c.golden_key(case)}: crawl {chroma:.3f} "
+                            f"chroma, recorded exception at {allowed:.3f}")
+                if chroma > allowed + 0.05:
+                    worst, worst_at, worst_luma = (
+                        chroma, c.golden_key(case) + " (over its exception)",
+                        luma)
+            elif chroma > worst:
+                worst, worst_at, worst_luma = chroma, c.golden_key(case), luma
+        report.check(worst <= c.CRAWL, f"{name} crawl",
+                     f"worst {worst:.3f} chroma ({worst_luma:.3f} luma) at "
+                     f"{worst_at}, {param}={hi:g}")
 
     if verbose:
         for name in names:

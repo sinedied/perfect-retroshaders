@@ -59,6 +59,33 @@ scaler_reference = "pixel-perfect-v1.glsl"
 # carry the pattern, so it is the floor of what counts as signal.
 min_pitch = 3.0
 
+# Crawl: the low-frequency colour band a shader paints on when the picture
+# scrolls, in 8-bit levels, over what the scale factor makes unavoidable.
+#
+# Measured at each colour parameter's MAXIMUM, not its shipped default. A
+# guarded effect only shows its artifacts with it turned on, the same reason
+# perf.py has MAXED - and at 0.20 the stripes hid under the scaler's own floor
+# while still being visible to a person scrolling a game.
+#
+# 0.35 is a hair over what a corrected pattern leaves and far under the 1.6 the
+# uncorrected one reads, so it separates the two without sitting on either.
+crawl = 0.35
+
+# The cases crawl is measured on. NOT the full matrix: it renders a scroll
+# sequence, so it costs eight renders a case, and the artifact needs a
+# non-integer scale to exist at all.
+#
+# The first two are the geometry aspect scaling actually produces on the target
+# for GBA and GBC - 1024x682 and 853x768, not the 1024x768 the moire cases all
+# use. The third is an integer scale and must read zero: scrolling an exact 4x
+# moves the picture a whole number of output pixels, so nothing can change, and
+# a metric that reports otherwise is measuring itself.
+crawl_cases = [
+    [240, 160, 1024, 682],
+    [160, 144,  853, 768],
+    [256, 224, 1024, 768],
+]
+
 # 8-bit levels. Two GPU renders of the same arithmetic should be identical;
 # anything above 0 needs a mechanism, not a shrug.
 tolerance = 1
@@ -70,6 +97,18 @@ tolerance = 1
 # and the sheet looked fine.
 [settings.preview]
 cp_curvature = 0.10
+
+# The parameter that draws a shader's COLOUR pattern, per family. Crawl is
+# measured with this at its maximum, so it has to be named somewhere; keyed by
+# family rather than by filename, because listing versions by name is how the
+# preview overrides silently stopped applying the moment a v9 existed.
+#
+# A family with no entry has no colour pattern and is not measured for crawl.
+# dmg-perfect is deliberately absent: its grid is neutral, and it has a crawl of
+# its own from a different cause that nobody has looked at yet.
+[settings.colour]
+lcd-perfect = "lp_subpixels"
+crt-perfect = "cp_rgb_mask"
 
 # The device benchmark's one case. Everything tools/device measures runs at this
 # size: a 320x240 source into a 1024x768 output, which is the Brick's panel and
@@ -197,6 +236,18 @@ moire_allow = [
 [[shader]]
 name = "crt-perfect-v10.glsl"
 family = "crt-perfect"
+# CRAWL, RECORDED AND NOT YET FIXED. The RGB mask are multiplied on after the
+# scaler's blend, so at maximum visibility they paint a low-frequency colour
+# band that walks with a horizontal scroll - the defect the owner reported.
+# Measured against a limit of 0.35. It is a bug and not a limit of the design:
+# the same shader supersampled and averaged down, which is what it is trying to
+# approximate, reads 0.319 on the worst case. These allowances stop it getting
+# worse while the remaining error is worked out. See docs/lcd-perfect.md.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 1.134 },
+    { case = [160, 144, 853, 768], value = 0.745 }
+]
+
 role = ["current"]
 pattern = "output-locked"
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
@@ -227,10 +278,22 @@ family = "lcd-perfect"
 role = ["released"]
 
 [[shader]]
-name = "lcd-perfect-v6.glsl"
+name = "lcd-perfect-v7.glsl"
 family = "lcd-perfect"
-role = ["current"]
+role = ["archive"]
 pattern = "whole-cell"
+# CRAWL, RECORDED AND NOT YET FIXED. The RGB stripes are multiplied on after the
+# scaler's blend, so at maximum visibility they paint a low-frequency colour
+# band that walks with a horizontal scroll - the defect the owner reported.
+# Measured against a limit of 0.35. It is a bug and not a limit of the design:
+# the same shader supersampled and averaged down, which is what it is trying to
+# approximate, reads 0.319 on the worst case. These allowances stop it getting
+# worse while the remaining error is worked out. See docs/lcd-perfect.md.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 1.606 },
+    { case = [160, 144, 853, 768], value = 1.038 }
+]
+
 # Row/column balance ships at 0.60 rather than 0.50, leaning the mesh towards
 # columns. A column mesh shares its pitch with the RGB stripes, so the two
 # correlate and the beat rises with it: 0.365 at 0.50, 0.432 at 0.60, 0.620 at
@@ -245,6 +308,32 @@ neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1
 # content, where the two are indistinguishable.
 # v6 also moves gamma before the pattern, so it grades the picture without
 # deepening the grid. v5 applies it after.
+# v7 integrates the RGB stripes into the blend instead of multiplying them on
+# after it, which is what stopped them painting a colour band that walked with
+# the scroll. See docs/lcd-perfect.md.
+
+[[shader]]
+name = "lcd-perfect-v6.glsl"
+family = "lcd-perfect"
+role = ["current"]
+pattern = "whole-cell"
+# CRAWL, RECORDED AND NOT YET FIXED. The RGB stripes are multiplied on after the
+# scaler's blend, so at maximum visibility they paint a low-frequency colour
+# band that walks with a horizontal scroll - the defect the owner reported.
+# Measured against a limit of 0.35. It is a bug and not a limit of the design:
+# the same shader supersampled and averaged down, which is what it is trying to
+# approximate, reads 0.319 on the worst case. These allowances stop it getting
+# worse while the remaining error is worked out. See docs/lcd-perfect.md.
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 1.606 },
+    { case = [160, 144, 853, 768], value = 1.038 }
+]
+
+# Superseded by v7. Kept as the negative control for crawl: its RGB stripes are
+# multiplied on after the blend, so it reads 1.606 chroma at GBA geometry with
+# lp_subpixels at maximum, against a limit of 0.35.
+moire_allow = [{ case = [480, 272, 1024, 768], value = 0.432 }]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
 
 [[shader]]
 name = "lcd-perfect-v5.glsl"
@@ -942,6 +1031,18 @@ sampler = "linear"
 "320x240->640x480" = "66094074cae772a0"
 "480x272->1024x768" = "ac867203cbd29d99"
 "480x272->640x480" = "f3c3131b338766bd"
+
+[golden."lcd-perfect-v7.glsl"]
+"160x144->1024x768" = "13c20659362eb272"
+"240x160->1024x768" = "9a73c7c510fd5391"
+"256x192->1024x768" = "c4635443d4ceb0d5"
+"256x192->640x480" = "95c2ce9ecf9096c0"
+"256x224->1024x768" = "4f933bf80c27be23"
+"320x240->1024x768" = "3f1d079845a75899"
+"320x240->1280x720" = "02475ad215807e5d"
+"320x240->640x480" = "86c5ae12c92953d4"
+"480x272->1024x768" = "fdeb8a2a402b506f"
+"480x272->640x480" = "81ce998f71071b5a"
 
 [golden."lcd-perfect.glsl"]
 "160x144->1024x768" = "7320fd88c5ca9205"
