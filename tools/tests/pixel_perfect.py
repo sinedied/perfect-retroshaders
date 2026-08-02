@@ -18,7 +18,12 @@ BALANCE = """        col *= 1.0 + pp_temperature * vec3(1.0, 0.0, -1.0)
                    + pp_tint        * vec3(-0.5, 1.0, -0.5);
 
 """
-MIX = """        float ga = pp_brightness * pp_contrast;"""
+# Where the folded mix starts, matched by its opening rather than quoted whole:
+# the right-hand side changes with the version - v7 folds brightness into it,
+# v2 of the turbo line takes brightness out and gives it to the exponent - and
+# quoting it in full made this control assert its way out of the suite the first
+# time that happened.
+MIX_PREFIX = "        float ga = "
 # Where the folded mix ends. Anchoring the control here rather than on the
 # clamp keeps it working across versions: v6 clamped inside the grade guard,
 # v7 clamps once at the end, so the clamp line is not a stable landmark.
@@ -71,9 +76,11 @@ def run(names, ctx, progs, report, cases=None, family=FAMILY):
     # order is swapped in the source and compiled on the spot, which is the only
     # way to show the check is measuring the order and not something else.
     src_txt = c.read(CURRENT)
-    assert src_txt.count(BALANCE) == 1 and src_txt.count(MIX) == 1 \
-        and src_txt.count(END_OF_MIX) == 1, "the grade block moved; fix the control"
-    swapped = src_txt.replace(BALANCE + MIX, MIX)
+    mix = next((l for l in src_txt.split("\n") if l.startswith(MIX_PREFIX)), None)
+    assert mix is not None and src_txt.count(BALANCE) == 1 \
+        and src_txt.count(mix) == 1 and src_txt.count(END_OF_MIX) == 1, \
+        "the grade block moved; fix the control"
+    swapped = src_txt.replace(BALANCE + mix, mix)
     swapped = swapped.replace(END_OF_MIX,
                               END_OF_MIX + "\n\n" + BALANCE.rstrip())
     assert swapped != src_txt

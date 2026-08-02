@@ -60,6 +60,11 @@ FAMILY_TESTS = {
     "lcd-turbo": "tests.lcd_perfect",
     "pixel-turbo": "tests.pixel_perfect",
     "dmg-turbo": "tests.dmg_perfect",
+    # ... and the mini line, which draws the same patterns without the scaler.
+    "crt-mini": "tests.crt_perfect",
+    "lcd-mini": "tests.lcd_perfect",
+    "colour-mini": "tests.pixel_perfect",
+    "dmg-mini": "tests.dmg_perfect",
 }
 
 

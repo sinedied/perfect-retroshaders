@@ -97,6 +97,10 @@ def run(names, ctx, progs, report, cases=None):
         neutral = c.declared(name).get("neutral")
         if neutral is None or name == base:
             continue
+        # A shader that does no scaling has its own anchor below; comparing it
+        # to the plain scaler would only prove it is not one.
+        if c.declared(name).get("passthrough"):
+            continue
         worst, at = 0.0, ""
         for case in cases:
             sw, sh, ow, oh = case
@@ -108,6 +112,28 @@ def run(names, ctx, progs, report, cases=None):
                 worst, at = d, c.golden_key(case)
         report.check(worst <= c.TOLERANCE, f"{name} neutral is the plain scaler",
                      f"worst {worst:.0f}/255 at {at}")
+
+    # The mini line's anchor. These draw a panel and nothing else, so the thing
+    # to prove is that they are TRANSPARENT: sitting behind a scaler, at 1:1 and
+    # with every pattern off, the picture has to come through untouched.
+    #
+    # Checked at 1:1 rather than across the matrix on purpose. Standalone they
+    # are whatever their sampler does to an upscale, which is a property of the
+    # sampler and not of the shader; behind a scaler - which is what they are
+    # for - 1:1 is the only geometry they ever see.
+    for name in names:
+        if not c.declared(name).get("passthrough"):
+            continue
+        neutral = c.declared(name).get("neutral") or {}
+        worst, at = 0, ""
+        for sw, sh in ((320, 240), (256, 224), (480, 272)):
+            src = c.scene(sw, sh)
+            out = c.render(ctx, progs, name, src, sw, sh, **neutral)
+            d = int(np.abs(out.astype(int) - src.astype(int)).max())
+            if d > worst:
+                worst, at = d, f"{sw}x{sh}"
+        report.check(worst <= c.TOLERANCE, f"{name} neutral passes the picture through",
+                     f"worst {worst}/255 at {at}")
 
     # And the other end of the chain: the plain scaler against a third party.
     worst, at = 0.0, ""
