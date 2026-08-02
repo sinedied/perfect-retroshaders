@@ -183,7 +183,8 @@ no compiler or no SDL2.
 
 ## What the device said
 
-Raw output in `device-results.tsv`; the table is in the README.
+Raw output in `device-results.tsv`, which is the record; the README does not
+carry these numbers yet.
 
 | pipeline | ms | frame budget | vs pixellate | ops@def | SFU@def |
 |---|---:|---:|---:|---:|---:|
@@ -267,5 +268,7 @@ over SSH none of the frontend's environment exists and the binary would not find
 Then, back on the host:
 
 ```sh
-python tools/report.py results.tsv --write   # into README.md, between its markers
+# The README carries no device table yet. --write needs the marker pair
+# <!-- device-perf:begin --> / <!-- device-perf:end --> put back first.
+python tools/report.py results.tsv
 ```
