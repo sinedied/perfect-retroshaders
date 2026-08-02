@@ -1,0 +1,15 @@
+# 320x240 source into 1024x768 output, 16.6667 ms budget
+# renderer	PowerVR Rogue GE8300
+# version	OpenGL ES 3.2 build 1.19@6345021
+# method	slope of wall clock over two batch sizes, each sized to about 20 ms of work, median of 11 interleaved passes after 5 discarded
+# sensors	cpu 44515 mC, gpu 44515 mC, cpu clock 600000 kHz
+# ms is one whole frame: every pass plus the final blit.
+# frag_ms is the fragment shaders alone, with the render passes around them removed.
+pipeline	passes	ms	iqr_pct	budget_pct	relative_pct	frag_ms
+pixellate	1	12.3199	0.1	73.9	100.0	11.0783
+pixellate -> lcd3x	2	15.2123	0.6	91.3	81.0	14.0856
+pixel-perfect	1	6.7487	0.5	40.5	182.6	5.2852
+crt-perfect	1	15.9299	0.2	95.6	77.3	14.7739
+lcd-perfect	1	14.9994	0.1	90.0	82.1	13.6890
+dmg-perfect	1	14.6098	0.8	87.7	84.3	13.5017
+sharp-shimmerless	1	3.8255	0.9	23.0	322.0	2.1335

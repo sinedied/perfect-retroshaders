@@ -125,21 +125,30 @@ Four layers, deliberately:
   only that nothing moved since somebody last looked at it. A mismatch is a
   question, not a verdict.
 
-**Not covered: the device — but no longer unmeasurable.** Everything in the
-Python tools runs desktop GL 4.10 on an Apple GPU, and the two cost signals
-disagree on it. `crt-perfect` has less than half `pixellate`'s SFU (14 against
-30), 70% more ALU ops (501 against 292), and comes out slower — so on this GPU
-time tracks ops and SFU is not the bottleneck. Whether the device ranks them the
-other way round is now a question with an answer: `tools/device` runs on the
-Brick. Until its numbers are in, treat SFU as the device signal and timings as
-the desktop one, and assume neither predicts the other.
+**Now covered: the device.** `tools/device` runs on the Brick, and the answer to
+the question this section used to leave open is in `docs/device-perf.md` and the
+README table. Two things it settled:
+
+- **Time tracks ops, not SFU — on the device as well as the desktop.** Measured
+  at 1024x768: `sharp-shimmerless` 49 ops / 0 SFU / 3.8ms, `pixel-perfect` 112 /
+  0 / 6.7, `pixellate` 240 / **30** / 12.3, `dmg-perfect` 267 / 6 / 14.6,
+  `lcd-perfect` 334 / 17 / 15.0, `crt-perfect` 428 / 8 / 15.9. Monotonic in ops;
+  unrelated to SFU, since `pixellate` carries the most SFU of anything here and
+  still beats three shaders with far less. **This file previously said to treat
+  SFU as the device signal. That was a guess about a Mali, and it was wrong.**
+- **Desktop ratios did predict the device ordering**, and understated the
+  spread. Both rank the six the same way bar `lcd-perfect` and `crt-perfect`,
+  which are within 6% of each other on the device.
+
+`perf.py --static` is still the fast signal while iterating; read the `ops`
+column, and re-measure on the device before believing anything close.
 
 **The target GPU was misidentified here as a Mali G31 MP2** until it was
-checked. It is an Imagination PowerVR Rogue GE8300 on an Allwinner A133 Plus —
-NextUI's own `generic_video.c` says so where it disables vsync (`// No effect on
-Ge8300`), and 68 driver dumps agree. It matters: the two architectures differ on
-overdraw removal and on whether GPU timer queries exist at all. See
-`docs/device-perf.md`.
+checked. It is an Imagination PowerVR Rogue GE8300 on an Allwinner A133 Plus,
+now confirmed by the device itself: `GL_RENDERER: PowerVR Rogue GE8300`,
+`OpenGL ES 3.2 build 1.19@6345021`. It matters — that architecture removes
+opaque overdraw entirely (measured: 0.019ms against 10.3ms for the same draw
+blended) and exposes no GPU timer query at all. See `docs/device-perf.md`.
 
 **Perf is not a gate**, deliberately: GPU timing moves a few percent with laptop
 thermals, so it would fail for reasons that have nothing to do with the shader.

@@ -553,50 +553,18 @@ static int self_test(Bench *b, Case *cases, int n_cases, Case *floor_case)
     calibrate(b, ref);
     calibrate(b, floor_case);
 
-    // 1. Hidden surface removal. This GPU is documented as removing overdraw
-    //    entirely for opaque renders, which would make every repeat free and
-    //    every number here fiction. Blending is what stops it.
-    //
-    //    The quad counts scale with the calibrated batch size, so the largest
-    //    does about as much work as a timed batch. A fixed count measured the
-    //    barrier instead, and read every draw as free.
-    double counts[5];
-    for (int i = 0; i < 5; i++) {
-        counts[i] = (double)(ref->n_hi * (i + 1)) / 5.0;
-        if (counts[i] < 2.0)
-            counts[i] = 2.0;
-    }
-    double opaque[5], blended[5];
-    series_overdraw(b, &ref->p, 0, counts, 5, 0, opaque, 9);
-    series_overdraw(b, &ref->p, 0, counts, 5, 1, blended, 9);
-    double s_opaque = fit_slope(counts, opaque, 5);
-    double s_blended = fit_slope(counts, blended, 5);
-    int hsr_active = s_opaque < s_blended * 0.5;
-    printf("       %-34s", "quads");
-    for (int i = 0; i < 5; i++)
-        printf(" %8.0f", counts[i]);
-    printf("\n       %-34s", "opaque ms");
-    for (int i = 0; i < 5; i++)
-        printf(" %8.3f", opaque[i]);
-    printf("\n       %-34s", "blended ms");
-    for (int i = 0; i < 5; i++)
-        printf(" %8.3f", blended[i]);
-    printf("\n");
-    failures += report(s_blended > 0.0, "blended overdraw is not free",
-                       "%.4f ms per extra quad", s_blended);
-    printf("       %-34s %.4f ms per extra quad%s\n", "opaque overdraw",
-           s_opaque, hsr_active ? "  <- removed, as the vendor documents"
-                                : "");
-
-    // 2. Linearity of the measured quantity. If the driver were dropping whole
-    //    repeats, batch time would stop growing with batch size and the slope
-    //    would be measuring nothing.
+    // 1. Linearity, and what one whole render costs. This has to come first,
+    //    because it is the reference every later check is read against: an
+    //    absolute figure proves nothing on its own, but it says what the other
+    //    probes OUGHT to be measuring. If the driver were dropping whole
+    //    repeats, batch time would stop growing with batch size.
     double sizes[5];
     for (int i = 0; i < 5; i++)
         sizes[i] = (double)(ref->n_hi * (i + 1)) / 5.0;
     double times[5];
     series_batch(b, &ref->p, sizes, 5, times, 9);
     double r2 = fit_r2(sizes, times, 5);
+    double per_render = fit_slope(sizes, times, 5);
     printf("       %-34s", "batch");
     for (int i = 0; i < 5; i++)
         printf(" %8.0f", sizes[i]);
@@ -609,10 +577,9 @@ static int self_test(Bench *b, Case *cases, int n_cases, Case *floor_case)
     // enough to fail on ordinary clock wobble would be a threshold that fails
     // for reasons that have nothing to do with the question.
     failures += report(r2 >= 0.98, "batch time is linear in batch size",
-                       "r2 = %.4f, slope %.4f ms", r2,
-                       fit_slope(sizes, times, 5));
+                       "r2 = %.4f, %.4f ms per render", r2, per_render);
 
-    // 3. The floor. A pipeline with no shader pass still blits to the screen,
+    // 2. The floor. A pipeline with no shader pass still blits to the screen,
     //    so its cost is what filling the output costs before any shader. A
     //    floor of zero means the final pass is being elided across repeats and
     //    every figure is missing it.
@@ -620,6 +587,48 @@ static int self_test(Bench *b, Case *cases, int n_cases, Case *floor_case)
                                   floor_case->n_lo, floor_case->n_hi, 9);
     failures += report(floor_ms > 0.0, "final blit is not elided",
                        "%.4f ms with no shader pass", floor_ms);
+
+    // 3. Hidden surface removal. This GPU removes overdraw entirely for opaque
+    //    renders, so a repeated draw can cost nothing while looking healthy,
+    //    and any figure built on repeats would be fiction. Blending is what
+    //    stops it.
+    //
+    //    MEASURED AGAINST WHAT A QUAD SHOULD COST, not against zero. The
+    //    reference pipeline is one shader pass plus the final blit, so one more
+    //    quad of that shader is about (per_render - floor). Asserting only that
+    //    the slope is positive is not a test: on the device it passed at 0.016
+    //    ms per quad against an expected 11.9, because 7 of every 8 draws had
+    //    been removed and the eighth had not.
+    double counts[5];
+    for (int i = 0; i < 5; i++) {
+        counts[i] = (double)(ref->n_hi * (i + 1)) / 5.0;
+        if (counts[i] < 2.0)
+            counts[i] = 2.0;
+    }
+    double opaque[5], blended[5];
+    series_overdraw(b, &ref->p, 0, counts, 5, 0, opaque, 7);
+    series_overdraw(b, &ref->p, 0, counts, 5, 1, blended, 7);
+    double s_opaque = fit_slope(counts, opaque, 5);
+    double s_blended = fit_slope(counts, blended, 5);
+    double expect = per_render - floor_ms;
+    printf("       %-34s", "quads");
+    for (int i = 0; i < 5; i++)
+        printf(" %8.0f", counts[i]);
+    printf("\n       %-34s", "opaque ms");
+    for (int i = 0; i < 5; i++)
+        printf(" %8.3f", opaque[i]);
+    printf("\n       %-34s", "blended ms");
+    for (int i = 0; i < 5; i++)
+        printf(" %8.3f", blended[i]);
+    printf("\n");
+    failures += report(expect > 0.0 && s_blended > expect * 0.5,
+                       "a blended repeat costs what it should",
+                       "%.4f ms per quad, against %.4f expected",
+                       s_blended, expect);
+    printf("       %-34s %.4f ms per quad%s\n", "opaque repeat",
+           s_opaque,
+           (expect > 0.0 && s_opaque < expect * 0.5)
+           ? "   <- removed, as the vendor documents" : "");
 
     // 4. Repeatability. The two runs are INTERLEAVED, not run one after the
     //    other: measured in sequence, the whole of any clock drift lands on
@@ -638,20 +647,19 @@ static int self_test(Bench *b, Case *cases, int n_cases, Case *floor_case)
          "%+.1f%% between them", drift);
 
     // 5. Direction. sharp-shimmerless takes one tap and no transcendental, so
-    //    it cannot be the expensive one. Compared by FRAGMENT cost, because
-    //    per frame the render pass around a cheap shader can cost more than
-    //    the shader and two different shaders then read the same.
+    //    it cannot be the expensive one. Read per frame, which is the column
+    //    the table publishes.
     Case *cheapest = NULL;
     for (int i = 0; i < n_cases; i++)
         if (strstr(cases[i].p.label, "shimmerless"))
             cheapest = &cases[i];
     if (cheapest) {
         calibrate(b, cheapest);
-        double one_tap = overdraw_slope(b, &cheapest->p, counts, 5, 9);
-        double four_tap = overdraw_slope(b, &ref->p, counts, 5, 9);
-        failures += report(one_tap <= four_tap * 1.05,
+        double one_tap = robust_slope(b, &cheapest->p, cheapest->n_lo,
+                                      cheapest->n_hi, 9);
+        failures += report(one_tap <= per_render * 1.05,
                            "the one-tap shader is the cheaper",
-                           "%.4f vs %.4f ms per quad", one_tap, four_tap);
+                           "%.4f vs %.4f ms per frame", one_tap, per_render);
     }
 
     read_sensors(&t1c, &t1g, &f1);

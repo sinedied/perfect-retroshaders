@@ -55,17 +55,23 @@ def table(meta, rows):
     """
     out = []
     renderer = meta.get("renderer", "unknown GPU")
-    out.append(f"| Pipeline | Perf. | GPU ms | Frame budget |")
-    out.append(f"| --- | ---: | ---: | ---: |")
-    for r in rows:
+    out.append("| Pipeline | Perf. | GPU ms | Frame budget |")
+    out.append("| --- | ---: | ---: | ---: |")
+    for i, r in enumerate(rows):
         passes = int(r["passes"])
-        label = f"{passes} pass{'es' if passes != 1 else ''} · {r['pipeline']}"
+        name = r["pipeline"].replace("->", "→")
+        label = f"{passes} pass{'es' if passes != 1 else ''} · {name}"
+        if i == 0:
+            label += " *(reference)*"
         out.append(f"| {label} | {float(r['relative_pct']):.0f}% "
-                   f"| {float(r['ms']):.2f} ms "
+                   f"| {float(r['ms']):.1f} ms "
                    f"| {float(r['budget_pct']):.0f}% |")
     out.append("")
-    out.append(f"_{renderer}, 320×240 into 1024×768. Frame budget is the share "
-               f"of one 60fps frame (16.67 ms) the pipeline uses._")
+    out.append(f"_{renderer}, 320×240 into 1024×768, every pipeline filling the "
+               f"full screen. **Perf.** is against the reference, so higher is "
+               f"cheaper. **Frame budget** is the share of one 60fps frame "
+               f"(16.67 ms) the pipeline uses, leaving the rest for the "
+               f"emulator._")
     return "\n".join(out)
 
 
