@@ -102,25 +102,28 @@ They overlap: the balance and the affine live in the same guarded block, so the
 whole grade is 29 ops, not 44. At the shipped defaults the guard is false and
 the grade folds away entirely — 53 ops, 0 SFU.
 
-**Brightness changed in v2**, from a gain-and-clamp to a midtone push folded
-into the gamma exponent, so the control means the same thing in all four turbo
-shaders:
+**Brightness went out and came back.** v2 folded it into the gamma exponent and
+described that as pushing the midtones; `pow(c, g/b)` divides the exponent
+`pow(c, g)` divides, so it was gamma under a second name. v3 restores
+`pixel-perfect`'s form exactly:
 
 ```glsl
-if (abs(pp_gamma - 1.0) > 0.001 || abs(pp_brightness - 1.0) > 0.001)
-    col = pow(max(col, 1e-8), vec3(pp_gamma / max(pp_brightness, 1e-3)));
+float ga = pp_brightness * pp_contrast;
 ```
 
-The guard is on the two parameters separately, not on their ratio. `max()` of
-two literals does not constant-fold in `spirv-opt`, so a guard reading
-`abs(gamma / max(brightness, 1e-3) - 1.0) > 0.001` kept the `pow` in the shader
-at settings where it does nothing — 68 ops at the defaults instead of 53.
+inside the folded affine, with the plain guarded `pow(col, pp_gamma)` after it.
 
-`pp_brightness` ships at 1.00, so the moiré exception in `docs/optimized.md`
-does not apply to `pixel-turbo` at its defaults: 0.044 against a limit of 0.40.
-With everything on, gamma at 1.40 takes it to 5.784 — and `pixel-perfect` reads
-5.788 on the same setting, so that is the released line's behaviour, not a
-regression.
+**This shader therefore needs no exception at all.** Moiré at the shipped
+defaults is 0.044 against a limit of 0.40, and `pixel-turbo` is now
+`pixel-perfect`'s grading exactly — within 1/255 at *every* setting rather than
+only at brightness 1.00. With everything on, gamma at 1.40 takes it to 5.784,
+and `pixel-perfect` reads 5.788 on the same setting, so that is the released
+line's behaviour and not a regression.
+
+The affine is what makes this safe: a gain and an offset commute with the
+blend, so grading after the scaler is legal where a curve is not. It is the
+`clamp()` at the very end that can beat, and only when the gain drives content
+past 1.
 
 If you raise brightness or gamma and the scale is not an integer, the clean
 place to do it is `colour-mini` at source resolution in front of this shader.

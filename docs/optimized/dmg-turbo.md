@@ -87,25 +87,28 @@ Per-effect cost, each measured on its own over the plain scaler:
 The shadow is the only expensive effect and the only thing still needing a
 second tap. It is off by default, so the shipped configuration is 168 ops.
 
-## Brightness, in v2
+## Brightness, in v3
 
-`dp_brightness` now rides the gamma exponent, as it does in the other three
-turbo shaders, so the control means the same thing everywhere:
+`dp_brightness` is folded into the balance factor, exactly as the released
+shader does it:
 
 ```glsl
-if (abs(dp_gamma - 1.0) > 0.001 || abs(dp_brightness - 1.0) > 0.001)
-    col = pow(max(col, 1e-8), vec3(dp_gamma / max(dp_brightness, 1e-3)));
+vec3 grade = (1.0 + dp_temperature * vec3(1.0, 0.0, -1.0)
+                  + dp_tint        * vec3(-0.5, 1.0, -0.5)) * dp_brightness;
 ```
 
-**At the shipped defaults `dmg-turbo-v2` is byte-identical to v1** on every case
-in the matrix — `dp_brightness` ships at 1.00, so nothing moved. The difference
-only appears when the control is used, and there it lifts the midtones instead
-of shallowing the dot pattern.
+Applied to `area` but **not to `DMG_SUBSTRATE`**, so brightening lifts the dots
+toward a fixed paper and softens the grid rather than washing the panel out.
+That is the one place in either line where the released design already had the
+right answer and neither v2 nor v3 needed to move it.
 
-`dp_gamma` ships at 1.20, so this shader already had a `pow` after the blend and
-already carried the exceptions for it. Raising brightness makes that exponent
-further from 1 and the beat proportionally larger; the numbers and the two-pass
-route that avoids it are in `docs/optimized.md`.
+**At the shipped defaults `dmg-turbo-v3` is byte-identical to v1 and v2** on
+every case in the matrix — `dp_brightness` ships at 1.00, so nothing acts. The
+v2 experiment of folding it into the gamma exponent is gone; it was gamma under
+a second name.
+
+`dp_gamma` ships at 1.20, so this shader already has a `pow` after the blend and
+already carries the exceptions for it. Those are unchanged.
 
 ## The measurement trap this hit
 

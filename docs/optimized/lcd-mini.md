@@ -1,7 +1,7 @@
 # lcd-mini
 
 `lcd-turbo` with the scaler removed: the mesh, the RGB stripes and the cast
-correction, at 1:1. **218 ops and 1 tap** against `lcd-turbo`'s 284; predicted
+correction, at 1:1. **220 ops and 1 tap** against `lcd-turbo`'s 286; predicted
 device cost 8.7 ms, 52% of a frame against 64%.
 
 Read `docs/optimized/mini.md` first for the contract every mini shares.
@@ -19,8 +19,8 @@ area blend leaves the correlation in the picture as a beat:
 | aperture-weighted | 0.118 |
 
 That machinery — `Alo`, `AB` and the boundary sine that positions them — is 70
-of `lcd-turbo`'s 190 floor ops. **`lcd-mini` has no blend to weight, so all of
-it goes: a 120-op floor against 190.**
+of `lcd-turbo`'s 192 floor ops. **`lcd-mini` has no blend to weight, so all of
+it goes: a 122-op floor against 192.**
 
 Every other mini saves less, because what they drop is the scale itself rather
 than something the scale forced on them: `crt-mini` saves 37 ops, `dmg-mini` 20,
@@ -30,7 +30,7 @@ than something the scale forced on them: `crt-mini` saves 37 ops, `dmg-mini` 20,
 
 | stage | ops | SFU | share of the shader with everything on |
 |---|---:|---:|---:|
-| one tap at 1:1 + pitch and band-limit setup | 120 | 7 | 55% |
+| one tap at 1:1 + pitch and band-limit setup | 122 | 7 | 54% |
 | RGB stripes + cast correction | 86 | 6 | 40% |
 | mesh | 7 | 0 | 3% |
 | brightness · gamma | 6 | 6 | 3% |
@@ -65,21 +65,21 @@ carries no moiré exception at all, for 2 points over `lcd-turbo`. See
 
 | | worst over the matrix |
 |---|---:|
-| moiré, defaults | 0.406 |
-| moiré, everything on | 0.990 |
-| crawl, defaults | 0.714 |
-| crawl, everything on | 2.944 |
+| moiré, defaults | 1.062 |
+| moiré, everything on | 1.427 |
+| crawl, defaults | 0.646 |
+| crawl, everything on | 2.993 |
 
-**Lower than `lcd-turbo` at defaults on both** (1.860 and 0.872), and the reason
+**Lower than `lcd-turbo` at defaults on both** (3.400 and 0.879), and the reason
 is the missing scaler rather than anything this shader does better: a bilinear
-upscale is smooth, so there is less structure for the brightness curve to beat
-against. One exception is recorded, 0.406 at 480x272 → 1024x768.
+upscale is smooth, so there is less structure for the brightness clip to beat
+against. Six exceptions are recorded, the largest 1.062.
 
 The stripe crawl at full depth is `lcd-perfect`'s own inherited figure — the
 stripe's aperture error, which `lcd-perfect-v7` fixed at +40% ops and was
 rejected for. Nothing here made it worse.
 
-Against `lcd-perfect-v8` the difference is large (104/255 at brightness 1.00),
+Against `lcd-perfect-v9a` the difference is large,
 and that number means nothing: it is a shader with a box scaler being compared
 to one without. The comparison that matters is `pixel-turbo → lcd-mini` against
 `lcd-turbo`, and that is a device measurement, not a harness one.

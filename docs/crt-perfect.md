@@ -346,3 +346,45 @@ shader exactly. From v12 that holds only at **neutral brightness**: above 1.0 v1
 deliberately differs from every earlier version everywhere, curvature or not,
 because the brightness path changed. The comparison now pins brightness to 1.0,
 where the two are the same arithmetic and the claim still means what it meant.
+
+## v13: the per-tap clamp was better on every number and wrong in use
+
+v12 clamps brightness on each tap, where the clamp is per source pixel and so
+cannot vary with coverage. It is strictly the best of the three formulations
+this repository has tried, and flat in brightness on both metrics:
+
+| form | crawl @1.25 | crawl @2.0 | moiré @1.25 | moiré @2.0 |
+|---|---:|---:|---:|---:|
+| v10, gain on the pattern, one end clamp | 0.295 | **1.496** | 0.466 | 7.347 |
+| v12, gain per tap, clamped there | 0.094 | 0.077 | 0.494 | 0.494 |
+
+**It was still reported as unusable**, and the mechanism is plain once looked
+for. `sb = pow(brightness, 0.5/gamma)` scales each tap and clamps it *before*
+the mask and scanlines are applied. At 1.25 every tap above 0.89 becomes flat
+white and its structure is gone; the pattern then darkens an already-flat
+highlight. The slider bleaches the picture instead of brightening it, and no
+metric here can see that because a bleached frame has no beat and no crawl.
+
+v10 multiplies brightness into the pattern gain and clamps **once, at the very
+end, on the product**, so a highlight keeps its detail until the product itself
+exceeds 1. v13 is v12 with that restored:
+
+```glsl
+vec3 gain = sqrt(max(mask * (scan * cp_brightness), 0.0));
+FragColor  = vec4(clamp(color * gain * tube, 0.0, 1.0), 1.0);
+```
+
+Gamma stays **before** the pattern, which is where v10 has it — v11 was the only
+version that put it after, and v12 had already moved it back.
+
+**v13 measures exactly like the release**: 428 ops against v12's 449, moiré
+0.334 worst, and the same two exceptions the shipped shader carries. The 21 ops
+the per-tap clamp cost are gone with it.
+
+The crawl comes back, and that is the price: 1.496 at brightness 2.00 against
+v12's 0.077. At the shipped 1.25 it is 0.295, inside the 0.35 limit. The header
+now says so — brightness above 1.00 clips, and a clip beats unless the output is
+a whole multiple of the source.
+
+**v12 stays archived as the negative control** for the crawl property, and as
+the record that the best-measuring answer was not the right one.

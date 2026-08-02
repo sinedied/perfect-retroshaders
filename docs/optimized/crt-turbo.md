@@ -1,8 +1,8 @@
 # crt-turbo
 
-From `crt-perfect-v12`, the latest iteration. 449 ops and 4 taps become **301
+From `crt-perfect-v13`, the latest iteration. 428 ops and 4 taps become **303
 ops and 1 tap** at the shipped defaults; predicted device cost 15.9 ms →
-11.2 ms, 96% of a frame to 67%.
+11.3 ms, 96% of a frame to 68%.
 
 Same eight parameters as `crt-perfect`, same defaults, same picture: at
 brightness 1.00 the two differ by at most **1/255** over the whole case matrix.
@@ -49,9 +49,8 @@ so the box average stays exact under a varying local magnification.
 `clamp(uv/e, 0, 1) * clamp((1-uv)/e, 0, 1)` where `e` is one output pixel, in
 place of `smoothstep(0, e, uv) * smoothstep(0, e, 1-uv)`. At one pixel wide the
 two are indistinguishable, and the tube outline is identical: measured on a flat
-white source at 320x240 → 1024x768, `crt-perfect-v12`, `crt-turbo-v2` and
-`crt-mini-v2` all place the image edge at the same pixel on every probe row and
-column.
+white source at 320x240 → 1024x768, `crt-perfect`, `crt-turbo` and `crt-mini`
+all place the image edge at the same pixel on every probe row and column.
 
 Curvature also forces `noWarp = 0`, which switches off the source-lock term.
 That is `crt-perfect`'s design and is kept: the pattern pitch is still computed
@@ -61,35 +60,44 @@ from the *flat* geometry, which is what keeps `boxSinc`'s `sin` and
 
 ## Brightness
 
-v1 shallowed the pattern. v2 pushes the midtones, folded into the gamma
-exponent, because "brightness" should brighten the picture rather than fade the
-effect:
+v1 shallowed the pattern, which made the control fade the effect. v2 folded it
+into the gamma exponent and called that "pushing the midtones" — but
+`pow(c, g/b)` divides the exponent `pow(c, g)` divides, so that was gamma with a
+second name and not a brightness control at all.
+
+v3 is the released shader's form: a plain gain on the content, clamped, before
+the pattern.
 
 ```glsl
-if (abs(cp_gamma - 1.0) > 0.001 || abs(cp_brightness - 1.0) > 0.001)
-    color = pow(max(color, 1e-8), vec3(cp_gamma / max(cp_brightness, 1e-3)));
+if (cp_brightness != 1.0)
+    color = min(color * cp_brightness, 1.0);
 ```
 
-Applied to the blended colour, which is a non-linearity after the blend and
-therefore beats. `cp_brightness` ships at **1.25**, so the exception is live at
-the default: moiré 4.169 at 480x272 → 640x480 against a limit of 0.40, where
-`crt-perfect-v12` reads 0.494.
+The clamp is a non-linearity after the blend, and with one tap there is no
+per-source-pixel clamp to use instead. `cp_brightness` ships at **1.25**, so the
+exception is live at the default: moiré **7.256** at 480x272 → 640x480 against
+a limit of 0.40, where `crt-perfect-v13` reads 0.466. Worse than v2's 4.169,
+which is the honest reading — a clip has a harder edge than a curve, so more of
+its energy lands in the beat band.
 
-That number is the synthetic worst case — the metric renders a 1px checkerboard.
-On the 18 real screenshots in `retroshader-lab/public/samples` the same artifact
-is **1.50 levels RMS, p99 of 7, and exactly 0 at an integer scale**. The full
-evidence, and the two-pass assembly that removes it for 1 point of frame time,
-are in `docs/optimized.md`.
+Two things bound it. The metric renders a 1px checkerboard, maximum energy at
+the source pixel grid, which no game reaches; and the whole effect **vanishes at
+an integer scale**, because every output pixel then has full coverage. The full
+evidence, and the source-resolution `colour-mini` pass that removes it for 1
+point of frame time, are in `docs/optimized.md`.
 
-Crawl is unaffected: 0.962 at the defaults against `crt-perfect-v12`'s 1.111.
-The curve is a fixed function of the blended value, so it scrolls with the
-picture instead of sitting on the screen.
+Crawl at the defaults is 1.001, against `crt-perfect`'s 0.295 on the same
+control — the one-tap scale has no per-tap clamp to fall back on, so the clip
+is the only bound and it moves with coverage.
+
+**It cost 2 ops and saved 6 SFU.** The guarded `pow` is gone at gamma 1.00,
+where v2's fused exponent kept it alive whenever brightness moved.
 
 ## Where the cost actually is
 
 | stage | ops | % of the effects budget |
 |---|---:|---:|
-| one LINEAR tap + pitch and band-limit setup | 289 | — *(the floor)* |
+| one LINEAR tap + pitch and band-limit setup | 291 | — *(the floor)* |
 | curvature | 73 | 70% |
 | slot mask, when selected | 22 | 21% |
 | brightness · gamma | 6 | 6% |
@@ -101,7 +109,7 @@ decides where to put them and how hard to band-limit them: `scanPitch`,
 `scanLocked`, `maskPitch`, `maskLocked`, two `nyquistFade` smoothsteps and two
 `boxSinc` calls, all of which sit outside the guards and run whether the
 patterns are on or off. The scale alone is 53 ops, so that machinery is roughly
-236.
+238.
 
 It is uniform-derived, and the obvious response is to hoist it. Measured, that
 is worth much less than it looks: pinning `OutputSize`, `TextureSize` and

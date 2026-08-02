@@ -202,6 +202,39 @@ legitimate picture, reading 10 to 78 before a shader touches it. The artifact
 has to be isolated by differencing against the correct construction, never read
 off the shaded frame.
 
+### Two shaders that look different can differ only in phase
+
+Reported from a device: this repository's LCD mesh looks offset against `lcd1x`
+and does not read as an exact grid. Both are sinusoids of period one source
+pixel, and the whole difference is where the trough lands.
+
+| flat white, integer ×4, % of own peak | px 0 | px 1 | px 2 | px 3 |
+|---|---:|---:|---:|---:|
+| `lcd1x`, trough on the source-pixel boundary | **70** | 100 | 100 | **70** |
+| `lcd-perfect`, trough half an output pixel in | **73** | 89 | 100 | 89 |
+
+`lcd1x` puts two samples either side of the trough and never reaches deeper than
+cos(45°) = 0.707 of the sinusoid; `lcd-perfect` lands one sample exactly on it.
+So `lcd1x` is the *deeper* pattern of the two (60% against 71% of peak on real
+geometry) and still reads as the cleaner grid, because two of its four samples
+sit near the flat top.
+
+Two things generalise:
+
+- **"Looks weaker" is not "is weaker".** Peak-to-trough said the opposite of
+  what the eye said. What the eye was reading was how many samples per cycle sit
+  near the peak, which is a sampling property, not an amplitude one.
+- **A sample-phase result at one scale is not a result.** At a non-integer scale
+  the phase drifts cycle to cycle: the same shader reads `73 88 100 94` in one
+  cycle and `78 77 97 99` three cycles later. Any claim about "how many pixels
+  are dark" has to name the scale, and at a non-integer one there is no fixed
+  answer.
+
+The underlying limit is worth stating once: **a sinusoid is below its peak for
+three quarters of its cycle at any phase**, so no phase makes one draw a thin
+line. A defined line needs a different waveform - an aperture with a duty cycle.
+See `docs/lcd-perfect.md`.
+
 ## Assumptions this session got wrong
 
 Do not re-derive these.

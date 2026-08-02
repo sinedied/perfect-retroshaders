@@ -1,8 +1,8 @@
 # crt-mini
 
 `crt-turbo` with the scaler removed: scanlines, the RGB mask, curvature and the
-slot grille, at 1:1. **264 ops and 1 tap** against `crt-turbo`'s 301; predicted
-device cost 10.1 ms, 60% of a frame against 67%.
+slot grille, at 1:1. **266 ops and 1 tap** against `crt-turbo`'s 303; predicted
+device cost 10.1 ms, 61% of a frame against 68%.
 
 Read `docs/optimized/mini.md` first for the contract every mini shares.
 
@@ -12,9 +12,9 @@ Read `docs/optimized/mini.md` first for the contract every mini shares.
 
 | | `crt-turbo` | `crt-mini` |
 |---|---:|---:|
-| floor, patterns neutral | 289 | 252 |
+| floor, patterns neutral | 291 | 254 |
 | one LINEAR tap, box-weighted | 53 | — |
-| pitch, lock, `nyquistFade`, `boxSinc` | ~236 | ~232 |
+| pitch, lock, `nyquistFade`, `boxSinc` | ~238 | ~234 |
 
 The band-limit machinery has to run either way: it is what decides how hard to
 fade the scanlines and the mask as their pitch approaches Nyquist, and that
@@ -22,7 +22,7 @@ depends on the output geometry, not on who did the scaling. Removing the scaler
 removes the scaler and nothing else.
 
 So `crt-mini` is for composition, not for speed. `pixel-turbo → crt-mini` is 74%
-of a frame against `crt-turbo`'s 67% — **the chain is the more expensive way to
+of a frame against `crt-turbo`'s 68% — **the chain is the more expensive way to
 get the same picture**, and it exists so a user can put a different scaler,
 no scaler, or a source-resolution colour pass into the same pipeline.
 
@@ -43,8 +43,8 @@ The rest is identical, including the two things worth not losing:
   `crt-perfect` records 16.5% of frame time lost the one time that stopped being
   true.
 
-**The tube outline is identical to `crt-perfect-v12`.** Measured on a flat white
-source at 320x240 → 1024x768, `crt-perfect-v12`, `crt-turbo-v2` and `crt-mini-v2`
+**The tube outline is identical to the released shader.** Measured on a flat
+white source at 320x240 → 1024x768, `crt-perfect`, `crt-turbo` and `crt-mini`
 place the image edge at the same pixel on every probe row and column — x 27..996
 and y 20..747 at the 8% and 92% lines, edge to edge at the centres.
 
@@ -56,7 +56,7 @@ Curvature is free when off, and the corner mask with it: 0 ops at
 
 | stage | ops | share of the shader with everything on |
 |---|---:|---:|
-| one tap at 1:1 + pitch and band-limit setup | 252 | 73% |
+| one tap at 1:1 + pitch and band-limit setup | 254 | 72% |
 | curvature | 61 | 18% |
 | slot mask, when selected | 22 | 6% |
 | brightness · gamma | 6 | 2% |
@@ -72,22 +72,22 @@ equally.
 
 | | worst over the matrix |
 |---|---:|
-| moiré, defaults | 0.977 |
-| moiré, everything on | *18.617* |
-| crawl, defaults | 0.814 |
-| crawl, everything on | 4.235 |
+| moiré, defaults | 1.275 |
+| moiré, everything on | *23.228* |
+| crawl, defaults | 0.724 |
+| crawl, everything on | 4.437 |
 
-**0.977 against `crt-turbo`'s 4.169**, and the difference is the missing box
+**1.275 against `crt-turbo`'s 7.256**, and the difference is the missing box
 blend rather than anything this shader does better: a bilinear upscale is smooth,
-so the brightness curve — which ships at 1.25 and is a non-linearity after the
-blend — has much less structure to beat against. Two exceptions are recorded,
-0.460 and 0.977.
+so the brightness clip — which ships at 1.25 and is a non-linearity after the
+blend — has much less structure to beat against. Eight exceptions are recorded,
+the largest 1.275.
 
-*The 18.617 is a measurement artifact, not a defect.* "Everything on" includes
+*The 23.228 is a measurement artifact, not a defect.* "Everything on" includes
 curvature at 0.15, and `docs/measurement.md` records that a row-mean metric is
-invalid on a warped image. `crt-perfect-v12` reads 32.216 on the same row.
+invalid on a warped image. `crt-perfect` reads 32.216 on the same row.
 
-Against `crt-perfect-v12` the difference is 120/255 at brightness 1.00, and that
+Against `crt-perfect-v13` the difference is large at brightness 1.00, and that
 number means nothing: it is a shader with a box scaler being compared to one
 without. The comparison that matters is `pixel-turbo → crt-mini` against
 `crt-turbo`, and that is a device measurement, not a harness one.

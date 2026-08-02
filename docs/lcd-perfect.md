@@ -382,3 +382,112 @@ And it is not only a loss. Under v6 a bright area clips to flat white and the
 grid vanishes with it; under v8 the content clips at the source and the pattern
 is applied afterwards, so **the LCD structure survives in highlights** instead of
 being washed out. That is visible in a still, not just in a number.
+
+## v9: brightness back, and three answers to "why is the grid not a grid"
+
+### The brightness half, as in crt-perfect-v13
+
+v8 clamps brightness on each tap, which is flat on every metric and is the best
+formulation this repository has tried:
+
+| form | crawl @1.25 | crawl @2.0 | moiré @1.25 | moiré @2.0 |
+|---|---:|---:|---:|---:|
+| v6, gain on the pattern, one end clamp | 0.222 | **0.541** | 0.432 | 3.291 |
+| v8, gain per tap, clamped there | 0.065 | 0.062 | 0.158 | 0.158 |
+
+It was still reported as the slider washing the picture out, and the mechanism
+is the same one written up in `docs/crt-perfect.md`: the per-tap clamp lands on
+the *content*, before the mesh and stripes, so every highlight above
+`1/brightness` flattens to white and the pattern can no longer shape it.
+
+All three v9 arms put v6's form back — `m = sqrt(stripe * (gain * lp_brightness))`
+with the single clamp at the end — while **keeping v8's peak-normalised RGB
+stripe**, which was the other half of that commit and is not in question.
+
+### The grid half: it is phase, and phase cannot fix it
+
+Reported from the device: against `lcd1x` at an integer scale the mesh looks
+offset, and does not read as an exact grid. It does, and the cause is worth
+recording because it is not what either of us guessed.
+
+Flat white, integer ×4, one 4-pixel cell, as a percentage of each shader's own
+peak:
+
+| shader | px 0 | px 1 | px 2 | px 3 |
+|---|---:|---:|---:|---:|
+| `lcd1x` | **70** | 100 | 100 | **70** |
+| v9a — the current phase | **73** | 89 | 100 | 89 |
+| v9b — `lcd1x`'s phase | **80** | 100 | 100 | **80** |
+| v9c — a gap aperture | **91** | 100 | 100 | **91** |
+
+Both `lcd1x` and this family draw a sinusoid of period one source pixel. They
+differ **only in phase**:
+
+- `lcd1x` uses `angle = 2π(p − 0.25)`, putting the trough on the source-pixel
+  boundary. Two samples land either side of it, so the line reads as a symmetric
+  two-pixel band *between* cells — and it never reaches deeper than
+  cos(45°) = 0.707 of the sinusoid.
+- This family shifts the phase by **half an output pixel**, landing one sample
+  exactly on the trough. Full depth, one pixel wide, and wholly inside the cell
+  at its leading edge, which is what reads as offset. The shift is deliberate:
+  without it every integer pitch loses contrast to sample phase, 3.0px measuring
+  0.375 against a possible 0.75.
+
+**And it is a red herring, because a sinusoid cannot draw a thin line at any
+phase.** It is below its peak for three quarters of its cycle by construction.
+At GBA native into 1024x768 the cycle is 4.267 output pixels, so v9a puts one
+pixel at the peak and three below it, drifting cycle to cycle:
+
+| | cycle 1 | cycle 2 | cycle 3 | cycle 4 |
+|---|---|---|---|---|
+| v9a | `73 88 100 94` | `75 82 99 97` | `78 77 97 99` | `84 74 92 100` |
+| v9c | `91 100 100 96` | `85 100 100 100` | `81 99 100 100` | `87 94 100 100` |
+
+v9c is the only one whose lit cells are flat.
+
+### v9c: a black matrix instead of a mesh
+
+The aperture becomes a duty-cycle train rather than a sinusoid:
+
+```
+A(u) = 1 - amp * rect(fract(u + w/2) < w)
+```
+
+centred on the cell boundary, with `w = lp_gap * f` — the new `lp_gap` is a
+thickness in **output pixels**, converted to a share of a period, so the line is
+the same width whatever the game's resolution while the pattern stays periodic
+on the source grid and cannot beat.
+
+Its box integral has a closed form, which is what keeps it band-limited:
+
+```
+F(x) = floor(x) * w + min(fract(x), w)      ∫A over [a,b] = (b-a) - amp*(F(b) - F(a))
+```
+
+`F` is **continuous at every integer** — `fract` reaches 1 exactly where `floor`
+steps — so none of this repository's usual `floor()` epsilons are needed.
+
+Three things get simpler and one gets harder:
+
+- the peak is 1 by construction, so v6's `(1 + amp)` normalisation goes, and the
+  lit part of a cell is at full level rather than 73% of it;
+- the aperture-weighted blend reads `F` directly instead of a sine at the
+  boundary;
+- `lp_brightness` ships at **1.00**, not 1.25 — the 1.25 exists to give back the
+  light a sinusoid mesh eats, and this one eats `amp*w`, about 15%. Left at 1.25
+  the whole frame clipped and the grid vanished;
+- the stripes lose the sin/cos pair the mesh used to share with them, and the
+  colour-cast correction needs a new closed form. A gap's fundamental is
+  `2·sin(πw)/π` of its depth where a sinusoid's is 1, its mean is `1 − amp·w`
+  rather than 1, and its trough no longer coincides with the stripe phase, so
+  all three terms appear where v6 needed none. Measured on a white field, the
+  worst channel spread over the case matrix is **0.208 levels against v9a's
+  2.250** — the correction is right, and better than the one it replaces.
+
+**It costs 94 ops**: 432 against v9a's 338, which is a predicted 108% of a frame
+and the only shader in this repository over one. Three `gapInt` evaluations
+replace one closed-form sinusoid integral. If this arm wins, making it cheap is
+the next job — and it has to be before the waveform could go near `lcd-turbo`.
+
+`v9c` also crawls more at equal brightness (0.256 against v9a's 0.066 at 1.00):
+a harder edge gives the end clamp more to bite on.

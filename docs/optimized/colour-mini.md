@@ -21,19 +21,19 @@ what turns every otherwise-cheap reference stack into one that does not fit:
 
 `colour-mini` does the same job with the same controls in 20 ops.
 
-**It is where brightness belongs.** The turbo line applies brightness as a
-`pow()` on the blended colour, which is a non-linearity after the blend and beats
-against the pixel grid — the one thing `AGENTS.md` prohibits, taken deliberately
-as a recorded exception. Put the same curve at *source* resolution, in front of
-the scaler, and it is per source pixel, which is legal and exact.
+**It is where brightness belongs.** The turbo line applies brightness as a gain
+and clamps it after the blend, which is the one thing `AGENTS.md` prohibits,
+taken deliberately as a recorded exception. Put the same gain at *source*
+resolution, in front of the scaler, and it is per source pixel, which is legal
+and exact — the same status the released line's per-tap clamp has.
 
 Measured over the 18 real screenshots in `retroshader-lab/public/samples` at
-1024x768, against the exact answer (`box_average(curve(source))` computed in
+1024x768, against the exact answer (`box_average(grade(source))` computed in
 float):
 
 | route | RMS, levels | p99 | max |
 |---|---:|---:|---:|
-| one pass — `pixel-turbo` at brightness 1.25 | **1.50** | 7 | 21 |
+| one pass — grading after the blend, brightness 1.25 | **1.50** | 7 | 21 |
 | two passes — `colour-mini @src` → `pixel-turbo` | **0.11** | 1 | 1 |
 
 The residual 0.11 is the 8-bit intermediate render target rounding, and nothing
