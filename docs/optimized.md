@@ -10,12 +10,12 @@ and **the released shaders are not touched.**
 | `*-turbo` | the same four shaders, one pass, rebuilt around a single texture tap | you want one shader and the best picture per millisecond |
 | `*-mini` | the pattern only, no scaler, composable behind anything | you want to pick your own scaler, or chain a source-resolution colour pass |
 
-Target: **≤ 75% of a frame (12.5 ms) with every feature on.** Every shader in
-both lines meets it; the one row that does not is `crt-turbo` with curvature at
-its maximum, which is opt-in and off by default.
+Target: **≤ 75% of a frame (12.5 ms) at the shipped defaults.** Measured on the
+device: six of the eight meet it. **`lcd-turbo` lands at 76% and `crt-turbo` at
+78%** — both miss, and both still halve what they replace.
 
-**Every device figure on this page is predicted, not measured.** See
-[the device run](#the-device-run-when-you-want-it).
+**Every device figure on this page is measured**, from the run in
+`docs/device-results.tsv`. See [the device run](#the-device-run).
 
 ## What v3 changed
 
@@ -108,137 +108,191 @@ Four things worth reading off it:
 folded. Desktop is an M4 Max and is compressed to near-noise — the render pass
 around these shaders costs more than the shaders — so read the device column.
 
-**Device figures for every `*-turbo` and `*-mini` row are PREDICTED**, from a
-model fitted to the six measured rows in `device-results.tsv`:
-
-```
-frag_ms = -0.003 + 0.03056 * ops + 0.6712 * taps      r2 = 0.974, rms 0.755 ms
-frame   = frag_ms + 1.329                             (measured, and flat in pass count)
-```
+**Every figure below is MEASURED on the device.** 47 pipelines, one run,
+`docs/device-results.tsv`; self-test passed, worst IQR 2.5% and most under 1%.
 
 | Shader | ops | SFU | tex | desktop ms | device ms | vs `pixellate` | frame |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `pixel-turbo`, defaults | 53 | 0 | 1 | 0.0493 | *3.6* | *340%* | ***22%*** |
-| `pixel-turbo`, all on | 82 | 6 | 1 | — | *4.5* | *273%* | ***27%*** |
-| `colour-mini`, defaults | 20 | 0 | 1 | 0.0493 | *2.6* | *472%* | ***16%*** |
-| `colour-mini`, all on | 49 | 6 | 1 | — | *3.5* | *352%* | ***21%*** |
-| `dmg-turbo`, defaults | 168 | 6 | 2 | 0.0538 | *7.8* | *158%* | ***47%*** |
-| `dmg-turbo`, all on | 273 | 6 | 2 | — | *11.0* | *112%* | ***66%*** |
-| `dmg-mini`, defaults | 148 | 6 | 2 | 0.0522 | *7.2* | *171%* | ***43%*** |
-| `dmg-mini`, all on | 253 | 6 | 2 | — | *10.4* | *118%* | ***62%*** |
-| `lcd-turbo`, defaults | 286 | 17 | 1 | 0.0585 | *10.7* | *115%* | ***64%*** |
-| `lcd-turbo`, all on | 291 | 23 | 1 | — | *10.9* | *113%* | ***65%*** |
-| `lcd-mini`, defaults | 220 | 13 | 1 | 0.0566 | *8.7* | *141%* | ***52%*** |
-| `lcd-mini`, all on | 225 | 19 | 1 | — | *8.9* | *139%* | ***53%*** |
-| `crt-turbo`, defaults | 303 | 8 | 1 | 0.0585 | *11.3* | *109%* | ***68%*** |
-| `crt-turbo`, all on | 402 | 14 | 1 | — | *14.3* | *86%* | ***86%*** |
-| `crt-mini`, defaults | 266 | 8 | 1 | 0.0588 | *10.1* | *121%* | ***61%*** |
-| `crt-mini`, all on | 353 | 14 | 1 | — | *12.8* | *96%* | ***77%*** |
-| `pixel-perfect`, defaults | 112 | 0 | 4 | 0.0538 | **6.7** | **183%** | **40%** |
+| `pixel-turbo`, defaults | 53 | 0 | 1 | 0.0493 | **4.5** | **269%** | **27%** |
+| `colour-mini`, defaults | 20 | 0 | 1 | 0.0493 | **3.1** | **391%** | **19%** |
+| `dmg-turbo`, defaults | 168 | 6 | 2 | 0.0538 | **8.4** | **145%** | **50%** |
+| `dmg-mini`, defaults | 148 | 6 | 2 | 0.0522 | **7.4** | **166%** | **44%** |
+| `lcd-turbo`, defaults | 286 | 17 | 1 | 0.0585 | **12.6** | **97%** | **76%** |
+| `lcd-mini`, defaults | 220 | 13 | 1 | 0.0566 | **8.6** | **142%** | **52%** |
+| `crt-turbo`, defaults | 303 | 8 | 1 | 0.0585 | **13.0** | **94%** | **78%** |
+| `crt-mini`, defaults | 266 | 8 | 1 | 0.0588 | **11.0** | **111%** | **66%** |
+| `pixel-perfect`, defaults | 112 | 0 | 4 | 0.0538 | **6.7** | **181%** | **40%** |
 | `dmg-perfect`, defaults | 267 | 6 | 8 | 0.0591 | **14.6** | **84%** | **88%** |
-| `lcd-perfect`, defaults | 334 | 17 | 4 | 0.0631 | **15.0** | **82%** | **90%** |
-| `crt-perfect`, defaults | 428 | 8 | 4 | 0.0663 | **15.9** | **77%** | **96%** |
+| `lcd-perfect`, defaults | 334 | 17 | 4 | 0.0631 | **15.0** | **81%** | **90%** |
+| `crt-perfect`, defaults | 428 | 8 | 4 | 0.0663 | **15.9** | **77%** | **95%** |
 
-Bold device figures are measured; *italic* ones are predicted. Worst desktop
-per-case IQR was 33.9%, so the desktop column separates almost nothing here and
-is included only to show that it does not contradict the ordering.
+- **Six of the eight new shaders are inside the 75% target.** `lcd-turbo` at
+  **76%** and `crt-turbo` at **78%** miss it. Both are still far better than
+  what they replace — `lcd-perfect` is 90% and `crt-perfect` 95% — but the
+  target was not met for those two, and saying otherwise would be a lie the next
+  measurement would catch.
+- **The panel shaders roughly halve their released counterpart** at the same
+  picture: `dmg` 88% → 50%, `lcd` 90% → 76%, `crt` 95% → 78%.
+- **The mini line is genuinely cheaper standalone**, by 8 to 24 points, and the
+  frontend's bilinear upscale is what pays for it.
 
-- **Every shader is under the 75% target at its shipped defaults.**
-- **The brightness change cost 2 ops** on `crt` and `lcd` and none anywhere
-  else, and it *saved* 6 SFU at the defaults: the guarded `pow` is gone at
-  gamma 1.00, where v2's fused exponent kept it alive whenever brightness
-  moved.
-- **`crt-turbo` with everything on is 86%, over target.** That row is curvature
-  at 0.15 — the one setting that provably breaks the budget, which is why it
-  ships at 0. Everything else maxed is 68%.
+### One `pow()` costs 1.34 ms, and that changes the guidance
 
-### The unreleased `*-perfect` iterations
+The v2 → v3 brightness change is a controlled experiment: nothing else moved,
+and at the shipped defaults it flips a guarded `pow()` from live to dead.
+
+| pair | Δops | ΔSFU | Δfrag_ms | ships gamma at |
+|---|---:|---:|---:|---:|
+| `crt-turbo` v2→v3 | +2 | **−6** | **−1.350** | 1.00 |
+| `lcd-turbo` v2→v3 | +2 | **−6** | **−1.352** | 1.00 |
+| `crt-mini` v2→v3 | +2 | **−6** | **−1.346** | 1.00 |
+| `lcd-mini` v2→v3 | +2 | **−6** | **−1.333** | 1.00 |
+| `dmg-turbo` v2→v3 | 0 | 0 | **0.000** | **1.20** |
+| `dmg-mini` v2→v3 | 0 | 0 | **+0.005** | **1.20** |
+
+Four shaders lose six SFU and each saves **0.22 ms per SFU op**. The two `dmg`
+shaders ship `dp_gamma` at 1.20, so the `pow` runs either way — and they move by
+**0.000 and 0.005 ms**. That is the control the experiment needed, and it is as
+clean as this repository has ever measured anything.
+
+**So one `vec3 pow()` per fragment is 1.34 ms — 8% of a 60fps frame**, against
+about 0.023 ms for an ordinary op. A transcendental is worth roughly **ten
+ordinary ops** here.
+
+`AGENTS.md` said the opposite — "time tracks ops, not SFU ... unrelated to SFU"
+— and that was inferred from six rows in which ops and SFU happened to be
+correlated. It is wrong and has been corrected. The evidence that misled it is
+still real: `pixellate` carries the most SFU here and is not the slowest,
+because it also has far fewer ops. **Both terms matter; neither alone predicts.**
+
+The practical rule: **guard every `pow()` on the parameter that actually
+disables it, and ship that parameter neutral if you can.** `lcd-turbo` and
+`crt-turbo` ship gamma at 1.00 and get the branch for free; `dmg` ships 1.20 and
+pays 1.34 ms for it every frame.
+
+### The cost model, refitted on 47 rows
+
+```
+frag_ms = 0.0278*ops + 0.409*tex + 0.098*sfu + 0.639     r2 = 0.961, rms 0.87 ms
+frame   = frag_ms + 1.46   (1 pass)   1.64 (2 passes)   1.50 (3 passes)
+```
+
+The `sfu` coefficient here (0.098) is an average over shaders whose SFU sit in
+branches that may not execute; the controlled pairs above measure the *executed*
+price at 0.224. Use the model to rank, and the pair figure to decide.
+
+**A second pass costs ~0.2 ms and a third costs nothing measurable.** Frame
+overhead is 1.46 ms at one pass, 1.64 at two and 1.50 at three — flat inside the
+spread. On a tile-based GPU that is expected, and it is what makes the mini line
+viable at all.
+
+### What the old predictions got wrong
+
+Median error **+2.2 points**, so the ranking held everywhere. Two systematic
+misses are worth recording:
+
+- **The turbo line was underpredicted by 5–12 points** — `lcd-turbo` predicted
+  64% and measured 76%, `crt-turbo` 68% against 78%. The old model had no SFU
+  term, and these are the shaders carrying the most.
+- **`lcd-perfect-v9c` was predicted at 108% and measured 84.5%** — a 24-point
+  miss, and in the useful direction. See below.
+
+### The unreleased `*-perfect` iterations, and a reversal
 
 | Shader | ops | SFU | tex | device ms | frame |
 |---|---:|---:|---:|---:|---:|
-| `crt-perfect` v10, released | 428 | 8 | 4 | **15.9** | **96%** |
-| `crt-perfect` v12, per-tap clamp | 449 | 8 | 4 | *16.6* | *100%* |
-| **`crt-perfect` v13, head** | **428** | **8** | **4** | **15.9** | **96%** |
+| `crt-perfect` v10, released | 428 | 8 | 4 | **15.9** | **95%** |
+| `crt-perfect` v12, per-tap clamp | 449 | 8 | 4 | **16.2** | **97%** |
+| **`crt-perfect` v13, head** | **428** | **8** | **4** | **15.9** | **95%** |
 | `lcd-perfect` v6, released | 334 | 17 | 4 | **15.0** | **90%** |
-| `lcd-perfect` v8, per-tap clamp | 351 | 17 | 4 | *15.5* | *93%* |
-| **`lcd-perfect` v9a, head** | **338** | 17 | 4 | *15.1* | *91%* |
-| `lcd-perfect` v9b, lcd1x phase | 336 | 17 | 4 | *15.1* | *91%* |
-| `lcd-perfect` v9c, gap aperture | **432** | 12 | 4 | *18.0* | *108%* |
+| `lcd-perfect` v8, per-tap clamp | 351 | 17 | 4 | **15.7** | **94%** |
+| **`lcd-perfect` v9a, head** | 338 | 17 | 4 | **15.3** | **92%** |
+| `lcd-perfect` v9b, lcd1x phase | 336 | 17 | 4 | **14.8** | **89%** |
+| **`lcd-perfect` v9c, gap aperture** | **432** | **12** | 4 | **14.1** | **84%** |
 
-`crt-perfect-v13` is the released op count exactly — the per-tap clamp was
-costing 21 ops as well as bleaching highlights. `lcd-perfect-v9a` is 4 over the
-release, which is v8's stripe normalisation.
+`crt-perfect-v13` measures exactly like the release, to 0.02 ms — the per-tap
+clamp was costing 21 ops and 0.3 ms as well as bleaching highlights.
 
-**`v9c` is 94 ops over `v9a`** and is the only shader in the repo over a whole
-frame. Three `gapInt` evaluations replace the closed-form sinusoid integral, and
-the stripes lose the sin/cos pair the mesh used to share with them. If that arm
-wins, making it cheap is the follow-up — and it must be, before the waveform
-could go anywhere near `lcd-turbo`.
+**`v9c` is the fastest of the whole `lcd-perfect` family, and I predicted it
+would be the slowest.** 432 ops against v9a's 338, and it measures **14.1 ms
+against 15.3** — cheaper than the shipped release too. The reason is the finding
+above: the gap aperture replaces transcendentals with `floor`, `min` and
+`fract`, dropping **5 SFU**, and 5 SFU buy far more than 94 ordinary ops cost.
 
+That reverses the conclusion in the v3 plan. **The gap aperture is not a
+looks-versus-speed trade — it is better on both**, and nothing needs making
+cheap before it could go into `lcd-turbo`.
 
 ## 3. What a chain costs
 
 The mini line is meant to be assembled. A pass rendered at **source** resolution
-(`upscale = 1`) covers 1/10 of the pixels at 320x240 → 1024x768, so its
-per-fragment cost is scaled by that in the model.
+(`upscale = 1`) covers 1/10 of the pixels at 320x240 → 1024x768. All measured.
 
-| Stack | passes | ops | tex | device ms | frame | vs `pixellate` |
-|---|---:|---:|---:|---:|---:|---:|
-| `colour-mini` | 1 | 20 | 1 | *2.6* | *16%* | *472%* |
-| `colour-mini @src → pixel-turbo` | 2 | 73 | 2 | *3.7* | *22%* | *329%* |
-| `pixel-turbo → colour-mini` | 2 | 73 | 2 | *4.9* | *29%* | *251%* |
-| `dmg-mini` | 1 | 148 | 2 | *7.2* | *43%* | *171%* |
-| `pixel-turbo → dmg-mini` | 2 | 201 | 3 | *9.5* | *57%* | *130%* |
-| `colour-mini @src → pixel-turbo → dmg-mini` | 3 | 221 | 4 | *9.6* | *58%* | *128%* |
-| `lcd-mini` | 1 | 218 | 1 | *8.7* | *52%* | *142%* |
-| `shimmerless → lcd-mini` | 2 | 267 | 2 | *10.8* | *65%* | *114%* |
-| `pixel-turbo → lcd-mini` | 2 | 271 | 2 | *10.9* | *66%* | *112%* |
-| `colour-mini @src → pixel-turbo → lcd-mini` | 3 | 291 | 3 | *11.1* | *66%* | *111%* |
-| `crt-mini` | 1 | 264 | 1 | *10.1* | *60%* | *122%* |
-| `pixel-turbo → crt-mini` | 2 | 317 | 2 | *12.4* | *74%* | *100%* |
-| `colour-mini @src → pixel-turbo → crt-mini` | 3 | 337 | 3 | *12.5* | *75%* | *99%* |
+| Stack | passes | device ms | frame | vs `pixellate` |
+|---|---:|---:|---:|---:|
+| `colour-mini` | 1 | **3.1** | **19%** | **391%** |
+| `colour-mini @src → pixel-turbo` | 2 | **4.7** | **28%** | **260%** |
+| `pixel-turbo → colour-mini` | 2 | **6.3** | **38%** | **192%** |
+| `dmg-mini` | 1 | **7.4** | **44%** | **166%** |
+| `pixel-turbo → dmg-mini` | 2 | **10.1** | **60%** | **121%** |
+| `lcd-mini` | 1 | **8.6** | **52%** | **142%** |
+| `shimmerless → lcd-mini` | 2 | **10.6** | **64%** | **115%** |
+| `pixel-turbo → lcd-mini` | 2 | **11.2** | **67%** | **109%** |
+| `colour-mini @src → pixel-turbo → lcd-mini` | 3 | **11.6** | **70%** | **105%** |
+| `crt-mini` | 1 | **11.0** | **66%** | **111%** |
+| `pixel-turbo → crt-mini` | 2 | **13.7** | **82%** | **89%** |
 
-**A source-resolution colour pass costs 0.2 ms — 1 point of frame time.** That
-is the whole reason the `@src` rows exist, and it is what buys off the moiré
-exception below.
+**A source-resolution colour pass costs 0.16 ms** — `pixel-turbo` alone is
+4.53 ms and `colour-mini @src → pixel-turbo` is 4.69. Predicted 0.2 ms, and it
+is the number the whole escape hatch from the brightness exception rests on.
+
+**Order matters more than anything else in this table.** The same two shaders
+cost 4.7 ms with the grade first at source resolution and 6.3 ms with it last at
+output resolution — **11× the marginal cost for the identical picture.** Grading
+at source resolution is both the cheap way and the correct way.
 
 **A chain is not cheaper than the single shader that does the same thing.**
-`pixel-turbo → lcd-mini` is 66% against `lcd-turbo`'s 64%; `pixel-turbo →
-crt-mini` is 74% against `crt-turbo`'s 67%. The mini line wins on *choice*, not
-on the clock: a cheaper scaler, no scaler, or a colour pass in the right place.
+`pixel-turbo → lcd-mini` is 67% against `lcd-turbo`'s 76% — actually *cheaper*
+here, because `lcd-turbo` carries the aperture-weighted blend that `lcd-mini`
+does not need. But `pixel-turbo → crt-mini` is 82% against `crt-turbo`'s 78%.
+The mini line wins on *choice*, and sometimes on the clock.
 
 ### The reference stacks — what already works
 
 What a user can assemble today from `tools/vendor/`, measured the same way.
 
-| Stack | passes | ops | tex | device ms | frame | vs `pixellate` |
-|---|---:|---:|---:|---:|---:|---:|
-| `sharp-shimmerless` | 1 | 49 | 1 | *3.5* | *21%* | *353%* |
-| `dmg_dot_matrix` | 1 | 78 | 1 | *4.4* | *26%* | *281%* |
-| `shimmerless → lcd1x` | 2 | 96 | 2 | *5.6* | *34%* | *220%* |
-| `shimmerless → scanlines` | 2 | 101 | 2 | *5.8* | *35%* | *214%* |
-| `shimmerless → lcd3x` | 2 | 117 | 2 | *6.2* | *37%* | *197%* |
-| `pixellate` | 1 | 240 | 4 | **12.3** | **74%** | **100%** |
-| `pixellate → lcd3x` | 2 | 308 | 5 | **15.2** | **91%** | **81%** |
-| `shimmerless → adjust` | 2 | 394 | 3 | *15.4* | *92%* | *80%* |
-| `dmg_dot_matrix → adjust` | 2 | 423 | 3 | *16.3* | *98%* | *76%* |
-| `shimmerless → lcd1x → adjust` | 3 | 441 | 4 | *17.5* | *105%* | *70%* |
+| Stack | passes | device ms | frame | vs `pixellate` |
+|---|---:|---:|---:|---:|
+| `sharp-shimmerless` | 1 | **3.9** | **23%** | **316%** |
+| `dmg_dot_matrix` | 1 | **4.9** | **30%** | **247%** |
+| `shimmerless → scanlines` | 2 | **5.7** | **34%** | **214%** |
+| `shimmerless → lcd1x` | 2 | **6.3** | **38%** | **192%** |
+| `shimmerless → lcd3x` | 2 | **6.8** | **41%** | **179%** |
+| `pixellate` | 1 | **12.2** | **73%** | **100%** |
+| `shimmerless → adjust` | 2 | **14.4** | **87%** | **84%** |
+| `pixellate → lcd3x` | 2 | **15.2** | **91%** | **80%** |
+| `dmg_dot_matrix → adjust` | 2 | **15.7** | **94%** | **78%** |
+| `shimmerless → lcd1x → adjust` | 3 | **16.7** | **100%** | **73%** |
 
-**`image-adjustment` costs more than any shader in this repo.** At 345 ops and
-2 taps it is ~11.9 ms on its own — 71% of a frame — which is what turns every
-otherwise-cheap stack into one that does not fit. `colour-mini` does the same
-job in 20 ops, and at source resolution in 0.2 ms.
+**`image-adjustment` costs 8.1 ms on its own** — `shimmerless` is 3.9 and
+`shimmerless → adjust` is 14.4, so the grading pass is 10.5 ms of frame at
+output resolution. That is what turns every otherwise-cheap stack into one that
+does not fit, and `shimmerless → lcd1x → adjust` lands at **exactly 100.2% of a
+frame** — it does not fit, measured.
 
-The bare vendor stacks are cheaper than either of our lines. The moment grading
-is added, they are not:
+`colour-mini` does the same job at source resolution for **0.16 ms**, which is
+**65× cheaper**.
+
+The bare vendor stacks are cheaper than either of our lines, and honestly so.
+The moment grading is added, they are not:
 
 | golden path | frame | ours | frame |
 |---|---:|---|---:|
-| `shimmerless → lcd1x → adjust` | *105%* | `lcd-turbo` | ***64%*** |
-| `dmg_dot_matrix → adjust` | *98%* | `dmg-turbo` | ***47%*** |
-| `shimmerless → scanlines` + grading | *~92%+* | `crt-turbo` | ***67%*** |
+| `shimmerless → lcd1x → adjust` | **100%** | `lcd-turbo` | **76%** |
+| `dmg_dot_matrix → adjust` | **94%** | `dmg-turbo` | **50%** |
+| `shimmerless → scanlines` + grading | **~85%** | `crt-turbo` | **78%** |
 
-And they do more: a real box-filtered scale, band-limited patterns that do not
+And ours do more: a real box-filtered scale, band-limited patterns that do not
 beat at any scale, curvature, and grading, in one pass.
 
 ## 4. Visual quality against the released line
@@ -336,12 +390,14 @@ and the pass costs 0.2 ms:
 
 | | passes | frame | moiré at defaults |
 |---|---:|---:|---:|
-| `lcd-turbo`, brightness 1.25 | 1 | *64%* | 3.400 |
-| `colour-mini @src → pixel-turbo → lcd-mini`, brightness 1.25 in pass 1 | 3 | *66%* | 1.062 |
+| `lcd-turbo`, brightness 1.25 | 1 | **76%** | 3.400 |
+| `colour-mini @src → pixel-turbo → lcd-mini`, brightness 1.25 in pass 1 | 3 | **70%** | 1.062 |
 
-**One point of frame time buys most of the exception back.** The turbo line
-takes it so that one shader is enough; the mini line exists so it does not have
-to be taken.
+**Six points of frame time buys most of the exception back** — measured, where
+the prediction said one. The extra is `lcd-mini` and `pixel-turbo` doing the
+scale in two passes rather than `lcd-turbo` doing it in one; the grading pass
+itself is 0.16 ms. The turbo line takes the exception so one shader is enough;
+the mini line exists so it does not have to be taken.
 
 ## Rejected, with the measurement
 
@@ -359,15 +415,24 @@ to be taken.
 | The lcd grid's half-output-pixel phase | **Kept, with an alternative built.** It lands a sample on the sinusoid's trough, which is what stops every integer pitch losing contrast to sample phase. `lcd-perfect-v9b` phases it on the source-pixel boundary as `lcd1x` does, and `v9c` replaces the sinusoid with a gap aperture. See `docs/lcd-perfect.md`. |
 | `mediump` / fp16 split | **Open, and unmeasurable here.** Rogue GE8300 has native fp16 ALU; every desktop GPU runs `mediump` at fp32 and will report no change. Needs a device run. The scale's `floor()` on a coordinate up to 480 must stay `highp`. |
 
-## Next levers, in order
+## Next levers, reordered by what the device said
 
-1. **`crt-turbo`'s 291-op floor.** The pitch, lock and Nyquist setup runs
-   whether the patterns are on or off, and is 72% of the shader. The patterns
-   themselves are 4 ops.
-2. **`lcd`'s stripe block**, 88% of that shader's effect budget, most of it the
-   cast correction — which is non-negotiable, so it needs a cheaper form rather
-   than removal.
-3. **`mediump`**, once there is a device run to measure it on.
+The device run moved every item on this list, because the old order was sorted
+by op count and ops are not what costs.
+
+1. **Kill transcendentals.** One `vec3 pow()` is 1.34 ms — 8% of a frame, worth
+   about ten ordinary ops each. `lcd-turbo` still carries 17 SFU and `crt-turbo`
+   8. `lcd-perfect-v9c` already demonstrates the payoff: +94 ops and −5 SFU made
+   it the *fastest* shader in its family. Every `sin`, `cos`, `sqrt` and `pow`
+   in a pattern is now a candidate for a polynomial or a table.
+2. **Settle whether a disabled uniform branch is free.** `crt-turbo-v1` is 22
+   points cheaper than `v3` for +21 ops. If the curvature branch costs when off,
+   that is the single largest number on this page and it invalidates a design
+   decision. The probe is built; it needs one device run.
+3. **`mediump` / fp16**, which is now the obvious follow-on from item 1 rather
+   than an afterthought.
+4. **`crt-turbo`'s 291-op floor.** Still real, still 72% of the shader — but at
+   0.023 ms an op it is worth less than any of the above.
 
 ## Running it
 
@@ -395,46 +460,54 @@ Per-shader design records:
 The released line's records stay in `docs/` — `docs/crt-perfect.md` for v13 and
 `docs/lcd-perfect.md` for the three v9 grid arms.
 
-## The device run, when you want it
+## The device run
 
-**Not run.** Every figure marked *italic* above is predicted.
-`tools/device/build/ShaderBench.pak` is built and current — ARM aarch64, **47
-pipelines**: the six already measured, the seven reference stacks, **every
-iteration of both new lines** (turbo v1/v2/v3, mini v2/v3), the six unreleased
-`*-perfect` iterations including all three grid arms, and nine assembled
-chains. `MAX_PIPELINES` was raised from 32 to 64 to hold them.
+**Run, 3 August 2026.** All 47 pipelines, self-test passed, results in
+`docs/device-results.tsv`. PowerVR Rogue GE8300, OpenGL ES 3.2 build
+1.19@6345021, 320x240 into 1024x768, GPU 42.9 → 47.1 °C over the run. Worst IQR
+2.5%, median under 0.5%.
 
-Every iteration is there deliberately: a single number with nothing beside it
-cannot show whether a change helped.
+Every figure on this page is measured. The five that were `italic` predictions
+are now bold, and the two places the prediction was materially wrong are called
+out where they matter — the turbo line was 5–12 points optimistic, and
+`lcd-perfect-v9c` was 24 points pessimistic.
+
+To repeat it:
 
 ```sh
 cd tools/device && make pak
 
-cp -r tools/device/build/ShaderBench.pak /Volumes/<card>/Tools/tg5040/
-# then launch ShaderBench from the device's Tools menu; the screen stays black
-# for a couple of minutes, then results.tsv and log.txt appear next to it
-
-# or over SSH, which is quicker to iterate on
-scp -r tools/device/build/ShaderBench.pak root@<ip>:/mnt/SDCARD/Tools/tg5040/
+# over SSH, which is quicker to iterate on
+ssh root@<ip> 'rm -rf /mnt/SDCARD/.shadercache'
+tar czf - -C tools/device/build ShaderBench.pak \
+  | ssh root@<ip> 'cd /mnt/SDCARD/Tools/tg5040 && tar xzf -'
 ssh root@<ip> 'cd /mnt/SDCARD/Tools/tg5040/ShaderBench.pak && ./launch.sh'
+ssh root@<ip> 'cat /mnt/SDCARD/Tools/tg5040/ShaderBench.pak/results.tsv' \
+  > docs/device-results.tsv
+python tools/report.py docs/device-results.tsv
 ```
 
-Four things to check when the numbers come back:
+Three practical notes, each of which cost time:
 
-- **Whether the cost model held on setup-heavy shaders.** It predicts each row
-  from `ops` and `taps` alone, and none of the six fitted rows was 73% uniform
-  setup the way `crt-turbo` is. If `crt-turbo` lands well under 11.2 ms, the
-  "reduce the band-limit machinery" lever is worth less than it looks.
-- **What a pass really costs.** The one 2-pass row measured so far showed no
-  per-pass overhead at all, which is surprising even for a tile-based GPU. The
-  mini chains give eleven more data points, including three 3-pass rows.
-- **Whether a source-resolution pass is really 0.2 ms.** The whole
-  moiré-exception escape hatch rests on it.
-- **Whether the one-tap scale still matches at 1/255.** The scaler anchor sits
-  exactly on the tolerance on this desktop, and Rogue's bilinear weights are
-  narrower fixed-point. Half a level is invisible; the *gate* would fail. See
-  `docs/optimized/pixel-turbo.md`.
+- **There is no `scp` on the device.** Use `tar` over `ssh` as above; `scp -O`
+  fails with `ash: scp: not found`.
+- **Delete `.shadercache` first, every time.** It is keyed on filename with no
+  content hash, so a new `crt-turbo-v3.glsl` silently loads the old binary.
+- **The screen stays black for the whole run.** Nothing is presented; that is
+  what success looks like. The self-test runs first, and if it fails the table
+  is discarded rather than printed.
 
-`bench --self-test` also fails one check on a desktop GPU — the blended-repeat
-probe, because the work is far smaller than the fixed cost around it. That is
-pre-existing and documented in `docs/device-perf.md`; on the device all six pass.
+### Still open
+
+- **`crt-turbo-v1` is 56% of a frame against `v3`'s 78%**, for +21 ops and the
+  same SFU. The difference is the restored curvature and slot-mask code, which
+  the *desktop* static count says is free when unselected — 449 ops either way.
+  The device disagrees by 4 ms, which would mean a disabled uniform branch is
+  not free here after all, probably through register pressure. A probe with each
+  block deleted is built and verified byte-identical at defaults; the device
+  slept before it ran. **Until that is measured, "curvature is free when off" is
+  a desktop result quoted beyond its evidence** — the one claim on this page
+  that a device run has contradicted rather than confirmed.
+- **`mediump` / fp16.** Untested. Now much more interesting than before: if a
+  transcendental really costs ten ordinary ops, the SFU path is where the wins
+  are, and half-precision is the obvious next lever.

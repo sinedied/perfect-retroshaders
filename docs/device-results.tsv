@@ -2,14 +2,54 @@
 # renderer	PowerVR Rogue GE8300
 # version	OpenGL ES 3.2 build 1.19@6345021
 # method	slope of wall clock over two batch sizes, each sized to about 20 ms of work, median of 11 interleaved passes after 5 discarded
-# sensors	cpu 44515 mC, gpu 44515 mC, cpu clock 600000 kHz
+# sensors	cpu 47731 mC, gpu 48066 mC, cpu clock 600000 kHz
 # ms is one whole frame: every pass plus the final blit.
 # frag_ms is the fragment shaders alone, with the render passes around them removed.
 pipeline	passes	ms	iqr_pct	budget_pct	relative_pct	frag_ms
-pixellate	1	12.3199	0.1	73.9	100.0	11.0783
-pixellate -> lcd3x	2	15.2123	0.6	91.3	81.0	14.0856
-pixel-perfect	1	6.7487	0.5	40.5	182.6	5.2852
-crt-perfect	1	15.9299	0.2	95.6	77.3	14.7739
-lcd-perfect	1	14.9994	0.1	90.0	82.1	13.6890
-dmg-perfect	1	14.6098	0.8	87.7	84.3	13.5017
-sharp-shimmerless	1	3.8255	0.9	23.0	322.0	2.1335
+pixellate	1	12.2012	0.2	73.2	100.0	11.0407
+pixellate -> lcd3x	2	15.2114	0.4	91.3	80.2	14.0649
+pixel-perfect	1	6.7447	0.4	40.5	180.9	5.2557
+crt-perfect	1	15.8840	0.1	95.3	76.8	14.7200
+lcd-perfect	1	15.0005	1.5	90.0	81.3	13.6413
+dmg-perfect	1	14.6010	0.2	87.6	83.6	13.4581
+sharp-shimmerless	1	3.8609	0.8	23.2	316.0	2.1199
+shimmerless -> lcd1x	2	6.3473	0.8	38.1	192.2	4.5705
+shimmerless -> lcd3x	2	6.8003	1.3	40.8	179.4	5.1317
+shimmerless -> scanlines	2	5.7117	0.6	34.3	213.6	3.6270
+shimmerless -> adjust	2	14.4456	0.9	86.7	84.5	13.0903
+shimmerless -> lcd1x -> adjust	3	16.7042	0.3	100.2	73.0	15.5257
+dmg_dot_matrix	1	4.9403	0.7	29.6	247.0	3.4897
+dmg_dot_matrix -> adjust	2	15.6871	0.3	94.1	77.8	14.4299
+crt-perfect-v12	1	16.2117	0.2	97.3	75.3	15.1914
+crt-perfect-v13	1	15.8628	0.2	95.2	76.9	14.7173
+lcd-perfect-v8	1	15.7331	0.3	94.4	77.6	14.5156
+lcd-perfect-v9a	1	15.2544	0.3	91.5	80.0	13.9306
+lcd-perfect-v9b	1	14.8003	0.3	88.8	82.4	13.5650
+lcd-perfect-v9c	1	14.0841	0.3	84.5	86.6	12.7859
+pixel-turbo-v1	1	4.4751	0.7	26.9	272.6	2.7277
+pixel-turbo-v2	1	4.6530	0.8	27.9	262.2	2.8905
+pixel-turbo-v3	1	4.5325	0.6	27.2	269.2	2.7405
+dmg-turbo-v1	1	8.4415	0.3	50.6	144.5	6.8334
+dmg-turbo-v2	1	8.4193	0.5	50.5	144.9	6.8377
+dmg-turbo-v3	1	8.4055	0.4	50.4	145.2	6.8378
+lcd-turbo-v1	1	12.7601	0.3	76.6	95.6	11.3261
+lcd-turbo-v2	1	13.8652	0.4	83.2	88.0	12.5499
+lcd-turbo-v3	1	12.5990	0.5	75.6	96.8	11.1982
+crt-turbo-v1	1	9.2766	0.2	55.7	131.5	7.6883
+crt-turbo-v2	1	14.2735	0.4	85.6	85.5	13.0582
+crt-turbo-v3	1	13.0001	0.3	78.0	93.9	11.7082
+colour-mini-v2	1	3.0893	2.2	18.5	394.9	1.2481
+colour-mini-v3	1	3.1240	2.5	18.7	390.6	1.1316
+dmg-mini-v2	1	7.4214	0.7	44.5	164.4	5.7314
+dmg-mini-v3	1	7.3544	0.7	44.1	165.9	5.7359
+lcd-mini-v2	1	9.8618	0.3	59.2	123.7	8.2981
+lcd-mini-v3	1	8.6023	0.4	51.6	141.8	6.9651
+crt-mini-v2	1	12.3096	0.2	73.9	99.1	10.9565
+crt-mini-v3	1	11.0310	0.2	66.2	110.6	9.6106
+pixel-turbo -> colour-mini	2	6.3380	2.0	38.0	192.5	3.7623
+pixel-turbo -> dmg-mini	2	10.0880	0.2	60.5	120.9	8.4720
+pixel-turbo -> lcd-mini	2	11.2067	1.0	67.2	108.9	9.6841
+pixel-turbo -> crt-mini	2	13.6843	0.1	82.1	89.2	12.3386
+shimmerless -> lcd-mini	2	10.6089	0.2	63.7	115.0	9.0940
+colour-mini -> pixel-turbo	2	4.6878	0.9	28.1	260.3	2.8468
+colour-mini -> pixel-turbo -> lcd-mini	3	11.6395	0.5	69.8	104.8	9.8198

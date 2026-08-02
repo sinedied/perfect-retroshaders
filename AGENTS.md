@@ -135,19 +135,29 @@ Four layers, deliberately:
 the question this section used to leave open is in `docs/device-perf.md` and the
 README table. Two things it settled:
 
-- **Time tracks ops, not SFU — on the device as well as the desktop.** Measured
-  at 1024x768: `sharp-shimmerless` 49 ops / 0 SFU / 3.8ms, `pixel-perfect` 112 /
-  0 / 6.7, `pixellate` 240 / **30** / 12.3, `dmg-perfect` 267 / 6 / 14.6,
-  `lcd-perfect` 334 / 17 / 15.0, `crt-perfect` 428 / 8 / 15.9. Monotonic in ops;
-  unrelated to SFU, since `pixellate` carries the most SFU of anything here and
-  still beats three shaders with far less. **This file previously said to treat
-  SFU as the device signal. That was a guess about a Mali, and it was wrong.**
+- **Ops AND SFU both cost, and a transcendental costs about ten ordinary ops.**
+  Measured by controlled pair, 1024x768: flipping one guarded `vec3 pow()` from
+  live to dead removes 6 SFU and **1.34 ms — 8% of a frame** — reproduced on
+  four shaders at 0.222 to 0.225 ms per SFU op, against ~0.023 ms for an
+  ordinary op. The control is `dmg-turbo` and `dmg-mini`, which ship gamma at
+  1.20 so the `pow` runs either way: they moved 0.000 and 0.005 ms.
+  **This file twice said the opposite** - first that SFU was the device signal
+  (a guess about a Mali), then that time was unrelated to SFU (inferred from six
+  rows where ops and SFU were correlated). Both were wrong. Fitted on 47 rows:
+  `frag_ms = 0.0278*ops + 0.409*tex + 0.098*sfu + 0.64`, r2 0.961.
+  **So: guard every `pow` on the parameter that disables it, and ship that
+  parameter neutral if you can.**
+- **A pass is nearly free.** Frame overhead is 1.46 ms at one pass, 1.64 at two
+  and 1.50 at three - flat inside the spread. A pass rendered at source
+  resolution costs 0.16 ms, so grading belongs in front of the scaler, where it
+  is also the only legal place for it.
 - **Desktop ratios did predict the device ordering**, and understated the
   spread. Both rank the six the same way bar `lcd-perfect` and `crt-perfect`,
   which are within 6% of each other on the device.
 
-`perf.py --static` is still the fast signal while iterating; read the `ops`
-column, and re-measure on the device before believing anything close.
+`perf.py --static` is still the fast signal while iterating; read the `ops` AND
+`SFU@def` columns, weight SFU about ten to one, and re-measure on the device
+before believing anything close.
 
 **The target GPU was misidentified here as a Mali G31 MP2** until it was
 checked. It is an Imagination PowerVR Rogue GE8300 on an Allwinner A133 Plus,

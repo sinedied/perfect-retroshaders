@@ -198,12 +198,12 @@ carry these numbers yet.
 
 Four things worth saying about it.
 
-**Time tracks ops, and does not track SFU.** The ordering is monotonic in
-`ops@def` across all six shaders. It is unrelated to SFU: `pixellate` carries the
-most SFU of anything here (30) and still beats three shaders with far less.
-`AGENTS.md` used to say to treat SFU as the device signal, on the assumption
-that a Mali would rank it that way. That assumption is now measured and wrong,
-and the file has been corrected.
+**Time tracks ops, and does not track SFU.** *(Superseded — see the second run
+below.)* The ordering is monotonic in `ops@def` across all six shaders, and
+`pixellate` carries the most SFU here (30) while beating three shaders with far
+less. That reading was correct about these six rows and wrong as a general
+claim: ops and SFU are correlated across them, and six points cannot separate
+two terms.
 
 **The desktop was directionally right and quantitatively compressed.** Desktop
 and device rank the six identically bar `lcd-perfect` and `crt-perfect`, which
@@ -272,3 +272,95 @@ Then, back on the host:
 # <!-- device-perf:begin --> / <!-- device-perf:end --> put back first.
 python tools/report.py results.tsv
 ```
+
+
+## The second run: 47 pipelines, 3 August 2026
+
+`docs/device-results.tsv` was replaced by a run covering every iteration of both
+new shader lines as well as the original six. Self-test passed; worst IQR 2.5%,
+median under 0.5%. The six original rows reproduced to within 0.1 ms, which is
+the reproducibility check that makes the rest worth reading.
+
+### A transcendental costs about ten ordinary ops
+
+The `*-turbo` v2 → v3 change is a controlled experiment. Nothing moved except
+the brightness formulation, and at the shipped defaults that flips a guarded
+`vec3 pow()` from live to dead:
+
+| pair | Δops | ΔSFU | Δfrag_ms | ms per SFU | ships gamma at |
+|---|---:|---:|---:|---:|---:|
+| `crt-turbo` v2→v3 | +2 | −6 | **−1.350** | 0.225 | 1.00 |
+| `lcd-turbo` v2→v3 | +2 | −6 | **−1.352** | 0.225 | 1.00 |
+| `crt-mini` v2→v3 | +2 | −6 | **−1.346** | 0.224 | 1.00 |
+| `lcd-mini` v2→v3 | +2 | −6 | **−1.333** | 0.222 | 1.00 |
+| `dmg-turbo` v2→v3 | 0 | 0 | **0.000** | — | **1.20** |
+| `dmg-mini` v2→v3 | 0 | 0 | **+0.005** | — | **1.20** |
+
+The last two rows are the control: they ship `dp_gamma` at 1.20, so the `pow`
+executes in both versions and nothing should change. Nothing changed.
+
+**One `vec3 pow()` per fragment is 1.34 ms at 1024x768 — 8% of a 60fps frame.**
+An ordinary op is about 0.023 ms. So a transcendental is worth roughly ten of
+them, and the practical rule is to guard every `pow` on the parameter that
+disables it and ship that parameter neutral where the look allows.
+
+Fitted on all 47 rows:
+
+```
+frag_ms = 0.0278*ops + 0.409*tex + 0.098*sfu + 0.639      r2 = 0.961, rms 0.87 ms
+```
+
+The `sfu` coefficient here is lower than the controlled 0.224 because it
+averages over shaders whose SFU sit in branches that may not execute. Rank with
+the model; decide with the pairs.
+
+### The clearest single demonstration
+
+`lcd-perfect-v9c` replaces a sinusoid mesh with a gap aperture: **+94 ops and
+−5 SFU**. It was predicted to be the slowest shader in the repository at 108% of
+a frame. It measured **84.5% — the fastest of the whole `lcd-perfect` family**,
+cheaper than the shipped release. Arithmetic bought back a transcendental at a
+better than ten-to-one rate.
+
+### A pass is nearly free
+
+Frame overhead, meaning `ms − frag_ms`:
+
+| passes | rows | mean | spread |
+|---|---:|---:|---|
+| 1 | 33 | 1.46 ms | 1.02 – 1.99 |
+| 2 | 12 | 1.64 ms | 1.15 – 2.58 |
+| 3 | 2 | 1.50 ms | 1.18 – 1.82 |
+
+Flat inside the spread, which is what a tile-based deferred renderer should do
+and what makes a composable shader line viable at all.
+
+**A pass at source resolution costs 0.16 ms.** `pixel-turbo` alone is 4.53 ms;
+`colour-mini @src → pixel-turbo` is 4.69. The same two shaders in the other
+order — grading last, at output resolution — cost 6.34 ms. **Eleven times the
+marginal cost for the identical picture.**
+
+### Still unsettled: does a disabled uniform branch cost?
+
+`crt-turbo-v1` measures **56% of a frame against `v3`'s 78%**, for +21 ops and
+identical SFU. The 21 ops are the restored curvature and slot-mask code, which
+the desktop static count says is free when unselected — 449 ops with the code
+present at 0 and 449 without it. The device disagrees by 4.0 ms, which is
+0.19 ms per op against a 0.023 average.
+
+If that holds it means a disabled uniform branch is *not* free on this
+architecture — plausibly through register pressure reducing occupancy — and it
+would invalidate the reasoning that brought curvature back in v2. A probe with
+each block deleted is built and verified byte-identical at defaults; the device
+went to sleep before it ran. **Until it does, "curvature is free when off" is a
+desktop result quoted beyond its evidence.**
+
+### Operating notes
+
+- **There is no `scp` on the device.** `scp -O` fails with `ash: scp: not
+  found`. Use `tar` piped over `ssh`.
+- **Delete `/mnt/SDCARD/.shadercache` before every run.** Keyed on filename with
+  no content hash, so a rebuilt shader silently loads its old binary.
+- **`/root/.ssh` does not survive**, so `ssh-copy-id` appears to succeed and the
+  key is gone next boot. Write `authorized_keys` explicitly and expect to redo
+  it.
