@@ -147,6 +147,18 @@ README table. Two things it settled:
   `frag_ms = 0.0278*ops + 0.409*tex + 0.098*sfu + 0.64`, r2 0.961.
   **So: guard every `pow` on the parameter that disables it, and ship that
   parameter neutral if you can.**
+- **A uniform-guarded feature is free only if nothing outside the guard depends
+  on what it wrote.** Measured by deleting one guarded block at a time from
+  `crt-turbo-v3`, each probe byte-identical at the shipped defaults: the slot
+  mask costs **0.14 ms** unselected (noise), and curvature costs **3.26 ms with
+  `cp_curvature` at 0.00** - 20% of a frame, paid by everyone who never turns it
+  on. The difference is that the curvature block writes `uv`, which is the
+  texture coordinate, so its presence makes the fetch dependent. Cheap: a term
+  added into a pattern. Expensive: anything that moves the sampling position -
+  and for those the only fix is a second shader file, not a branch.
+- **`perf.py --static`'s `@def` column cannot price an option.** It moved by 2
+  ops across that 3.26 ms, because it folds the parameters to literals and then
+  deletes the branch a live uniform keeps. Read `live` for a guarded feature.
 - **A pass is nearly free.** Frame overhead is 1.46 ms at one pass, 1.64 at two
   and 1.50 at three - flat inside the spread. A pass rendered at source
   resolution costs 0.16 ms, so grading belongs in front of the scaler, where it

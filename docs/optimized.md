@@ -497,17 +497,45 @@ Three practical notes, each of which cost time:
   what success looks like. The self-test runs first, and if it fails the table
   is discarded rather than printed.
 
+### Settled after the run: curvature is not free when off
+
+`crt-turbo-v1` measured 56% of a frame against `v3`'s 78%, so three probes were
+built from `v3` by deleting one guarded block each — byte-identical at the
+shipped defaults, and verified to have genuinely lost the feature at curvature
+0.15:
+
+| build | live ops | ops@def | frame |
+|---|---:|---:|---:|
+| `crt-turbo-v3` | 443 | 303 | **78.1%** |
+| slot-mask branch deleted | 416 | 301 | **77.3%** |
+| **curvature block deleted** | 360 | 301 | **59.8%** |
+| both deleted | 333 | 299 | **57.8%** |
+
+**The v2 decision was half right.** The slot mask really is free when
+unselected — 0.14 ms, inside the noise. **Curvature costs 3.26 ms with
+`cp_curvature` at its shipped 0.00**: nearly 20% of a frame, paid by everyone
+who never turns it on. That is the difference between `crt-turbo` missing the
+75% target at 78% and clearing it comfortably at 60%.
+
+The reason the two differ is what they write. The curvature block writes `uv`,
+and `uv` is the texture coordinate — its mere presence makes the fetch address
+depend on fragment arithmetic, so the read becomes *dependent* and cannot be
+issued ahead of the shader. The slot-mask branch only adds to a local scalar.
+
+**`ops@def` moved by 2 across that 3.26 ms**, because it folds parameters to
+literals and deletes the branch a live uniform keeps. It is the wrong column for
+pricing an option; `live` is the right one, and even it under-prices a texcoord.
+
+**This is the owner's original report, explained.** "Adding curvature and it
+falls under 60fps every time" — it was never only the curvature setting. The
+code being present costs a fifth of the frame at every setting.
+
+**The fix has to be a second shader file, not a cheaper branch.** No guard can
+make this free; that is what the measurement says. Not done, because it is a
+shipping decision rather than an optimisation — see `docs/device-perf.md`.
+
 ### Still open
 
-- **`crt-turbo-v1` is 56% of a frame against `v3`'s 78%**, for +21 ops and the
-  same SFU. The difference is the restored curvature and slot-mask code, which
-  the *desktop* static count says is free when unselected — 449 ops either way.
-  The device disagrees by 4 ms, which would mean a disabled uniform branch is
-  not free here after all, probably through register pressure. A probe with each
-  block deleted is built and verified byte-identical at defaults; the device
-  slept before it ran. **Until that is measured, "curvature is free when off" is
-  a desktop result quoted beyond its evidence** — the one claim on this page
-  that a device run has contradicted rather than confirmed.
-- **`mediump` / fp16.** Untested. Now much more interesting than before: if a
-  transcendental really costs ten ordinary ops, the SFU path is where the wins
-  are, and half-precision is the obvious next lever.
+- **`mediump` / fp16.** Untested, and now the clearest remaining lever: if a
+  transcendental costs ten ordinary ops, half-precision on the SFU path is where
+  the wins are.

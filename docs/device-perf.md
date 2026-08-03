@@ -340,20 +340,52 @@ and what makes a composable shader line viable at all.
 order — grading last, at output resolution — cost 6.34 ms. **Eleven times the
 marginal cost for the identical picture.**
 
-### Still unsettled: does a disabled uniform branch cost?
+### Settled: a guarded feature is free only if it stays out of the texcoord
 
-`crt-turbo-v1` measures **56% of a frame against `v3`'s 78%**, for +21 ops and
-identical SFU. The 21 ops are the restored curvature and slot-mask code, which
-the desktop static count says is free when unselected — 449 ops with the code
-present at 0 and 449 without it. The device disagrees by 4.0 ms, which is
-0.19 ms per op against a 0.023 average.
+`crt-turbo-v1` measured 56% of a frame against `v3`'s 78%, for +21 `@def` ops
+and identical SFU. Three probes were built from `crt-turbo-v3` by deleting one
+guarded block each, verified byte-identical at the shipped defaults and verified
+to have genuinely lost the feature at `cp_curvature = 0.15`:
 
-If that holds it means a disabled uniform branch is *not* free on this
-architecture — plausibly through register pressure reducing occupancy — and it
-would invalidate the reasoning that brought curvature back in v2. A probe with
-each block deleted is built and verified byte-identical at defaults; the device
-went to sleep before it ran. **Until it does, "curvature is free when off" is a
-desktop result quoted beyond its evidence.**
+| build | raw ops | live ops | ops@def | frag_ms | frame |
+|---|---:|---:|---:|---:|---:|
+| `crt-turbo-v3` | 462 | 443 | 303 | 11.71 | **78.1%** |
+| slot-mask branch deleted | 435 | 416 | 301 | 11.57 | **77.3%** |
+| **curvature block deleted** | 370 | 360 | 301 | **8.45** | **59.8%** |
+| both deleted | 343 | 333 | 299 | 8.14 | **57.8%** |
+| `crt-turbo-v1`, never had either | 322 | 311 | 282 | 7.70 | 55.5% |
+
+**The two features do opposite things, and the previous claim was half right.**
+
+- **The slot mask really is free when unselected.** Deleting it saves 0.14 ms
+  against an IQR of 0.4% — noise. 27 live ops at **0.005 ms each**.
+- **Curvature costs 3.26 ms with `cp_curvature` at its shipped 0.00** — nearly
+  **20% of a 60fps frame, paid by every user who never turns it on.** 83 live
+  ops at **0.039 ms each, eight times the slot mask's rate.**
+
+The op counts cannot explain that on their own, and the difference between the
+two blocks says what does: **the curvature block writes `uv`, and `uv` is the
+texture coordinate.** Guarded or not, its presence makes the fetch address
+depend on fragment-shader arithmetic, so the texture read becomes *dependent* —
+it cannot be issued from the rasteriser ahead of the shader. The slot-mask
+branch only adds to `phase`, a local scalar consumed by the mask, and costs
+what its arithmetic costs and nothing more.
+
+**`ops@def` is blind to all of this**: it moves by 2 across a 3.26 ms
+difference, because it folds the parameters to literals and then removes the
+branch that a live uniform keeps. For a guarded feature, read the **`live`**
+column — and even that under-prices anything touching a texcoord.
+
+The practical rules this yields:
+
+- **A uniform-guarded feature is free only if nothing outside the guard depends
+  on what it wrote.** Cheap: a term added into a pattern. Expensive: anything
+  that moves the sampling position.
+- **Where a feature does move the texcoord, the only way to make it free is a
+  second shader file**, not a branch.
+- **`perf.py --static`'s `@def` column must not be used to price an option.**
+  It answers "what does this cost once the driver knows the setting", which no
+  runtime with live uniforms ever knows.
 
 ### Operating notes
 
