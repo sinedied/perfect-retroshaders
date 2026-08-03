@@ -42,10 +42,11 @@ Reading it:
   each; its 289-op floor is the pitch, lock and Nyquist machinery that runs
   whether they are on or off.
 - **Curvature is the largest single effect in the repo** and, uniquely, it is
-  *not* free when switched off: it costs 3.26 ms on the device with the slider
+  *not* free when switched off: it costs 3.58 ms on the device with the slider
   at zero, because it makes uniform-derived work per-fragment. The slot mask,
   behind an identical-looking guard, really is free. v4b trades the warp's
-  Jacobian to get some of that back.
+  Jacobian to recover 0.60 ms of that; pinning `noWarp` as well would recover
+  2.82 ms, and is unshipped pending a decision.
 - **`dmg`'s shadow is the most expensive effect in the set** at 83%, and the
   only one still needing a second tap. It is off by default.
 - **`lcd`'s stripe block is 88%**, most of it the colour-cast correction, which
