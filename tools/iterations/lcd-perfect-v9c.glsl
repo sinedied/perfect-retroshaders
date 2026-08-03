@@ -15,7 +15,7 @@
 // PARAMETERS
 //
 //   lp_grid        0.00 - 1.00  Grid visibility. 0 disables it.
-//   lp_gap         0.25 - 2.00  Grid line thickness, in output pixels.
+//   lp_gap         0.25 - 3.00  Grid line thickness, in output pixels.
 //   lp_balance     0.00 - 1.00  Row/column balance. 0 rows, 1 columns.
 //   lp_min_pitch   2.00 - 6.00  Smallest pattern pitch, in output pixels.
 //   lp_subpixels   0.00 - 1.00  RGB stripe visibility. 0 disables them.
@@ -34,6 +34,8 @@
 //   0.80 or so matches lcd1x.
 // - Line thickness is in output pixels, so the grid looks the same whatever the
 //   game's resolution. Above about a third of a cell it stops reading as a line.
+// - The line can never take more than 90% of a cell, so at scales below about
+//   3x the top of the thickness range stops doing anything.
 // - Grid visibility is the line's darkness, not the whole cell's, so it wants a
 //   higher setting than a soft mesh does. 1.00 is a hard black matrix.
 // - Brightness above 1.00 clips, and a clip beats against the pixel grid unless
@@ -42,7 +44,7 @@
 //   mesh this one needs no gain to make up for what it takes.
 
 #pragma parameter lp_grid       "Grid visibility"          0.30 0.00 1.00 0.01
-#pragma parameter lp_gap        "Grid line thickness px"   1.00 0.25 2.00 0.25
+#pragma parameter lp_gap        "Grid line thickness px"   1.00 0.25 3.00 0.25
 #pragma parameter lp_balance    "Row/column balance"       0.60 0.00 1.00 0.01
 #pragma parameter lp_min_pitch  "Minimum pitch in px"      3.00 2.00 6.00 0.25
 #pragma parameter lp_subpixels  "RGB stripe visibility"    0.20 0.00 1.00 0.05

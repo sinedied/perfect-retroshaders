@@ -28,6 +28,9 @@
 // breaking into a pattern.
 //
 // Notes:
+// - Needs a LINEAR filter, set in the preset. Under NEAREST every tap stops
+//   interpolating: the pattern still draws, so nothing looks broken, but the
+//   picture underneath it is nearest-neighbour.
 // - Draws the panel and nothing else. Put a scaler in front of it - pixel-turbo
 //   is the matching one - or accept the sampler's own smooth upscale.
 // - Render at the output resolution, 1:1 with the display.

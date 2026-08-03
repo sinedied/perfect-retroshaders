@@ -1,4 +1,4 @@
-// dmg-mini v3 - a Game Boy dot matrix, to sit behind any scaler.
+// dmg-miniprobe-noshadow v1 - a Game Boy dot matrix, to sit behind any scaler.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
@@ -197,37 +197,6 @@ void main()
     float k = dp_grid * (1.0 - dot2d);
     vec3 col = mix(area * grade, vec3(DMG_SUBSTRATE), k);
 
-    // A cast shadow, so the dots sit above the panel rather than printed on
-    // it. It multiplies everything rather than darkening the gap colour, which
-    // is what puts it underneath. Uniform branch, so free when off.
-    if (dp_shadow > 0.0) {
-        // In source pixels, so the offset is a fixed fraction of a cell.
-        vec2 q = p - SHADOW_OFFSET;
-
-        // The dot's own shape, displaced. A wider averaging footprint is a
-        // box blur of the aperture.
-        vec2 hs = h + APERTURE_SOFT;
-        vec2 covS = max(dotInt(q + hs, lit) - dotInt(q - hs, lit), vec2(0.0))
-                    / (2.0 * hs);
-        covS = mix(vec2(1.0), covS, smoothstep(vec2(2.0), vec2(2.9), sc));
-
-        // How driven the casting cells are. dot() is linear, so luma of the
-        // blend equals the blend of lumas, and the texture unit does it in one
-        // tap - which also removes the float32 cell-boundary knife edge.
-        float casterLum = dot(COMPAT_TEXTURE(Texture, q / InputSize).rgb, LUMA);
-
-        // The undriven level to measure opacity against: the luma of the area
-        // blend, before any output gain. Not white - no Game Boy palette is
-        // near it. A blend rather than a max over neighbours, which would need
-        // a per-term gate that prints its own structure into the shadow.
-        float paper = max(dot(area, LUMA), PAPER_FLOOR);
-
-        // Both sides raw: opacity is a property of the panel, so an output
-        // gain must cancel out of the ratio.
-        float opacity = clamp(1.0 - casterLum / paper, 0.0, 1.0);
-
-        col *= 1.0 - dp_shadow * opacity * covS.x * covS.y;
-    }
 
     // The branch is uniform across the draw, so a gamma of 1 costs nothing.
     // The base is clamped because pow(0, g) is undefined and returns NaN on

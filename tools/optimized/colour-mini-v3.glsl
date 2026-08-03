@@ -27,6 +27,9 @@
 // do not want.
 //
 // Notes:
+// - Needs a LINEAR filter, set in the preset. Under NEAREST every tap stops
+//   interpolating: the pattern still draws, so nothing looks broken, but the
+//   picture underneath it is nearest-neighbour.
 // - Draws no pattern and does no scaling: it passes the picture through
 //   untouched at its default settings.
 // - Put a scaler in front of it for sharp pixel blocks. On its own it is a

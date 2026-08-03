@@ -1,4 +1,4 @@
-// dmg-mini v3 - a Game Boy dot matrix, to sit behind any scaler.
+// dmg-turboprobe-noshadow v1 - a Game Boy dot matrix over a one-tap pixel scale.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
@@ -22,16 +22,13 @@
 //   dp_temperature   -1.00 - 1.00  Warm above 0, cool below. 0.00 is off.
 //   dp_tint          -1.00 - 1.00  Green above 0, magenta below. 0.00 is off.
 // -----------------------------------------------------------------------------
-// An original Game Boy look: the dot matrix grid with its pale gaps. Dots can
-// cast a shadow so they sit above the panel. The grid is invisible on white
-// and strongest on dark content, as a real DMG is.
+// An original Game Boy look: the dot matrix grid with its pale gaps, over a
+// clean pixel scale. Dots can cast a shadow so they sit above the panel. The
+// grid is invisible on white and strongest on dark content, as a real DMG is.
 //
 // Notes:
-// - Needs a LINEAR filter, set in the preset. Under NEAREST every tap stops
-//   interpolating: the pattern still draws, so nothing looks broken, but the
-//   picture underneath it is nearest-neighbour.
-// - Draws the panel and nothing else. Put a scaler in front of it - pixel-turbo
-//   is the matching one - or accept the sampler's own smooth upscale.
+// - Needs a LINEAR filter, set in the preset. Under NEAREST the scale becomes
+//   ordinary nearest-neighbour and the dots get ragged edges.
 // - Render at the output resolution, 1:1 with the display.
 // - Grid line thickness is in output pixels, so the panel reads the same at
 //   every resolution. 1.00 is a one-pixel line.
@@ -160,11 +157,11 @@ vec2 dotInt(vec2 x, vec2 w)
 
 void main()
 {
-    // Source pixels, from InputSize rather than TextureSize: a later pass is
-    // handed the ORIGINAL source size in InputSize, and the size of whatever it
-    // is sampling in neither, so TextureSize cannot be trusted here.
-    vec2 p = TEX0.xy * InputSize;
+    // Source texels. The max() guards an unset uniform, which is 0 and would
+    // make h a zero divisor below.
+    vec2 p = TEX0.xy * TextureSize;
     vec2 h = max(0.4995 * InputSize / OutputSize, 1e-6);
+    vec2 B = floor(p + 0.5);
 
     // N is the whole scale that fits, so a dp_gap line is dp_gap/N of a cell
     // and stays a pixel wide at any scale. The nudge guards floor() on a
@@ -182,8 +179,12 @@ void main()
     cov = mix(vec2(1.0), cov, smoothstep(vec2(2.0), vec2(2.9), sc));
     float dot2d = cov.x * cov.y;
 
-    // Straight through: behind a scaler this is 1:1 and exact.
-    vec3 area = COMPAT_TEXTURE(Texture, TEX0.xy).rgb;
+    // One LINEAR tap. B is the nearest texel boundary and w the share of the
+    // footprint on its low side; a bilinear fetch at t returns
+    // mix(T[i], T[i+1], fract(t*TextureSize - 0.5)), so this texcoord asks the
+    // texture unit for exactly the blend four NEAREST taps used to compute.
+    vec2 w = clamp((B - p + h) / (2.0 * h), 0.0, 1.0);
+    vec3 area = COMPAT_TEXTURE(Texture, (B + 0.5 - w) / TextureSize).rgb;
 
     // One factor: balance then brightness, uniform-derived so it folds. Not
     // applied to the SUBSTRATE, so brightening lifts the dots toward a fixed
@@ -197,37 +198,6 @@ void main()
     float k = dp_grid * (1.0 - dot2d);
     vec3 col = mix(area * grade, vec3(DMG_SUBSTRATE), k);
 
-    // A cast shadow, so the dots sit above the panel rather than printed on
-    // it. It multiplies everything rather than darkening the gap colour, which
-    // is what puts it underneath. Uniform branch, so free when off.
-    if (dp_shadow > 0.0) {
-        // In source pixels, so the offset is a fixed fraction of a cell.
-        vec2 q = p - SHADOW_OFFSET;
-
-        // The dot's own shape, displaced. A wider averaging footprint is a
-        // box blur of the aperture.
-        vec2 hs = h + APERTURE_SOFT;
-        vec2 covS = max(dotInt(q + hs, lit) - dotInt(q - hs, lit), vec2(0.0))
-                    / (2.0 * hs);
-        covS = mix(vec2(1.0), covS, smoothstep(vec2(2.0), vec2(2.9), sc));
-
-        // How driven the casting cells are. dot() is linear, so luma of the
-        // blend equals the blend of lumas, and the texture unit does it in one
-        // tap - which also removes the float32 cell-boundary knife edge.
-        float casterLum = dot(COMPAT_TEXTURE(Texture, q / InputSize).rgb, LUMA);
-
-        // The undriven level to measure opacity against: the luma of the area
-        // blend, before any output gain. Not white - no Game Boy palette is
-        // near it. A blend rather than a max over neighbours, which would need
-        // a per-term gate that prints its own structure into the shadow.
-        float paper = max(dot(area, LUMA), PAPER_FLOOR);
-
-        // Both sides raw: opacity is a property of the panel, so an output
-        // gain must cancel out of the ratio.
-        float opacity = clamp(1.0 - casterLum / paper, 0.0, 1.0);
-
-        col *= 1.0 - dp_shadow * opacity * covS.x * covS.y;
-    }
 
     // The branch is uniform across the draw, so a gamma of 1 costs nothing.
     // The base is clamped because pow(0, g) is undefined and returns NaN on
