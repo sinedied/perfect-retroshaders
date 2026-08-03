@@ -484,10 +484,20 @@ Three things get simpler and one gets harder:
   worst channel spread over the case matrix is **0.208 levels against v9a's
   2.250** — the correction is right, and better than the one it replaces.
 
-**It costs 94 ops**: 432 against v9a's 338, which is a predicted 108% of a frame
-and the only shader in this repository over one. Three `gapInt` evaluations
-replace one closed-form sinusoid integral. If this arm wins, making it cheap is
-the next job — and it has to be before the waveform could go near `lcd-turbo`.
+**It costs 94 ops and it is the fastest of the family.** 432 against v9a's 338,
+which I predicted at 108% of a frame — the only shader in the repository over
+one. Measured on the device it is **84.5%, against v9a's 91.5% and the shipped
+release's 90.0%.**
+
+The reason is that ops were the wrong currency. Three `gapInt` evaluations
+replace one closed-form sinusoid integral, and in doing so they drop **5 SFU** —
+and a transcendental is worth about ten ordinary ops on this GPU (1.34 ms for
+one `vec3 pow()`, `docs/device-perf.md`). Trading `sin`/`cos` for `floor`, `min`
+and `fract` pays at better than ten to one.
+
+So there is nothing to make cheap first: **the gap aperture is better on looks
+and on speed**, and the only thing between it and `lcd-turbo` is the owner
+choosing an arm.
 
 `v9c` also crawls more at equal brightness (0.256 against v9a's 0.066 at 1.00):
 a harder edge gives the end clamp more to bite on.
