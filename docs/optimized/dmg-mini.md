@@ -82,3 +82,23 @@ screen-locked in both, but a bilinear upscale gives it less to beat against.
 
 Against `dmg-perfect-v10c` the difference is 157/255, and that number means
 nothing: it is a shader with a box scaler being compared to one without.
+
+
+## The standalone shadow, and why it is left alone
+
+With no scaler in front, the mini's shadow is weak: it reaches a factor of 0.510
+where `dmg-perfect` reaches 0.299. The cause is structural. `dmg-perfect` takes
+`paper` from a **box** average — blocky, constant across a source cell — while
+`casterLum` is a **bilinear** tap; the shadow lives on the contrast between
+them. Standalone, the mini's `area` is itself bilinear, so paper and caster
+track each other and the ratio flattens toward 1.
+
+**Behind a scaler it is right.** Measured with the C benchmark, which renders
+real chains: `pixel-turbo → dmg-mini` reaches **0.194** against `dmg-perfect`'s
+0.299, rms 2.99% of the factor field. The box-scaled input restores the blocky
+reference on its own.
+
+A fix for the standalone case was built and rejected. Sampling `paper` at the
+source cell centre costs +7 ops and a third tap when the shadow is on, and moves
+the standalone field **0.03–0.14% closer** to `dmg-perfect` on eight cases and
+*further* on two. That is noise, and it is not worth a tap.

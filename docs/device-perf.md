@@ -396,3 +396,54 @@ The practical rules this yields:
 - **`/root/.ssh` does not survive**, so `ssh-copy-id` appears to succeed and the
   key is gone next boot. Write `authorized_keys` explicitly and expect to redo
   it.
+
+
+## The third run: 67 pipelines, and the curvature question answered
+
+Two things this run existed to settle, both by deleting one guarded block at a
+time from a head shader and measuring the parent against the probe. Every probe
+was verified byte-identical to its parent at the shipped defaults first.
+
+### Curvature: it is `noWarp`, not the Jacobian
+
+`crt-turbo-v4a` carries curvature and pays for it even at `cp_curvature = 0`,
+because two values written inside the guard - the warp's Jacobian `jac` and the
+source-lock disable `noWarp` - make `h`, `scanLocked` and `maskLocked`
+per-fragment where they would otherwise be computed once per draw.
+
+| build | frag ms | frame | saves |
+|---|---:|---:|---:|
+| `crt-turbo-v4a`, full fidelity | 11.266 | **76%** | — |
+| `crt-turbo-v4b`, `jac` pinned | 10.667 | **72%** | 0.60 ms |
+| probe, `noWarp` pinned instead | 9.043 | **63%** | 2.22 ms |
+| probe, both pinned | 8.444 | **60%** | 2.82 ms |
+| `crt-turbo-v1`, no curvature at all | 7.683 | **56%** | 3.58 ms |
+
+**`noWarp` is worth 1.62 ms and `jac` 0.60 ms - the opposite of what was
+predicted.** The Jacobian looked like the expensive one because it feeds the
+scaler's footprint, which feeds the texture coordinate; in fact the pattern's
+pitch and lock terms are the larger loss, because they are what the driver was
+hoisting out of the fragment shader entirely.
+
+The residue is instructive too: with both pinned, curvature still costs 0.76 ms
+against having no curvature code at all. That is the warp arithmetic and the
+corner mask, and it is irreducible if the feature is to exist in the file.
+
+**So the trade is real and it is bigger than a fidelity argument suggests.**
+Pinning both is 16 points of frame for a difference of 74/255 at
+`cp_curvature = 0.15` and **zero at every setting below it**, since both pinned
+values only act when the warp does.
+
+### The dmg shadow is free when disabled
+
+| shader | with the block | without | cost when off |
+|---|---:|---:|---:|
+| `dmg-turbo-v3` | 6.843 | 6.798 | **+0.045 ms** (0.3% of a frame) |
+| `dmg-mini-v3` | 5.732 | 5.581 | **+0.151 ms** (0.9% of a frame) |
+
+`dp_shadow` ships at 0, so that is what a default user pays for carrying the
+most expensive effect in the set. Unlike curvature, the shadow block turns no
+uniform-derived value into a varying: it reads a second tap and multiplies
+`col`, both already per-fragment. **This is the case where "a uniform branch is
+free" holds**, and the pair with curvature is what makes the rule usable:
+the cost is not the branch, it is what the branch writes.

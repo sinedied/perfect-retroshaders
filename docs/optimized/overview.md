@@ -11,11 +11,64 @@ and **the released shaders are not touched.**
 | `*-mini` | the pattern only, no scaler, composable behind anything | you want to pick your own scaler, or chain a source-resolution colour pass |
 
 Target: **≤ 75% of a frame (12.5 ms) at the shipped defaults.** Measured on the
-device: six of the eight meet it. **`lcd-turbo` lands at 76% and `crt-turbo` at
-78%** — both miss, and both still halve what they replace.
+device: six of the eight meet it. **`lcd-turbo` lands at 76% and `crt-turbo-v4a`
+at 76%** — both miss, and both still halve what they replace. `crt-turbo-v4b`
+clears it at 72%, for one line of fidelity under curvature.
 
 **Every device figure on this page is measured**, from the run in
 `docs/device-results.tsv`. See [the device run](#the-device-run).
+
+## What v5 changed
+
+**`crt-turbo` and `crt-mini` take `crt-perfect`'s brightness.** v3 clamped the
+content before the pattern; v4 multiplies brightness into the pattern gain, as
+the released v10 does. Moiré at the 1.25 default falls from **7.256 to 0.480**
+— seven recorded exceptions become one — and `crt-turbo-v4a` now matches
+`crt-perfect` within 1/255 at *every* brightness, where v3 was 27/255 out at the
+default.
+
+**Curvature's cost was traced, and the answer was the reverse of the guess.**
+It is not the warp arithmetic and not the dependent texture read: `jac` and
+`noWarp` are written inside the guard, which turns three hoistable quantities
+into per-fragment ones.
+
+| build | frame | saves |
+|---|---:|---:|
+| **`crt-turbo-v4a`**, full fidelity — `current` | **76%** | — |
+| **`crt-turbo-v4b`**, `jac` pinned | **72%** | 0.60 ms |
+| probe, `noWarp` pinned | 63% | 2.22 ms |
+| probe, both pinned | 60% | 2.82 ms |
+| `crt-turbo-v1`, no curvature code at all | 56% | 3.58 ms |
+
+**`noWarp` is worth 1.62 ms against the Jacobian's 0.60**, nearly three times
+as much, and it only scales two pattern terms. The value that feeds the texture
+coordinate was the cheaper half. Both arms are byte-identical at
+`cp_curvature = 0` and differ by 74/255 at 0.15 — a difference nobody sees
+without a diff. `v4a` ships as `current` because it gives up nothing; `v4b`
+exists because it is the arm that meets the target.
+
+**There is no `crt-mini-v4b`.** The mini has no footprint to correct, so a b arm
+would be byte-identical to `v4` — which is exactly the trap `crt-perfect-v13`
+fell into, caught this time before it was built.
+
+**No `dmg` v4, deliberately.** The shadow was investigated for all three things
+asked of it and none justified a version number: the reported missing blur was a
+NEAREST filter rather than a shader defect; the blur is already near-minimal,
+with nothing to hoist and nothing shareable with the main coverage integral; and
+it is **already free when disabled** — 0.045 ms on `dmg-turbo`, 0.151 ms on
+`dmg-mini`, against `dp_shadow` shipping at 0. A cell-centre `paper` fix for the
+standalone mini was built and measured at 0.03–0.14% closer on eight cases and
+worse on two, for +7 ops and a third tap. Rejected. See
+`docs/optimized/dmg-turbo.md`.
+
+**`lcd-perfect-v9c`'s grid goes to 3.0 px**, edited in place at the owner's
+request rather than as a new iteration. Levels stay monotonic (250.0 → 196.8
+mean at ×4) and worst moiré is 0.248 against a 0.40 limit.
+
+**Every `*-mini` header now opens its Notes with the LINEAR requirement.** None
+of them mentioned it, and under NEAREST the pattern still draws while the
+picture underneath silently becomes nearest-neighbour — the failure mode looks
+like a broken effect, not a wrong filter.
 
 ## What v3 changed
 
@@ -433,10 +486,14 @@ by op count and ops are not what costs.
    8. `lcd-perfect-v9c` already demonstrates the payoff: +94 ops and −5 SFU made
    it the *fastest* shader in its family. Every `sin`, `cos`, `sqrt` and `pow`
    in a pattern is now a candidate for a polynomial or a table.
-2. **Settle whether a disabled uniform branch is free.** `crt-turbo-v1` is 22
-   points cheaper than `v3` for +21 ops. If the curvature branch costs when off,
-   that is the single largest number on this page and it invalidates a design
-   decision. The probe is built; it needs one device run.
+2. **~~Settle whether a disabled uniform branch is free.~~ Answered: it depends
+   on what the branch writes.** Curvature costs **3.58 ms with `cp_curvature` at
+   0.00**; the dmg shadow costs **0.045 ms** with `dp_shadow` at 0, and the slot
+   mask 0.14 ms unselected. The cheap ones write only values that were already
+   per-fragment; curvature writes two that the driver was hoisting out of the
+   shader entirely. Pinning those two back recovers 2.82 of the 3.58 ms, and
+   **that is now the largest single saving available in this line** — it is
+   waiting on a decision, not a measurement.
 3. **`mediump` / fp16**, which is now the obvious follow-on from item 1 rather
    than an afterthought.
 4. **`crt-turbo`'s 291-op floor.** Still real, still 72% of the shader — but at

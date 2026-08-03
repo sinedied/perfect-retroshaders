@@ -148,14 +148,19 @@ README table. Two things it settled:
   **So: guard every `pow` on the parameter that disables it, and ship that
   parameter neutral if you can.**
 - **A uniform-guarded feature is free only if nothing outside the guard depends
-  on what it wrote.** Measured by deleting one guarded block at a time from
-  `crt-turbo-v3`, each probe byte-identical at the shipped defaults: the slot
-  mask costs **0.14 ms** unselected (noise), and curvature costs **3.26 ms with
-  `cp_curvature` at 0.00** - 20% of a frame, paid by everyone who never turns it
-  on. The difference is that the curvature block writes `uv`, which is the
-  texture coordinate, so its presence makes the fetch dependent. Cheap: a term
-  added into a pattern. Expensive: anything that moves the sampling position -
-  and for those the only fix is a second shader file, not a branch.
+  on what it wrote.** Measured by deleting one guarded block at a time, each
+  probe byte-identical to its parent at the shipped defaults. Free: the slot
+  mask at **0.14 ms** unselected, and the dmg shadow at **0.045 ms** with
+  `dp_shadow` at 0 - both write only values that were already per-fragment.
+  Expensive: curvature at **3.58 ms with `cp_curvature` at 0.00**, 21% of a
+  frame paid by everyone who never turns it on, because it writes `jac` and
+  `noWarp` and those make `h`, `scanLocked` and `maskLocked` per-fragment where
+  the driver was hoisting them out of the shader entirely. Pinning them back
+  recovers 2.82 of the 3.58 ms.
+  **The cost is not the branch, it is what the branch writes** - and the guess
+  that the expensive one would be whatever feeds the texture coordinate was
+  wrong: `noWarp`, which only scales two pattern terms, cost 1.62 ms against
+  the Jacobian's 0.60.
 - **`perf.py --static`'s `@def` column cannot price an option.** It moved by 2
   ops across that 3.26 ms, because it folds the parameters to literals and then
   deletes the branch a live uniform keeps. Read `live` for a guarded feature.

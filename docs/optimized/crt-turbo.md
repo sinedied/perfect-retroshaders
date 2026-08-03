@@ -121,3 +121,50 @@ one.
 
 That is the next lever for this shader, and it is worth more than anything else
 in either line.
+
+
+## v4: crt-perfect's brightness, and what curvature really costs
+
+**Brightness moves into the pattern gain**, as `crt-perfect` v10 has it, instead
+of v3's clamp on the content before the pattern:
+
+```glsl
+vec3 gain = sqrt(max(mask * (scan * cp_brightness), 0.0));
+```
+
+| | moiré @1.25 | vs `crt-perfect` at any brightness |
+|---|---:|---|
+| v3, clamp the content | 7.256 | 27/255 at the default |
+| **v4a, `b` in the pattern gain** | **0.480** | **1/255 at every setting** |
+
+Seven recorded moiré exceptions become one, and the two lines stop disagreeing:
+`crt-turbo-v4a` is now within 1/255 of the released shader at 1.00, 1.25 and
+2.00 alike. `docs/crt-perfect.md` has why the alternatives lose.
+
+### The two arms, and the measurement that inverted the guess
+
+Curvature costs even at `cp_curvature = 0` because `jac` and `noWarp` are
+written inside the guard, which makes `h`, `scanLocked` and `maskLocked`
+per-fragment. `v4b` pins the Jacobian; two further probes pin `noWarp` and both.
+
+| build | frame | saves |
+|---|---:|---:|
+| **v4a**, full fidelity | **76%** | — |
+| **v4b**, `jac` pinned | **72%** | 0.60 ms |
+| probe, `noWarp` pinned | 63% | 2.22 ms |
+| probe, both pinned | 60% | 2.82 ms |
+| v1, no curvature at all | 56% | 3.58 ms |
+
+**`noWarp` is worth nearly three times what the Jacobian is**, which is the
+reverse of the prediction. The Jacobian feeds the texture coordinate and looked
+like the expensive one; the pattern's pitch and lock terms turned out to be the
+larger loss, because they are what the driver was hoisting away entirely.
+
+At `cp_curvature = 0` every arm is byte-identical, so none of this costs a user
+who leaves curvature alone anything in picture — only in the frame time they
+pay for carrying the code. **v4a misses the 75% target at 76%; v4b clears it at
+72%**, and pinning both would reach 60%. Which arm ships is the owner's call;
+`v4a` is `current` because it is the one that gives up nothing.
+
+There is no `crt-mini-v4b`. The mini has no footprint to correct, so a b arm
+would be byte-identical to `v4` — the trap `crt-perfect-v13` fell into.

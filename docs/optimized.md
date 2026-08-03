@@ -63,74 +63,85 @@ higher is cheaper. **frame** is the share of one 60fps frame (16.67 ms).
 
 | Shader | setting | ops | SFU | tex | desktop ms | vs pix. | device ms | vs pix. | frame |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| pixel-perfect *(released)* | defaults | 112 | 0 | 4 | 0.0599 | 98% | 6.7 | 181% | **40%** |
-|  | all on | 141 | 6 | 4 | 0.0673 | 88% | — | — | — |
-| pixel-turbo v1 | defaults | 53 | 0 | 1 | — | — | 4.5 | 273% | **27%** |
+| pixel-perfect *(released)* | defaults | 112 | 0 | 4 | 0.0599 | 98% | 6.7 | 182% | **40%** |
+|  | all on | 141 | 6 | 4 | 0.0673 | 88% | 8.9 | 137% | **54%** |
+| pixel-turbo v1 | defaults | 53 | 0 | 1 | — | — | 4.4 | 276% | **27%** |
 |  | all on | 82 | 6 | 1 | — | — | — | — | — |
-| pixel-turbo v2 | defaults | 53 | 0 | 1 | — | — | 4.7 | 262% | **28%** |
+| pixel-turbo v2 | defaults | 53 | 0 | 1 | — | — | 4.7 | 264% | **28%** |
 |  | all on | 82 | 6 | 1 | — | — | — | — | — |
-| **pixel-turbo v3** | defaults | 53 | 0 | 1 | 0.0506 | 116% | 4.5 | 269% | **27%** |
-|  | all on | 82 | 6 | 1 | 0.0523 | 113% | — | — | — |
-| colour-mini v2 | defaults | 20 | 0 | 1 | — | — | 3.1 | 395% | **19%** |
+| **pixel-turbo v3** | defaults | 53 | 0 | 1 | 0.0506 | 116% | 4.5 | 272% | **27%** |
+|  | all on | 82 | 6 | 1 | 0.0523 | 113% | 6.7 | 184% | **40%** |
+| colour-mini v2 | defaults | 20 | 0 | 1 | — | — | 3.1 | 399% | **18%** |
 |  | all on | 49 | 6 | 1 | — | — | — | — | — |
-| **colour-mini v3** | defaults | 20 | 0 | 1 | 0.0493 | 119% | 3.1 | 391% | **19%** |
-|  | all on | 49 | 6 | 1 | 0.0488 | 121% | — | — | — |
+| **colour-mini v3** | defaults | 20 | 0 | 1 | 0.0493 | 119% | 3.1 | 395% | **19%** |
+|  | all on | 49 | 6 | 1 | 0.0488 | 121% | 5.1 | 240% | **31%** |
 | crt-perfect *(released)* | defaults | 428 | 8 | 4 | 0.0650 | 91% | 15.9 | 77% | **95%** |
-|  | all on | 503 | 14 | 4 | 0.0678 | 87% | — | — | — |
+|  | all on | 503 | 14 | 4 | 0.0678 | 87% | 19.9 | 62% | **119%** |
 | crt-turbo v1 | defaults | 282 | 8 | 1 | — | — | 9.3 | 132% | **56%** |
 |  | all on | 286 | 14 | 1 | — | — | — | — | — |
-| crt-turbo v2 | defaults | 301 | 14 | 1 | — | — | 14.3 | 85% | **86%** |
+| crt-turbo v2 | defaults | 301 | 14 | 1 | — | — | 14.3 | 86% | **86%** |
 |  | all on | 372 | 14 | 1 | — | — | — | — | — |
 | crt-turbo v3 | defaults | 303 | 8 | 1 | — | — | 13.0 | 94% | **78%** |
 |  | all on | 380 | 14 | 1 | — | — | — | — | — |
-| **crt-turbo v4a** | defaults | 296 | 8 | 1 | 0.0578 | 102% | — | — | — |
-|  | all on | 373 | 14 | 1 | 0.0595 | 99% | — | — | — |
-| crt-turbo v4b | defaults | 292 | 8 | 1 | 0.0570 | 103% | — | — | — |
+| **crt-turbo v4a** | defaults | 296 | 8 | 1 | 0.0578 | 102% | 12.6 | 97% | **76%** |
+|  | all on | 373 | 14 | 1 | 0.0595 | 99% | 15.8 | 78% | **95%** |
+| crt-turbo v4b | defaults | 292 | 8 | 1 | 0.0570 | 103% | 12.1 | 102% | **72%** |
 |  | all on | 357 | 14 | 1 | 0.0580 | 102% | — | — | — |
-| crt-mini v2 | defaults | 264 | 14 | 1 | — | — | 12.3 | 99% | **74%** |
+| crt-mini v2 | defaults | 264 | 14 | 1 | — | — | 12.3 | 100% | **74%** |
 |  | all on | 323 | 14 | 1 | — | — | — | — | — |
 | crt-mini v3 | defaults | 266 | 8 | 1 | — | — | 11.0 | 111% | **66%** |
 |  | all on | 331 | 14 | 1 | — | — | — | — | — |
-| **crt-mini v4** | defaults | 259 | 8 | 1 | 0.0556 | 106% | — | — | — |
-|  | all on | 324 | 14 | 1 | 0.0567 | 104% | — | — | — |
-| lcd-perfect *(released)* | defaults | 334 | 17 | 4 | 0.0621 | 95% | 15.0 | 81% | **90%** |
-|  | all on | 339 | 23 | 4 | 0.0620 | 95% | — | — | — |
+| **crt-mini v4** | defaults | 259 | 8 | 1 | 0.0556 | 106% | 10.6 | 116% | **63%** |
+|  | all on | 324 | 14 | 1 | 0.0567 | 104% | 13.6 | 90% | **82%** |
+| lcd-perfect *(released)* | defaults | 334 | 17 | 4 | 0.0621 | 95% | 15.0 | 82% | **90%** |
+|  | all on | 339 | 23 | 4 | 0.0620 | 95% | 16.5 | 74% | **99%** |
 | lcd-turbo v1 | defaults | 293 | 17 | 1 | — | — | 12.8 | 96% | **77%** |
 |  | all on | 298 | 23 | 1 | — | — | — | — | — |
-| lcd-turbo v2 | defaults | 284 | 23 | 1 | — | — | 13.9 | 88% | **83%** |
+| lcd-turbo v2 | defaults | 284 | 23 | 1 | — | — | 13.9 | 89% | **83%** |
 |  | all on | 283 | 23 | 1 | — | — | — | — | — |
-| **lcd-turbo v3** | defaults | 286 | 17 | 1 | 0.0585 | 101% | 12.6 | 97% | **76%** |
-|  | all on | 291 | 23 | 1 | 0.0586 | 101% | — | — | — |
-| lcd-mini v2 | defaults | 218 | 19 | 1 | — | — | 9.9 | 124% | **59%** |
+| **lcd-turbo v3** | defaults | 286 | 17 | 1 | 0.0585 | 101% | 12.6 | 98% | **75%** |
+|  | all on | 291 | 23 | 1 | 0.0586 | 101% | 14.1 | 87% | **85%** |
+| lcd-mini v2 | defaults | 218 | 19 | 1 | — | — | 9.8 | 125% | **59%** |
 |  | all on | 217 | 19 | 1 | — | — | — | — | — |
-| **lcd-mini v3** | defaults | 220 | 13 | 1 | 0.0534 | 110% | 8.6 | 142% | **52%** |
-|  | all on | 225 | 19 | 1 | 0.0534 | 110% | — | — | — |
+| **lcd-mini v3** | defaults | 220 | 13 | 1 | 0.0534 | 110% | 8.6 | 143% | **52%** |
+|  | all on | 225 | 19 | 1 | 0.0534 | 110% | 10.1 | 121% | **61%** |
 | dmg-perfect *(released)* | defaults | 267 | 6 | 4 | 0.0599 | 98% | 14.6 | 84% | **88%** |
-|  | all on | 443 | 6 | 8 | 0.0673 | 88% | — | — | — |
-| dmg-turbo v1 | defaults | 168 | 6 | 1 | — | — | 8.4 | 145% | **51%** |
+|  | all on | 443 | 6 | 8 | 0.0673 | 88% | 20.6 | 60% | **124%** |
+| dmg-turbo v1 | defaults | 168 | 6 | 1 | — | — | 8.4 | 146% | **51%** |
 |  | all on | 273 | 6 | 2 | — | — | — | — | — |
-| dmg-turbo v2 | defaults | 168 | 6 | 1 | — | — | 8.4 | 145% | **51%** |
+| dmg-turbo v2 | defaults | 168 | 6 | 1 | — | — | 8.4 | 146% | **50%** |
 |  | all on | 273 | 6 | 2 | — | — | — | — | — |
-| **dmg-turbo v3** | defaults | 168 | 6 | 1 | 0.0525 | 112% | 8.4 | 145% | **50%** |
-|  | all on | 273 | 6 | 2 | 0.0565 | 104% | — | — | — |
-| dmg-mini v2 | defaults | 148 | 6 | 1 | — | — | 7.4 | 164% | **45%** |
+| **dmg-turbo v3** | defaults | 168 | 6 | 1 | 0.0525 | 112% | 8.4 | 147% | **50%** |
+|  | all on | 273 | 6 | 2 | 0.0565 | 104% | 12.5 | 98% | **75%** |
+| dmg-mini v2 | defaults | 148 | 6 | 1 | — | — | 7.4 | 165% | **45%** |
 |  | all on | 253 | 6 | 2 | — | — | — | — | — |
-| **dmg-mini v3** | defaults | 148 | 6 | 1 | 0.0507 | 116% | 7.4 | 166% | **44%** |
-|  | all on | 253 | 6 | 2 | 0.0545 | 108% | — | — | — |
+| **dmg-mini v3** | defaults | 148 | 6 | 1 | 0.0507 | 116% | 7.3 | 167% | **44%** |
+|  | all on | 253 | 6 | 2 | 0.0545 | 108% | 11.5 | 107% | **69%** |
 |  |  |  |  |  |  |  |  |  |  |
-| `sharp-shimmerless` | — | 49 | 0 | 1 | 0.0481 | 122% | 3.9 | 316% | **23%** |
-| `dmg_dot_matrix` | — | 78 | 6 | 1 | 0.0480 | 123% | 4.9 | 247% | **30%** |
-| `barrel-distortion` | — | 81 | 0 | 1 | 0.0477 | 123% | — | — | — |
+| `sharp-shimmerless` | — | 49 | 0 | 1 | 0.0481 | 122% | 3.8 | 320% | **23%** |
+| `dmg_dot_matrix` | — | 78 | 6 | 1 | 0.0480 | 123% | 5.2 | 237% | **31%** |
+| `barrel-distortion` | — | 81 | 0 | 1 | 0.0477 | 123% | 4.4 | 280% | **26%** |
 | `shimmerless → scanlines` | — | 101 | 1 | 2 | — | — | 5.7 | 214% | **34%** |
-| `shimmerless → lcd1x` | — | 96 | 2 | 2 | — | — | 6.3 | 192% | **38%** |
-| `shimmerless → lcd3x` | — | 117 | 4 | 2 | — | — | 6.8 | 179% | **41%** |
-| `pixellate` | — | 240 | 30 | 4 | 0.0589 | 100% | 12.2 | 100% | **73%** |
-| `image-adjustment` | — | 345 | 6 | 2 | 0.0572 | 103% | — | — | — |
+| `shimmerless → lcd1x` | — | 96 | 2 | 2 | — | — | 6.3 | 194% | **38%** |
+| `shimmerless → lcd3x` | — | 117 | 4 | 2 | — | — | 6.8 | 180% | **41%** |
+| `pixellate` | — | 240 | 30 | 4 | 0.0589 | 100% | 12.3 | 100% | **74%** |
+| `image-adjustment` | — | 345 | 6 | 2 | 0.0572 | 103% | 12.0 | 102% | **72%** |
 | `dmg_dot_matrix → adjust` | — | 423 | 12 | 3 | — | — | 15.7 | 78% | **94%** |
 
-Device figures are from `docs/device-results.tsv`. **A dash means not measured
-yet, not zero** — the all-on rows and the v4 arms need the next device run, and
-the archived iterations were measured at their defaults only.
+Device figures are from `docs/device-results.tsv`, 67 pipelines, self-test
+passed. **A dash means not measured, not zero** — archived iterations and the
+two-pass references were run at their defaults only.
 
 Desktop worst per-case IQR was 27.7%, so a desktop difference smaller than that
-is noise. The device run's worst IQR was 2.5%.
+is noise; the device run's was 2.5%.
+
+Three rows to read twice:
+
+- **`crt-turbo` v4a is 76% at its defaults and misses the 75% target**, where
+  v4b is 72%. The difference is one line — whether the warp's Jacobian is
+  multiplied into the footprint — and it changes nothing at all when curvature
+  is off.
+- **`crt-perfect` and `dmg-perfect` cross a whole frame with everything on**
+  (119% and 124%). The turbo line's worst all-on row is 95%.
+- **`image-adjustment` alone is 72% of a frame**, which is the entire reason the
+  vendor stacks stop fitting the moment grading is added.

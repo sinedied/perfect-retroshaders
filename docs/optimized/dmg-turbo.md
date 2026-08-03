@@ -122,3 +122,29 @@ Fixed by keying on the panel kind, `family.split("-")[0]`, rather than the whole
 family name. The same class of bug as every other one in
 `docs/measurement.md`: a constant that was right when it was written and that
 nothing rechecks.
+
+
+## Why there is no v4
+
+Three things were measured and none of them justified an iteration.
+
+**The blur was never broken.** A report that the turbo's shadow had lost its
+blur turned out to be a NEAREST filter: with LINEAR set, the shadow factor
+matches `dmg-perfect` to three decimals and 0.0% of pixels differ by more than
+10% on any case. Under NEAREST the pattern still draws, so nothing looks broken
+while the picture underneath is nearest-neighbour — which is why the LINEAR
+requirement is now the first line of every `*-mini` header too.
+
+**The blur is already near-minimal.** `covS` is 106 ops, the most expensive
+effect in the set, but `dotInt` is four cheap ops and its argument varies per
+fragment, so there is nothing to hoist and nothing to share with the main `cov`
+— they are evaluated at different positions and different widths.
+
+**It is free when disabled.** Measured by deleting the block: **0.045 ms** on
+`dmg-turbo` and 0.151 ms on `dmg-mini`, against `dp_shadow` shipping at 0.
+Unlike curvature, the shadow writes nothing that was previously uniform-derived
+— it reads a second tap and multiplies `col`, both already per-fragment.
+
+So the answer to "keep the shadow cost close to 0 when it is disabled" is that
+it already is, and the honest thing was to say so rather than ship a version
+number.
