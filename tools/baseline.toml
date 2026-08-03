@@ -225,6 +225,10 @@ label = "shimmerless -> lcd1x -> adjust"
 cfg = "shimmerless-lcd1x-adjust.cfg"
 
 [[pipeline]]
+label = "image-adjustment"
+cfg = "image-adjustment.cfg"
+
+[[pipeline]]
 label = "barrel-distortion"
 cfg = "barrel-distortion.cfg"
 
@@ -511,7 +515,7 @@ neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamm
 # unit has already blended - so a gain has to clip after the blend, which is the
 # non-linearity the design rule names. An exponent leaves 0 at 0 and 1 at 1, so
 # nothing ever clips; it beats instead, and that is the exception each of these
-# records. The evidence for taking it is in docs/optimized.md: it does not crawl
+# records. The evidence for taking it is in docs/optimized/overview.md: it does not crawl
 # (0.000), it is exactly zero at an integer scale, and on real game frames it is
 # a median 0.99 levels RMS against 11.30 on the synthetic checkerboard the gate
 # renders.
@@ -590,7 +594,7 @@ pattern = "output-locked"
 # same exponent. A clamp after the blend beats, and one tap has no per-source
 # clamp to use instead, so these are the price. Every one is zero at
 # cp_brightness 1.00; the default is 1.25. Worse than v2's, which is the honest
-# reading: a clip has a harder edge than a curve. See docs/optimized.md.
+# reading: a clip has a harder edge than a curve. See docs/optimized/overview.md.
 moire_allow = [
     { case = [320, 240, 1024, 768], value = 3.743 },
     { case = [256, 224, 1024, 768], value = 2.668 },
@@ -620,7 +624,7 @@ pattern = "output-locked"
 #
 # THE MOIRE EXCEPTIONS ARE THE MIDTONE LIFT, and they are the largest quality
 # decision in this repository. Taken deliberately, on the owner's instruction,
-# with the evidence in docs/optimized.md. Every one of them is zero at
+# with the evidence in docs/optimized/overview.md. Every one of them is zero at
 # cp_brightness 1.00. Delete them and the shader is inside the limit everywhere.
 moire_allow = [
     { case = [320, 240, 1024, 768], value = 2.001 },

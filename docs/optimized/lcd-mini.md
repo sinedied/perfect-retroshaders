@@ -38,7 +38,7 @@ than something the scale forced on them: `crt-mini` saves 37 ops, `dmg-mini` 20,
 The stripe block is now the largest single thing in the shader, and most of it
 is the colour-cast correction. That is not optional — without it the stripes
 tint the whole picture — so it needs a cheaper form rather than removal. It is
-the second lever in `docs/optimized.md`.
+the second lever in `docs/optimized/overview.md`.
 
 ## Assemblies
 

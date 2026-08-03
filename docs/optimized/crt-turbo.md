@@ -84,7 +84,7 @@ Two things bound it. The metric renders a 1px checkerboard, maximum energy at
 the source pixel grid, which no game reaches; and the whole effect **vanishes at
 an integer scale**, because every output pixel then has full coverage. The full
 evidence, and the source-resolution `colour-mini` pass that removes it for 1
-point of frame time, are in `docs/optimized.md`.
+point of frame time, are in `docs/optimized/overview.md`.
 
 Crawl at the defaults is 1.001, against `crt-perfect`'s 0.295 on the same
 control — the one-tap scale has no per-tap clamp to fall back on, so the clip

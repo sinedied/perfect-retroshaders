@@ -65,7 +65,7 @@ Curvature is free when off, and the corner mask with it: 0 ops at
 
 The patterns are 4 ops. Everything above them is band-limiting, and reducing it
 means a cheaper band-limit rather than a better-placed one. It is the first
-lever in `docs/optimized.md` and it applies to `crt-turbo` and `crt-mini`
+lever in `docs/optimized/overview.md` and it applies to `crt-turbo` and `crt-mini`
 equally.
 
 ## Measured

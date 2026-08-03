@@ -26,7 +26,7 @@ does not read GLSL.
 | `tools/device/` | the on-device benchmark, in C. Cross-built, run on the Brick |
 | `tools/report.py` | a device run's TSV as the README's performance table |
 | `docs/<shader>.md` | design record: what was measured, what was rejected, why |
-| `docs/optimized.md`, `docs/optimized/` | the same, for the `*-turbo` line. Kept separate on purpose |
+| `docs/optimized/overview.md`, `docs/optimized/` | the same, for the `*-turbo` line. Kept separate on purpose |
 
 ### Release and iteration
 
@@ -239,7 +239,7 @@ above — brightness on the taps, clamped there — is unavailable, and every fo
 that puts the clamp after the blend was measured and rejected. What works is
 shallowing the pattern instead of gaining the picture: both patterns are
 peak-normalised to 1, so reducing their depth gives back the light they cost
-with no knee and nothing to clip. See `docs/optimized.md`.
+with no knee and nothing to clip. See `docs/optimized/overview.md`.
 
 ## Shader header and comments
 

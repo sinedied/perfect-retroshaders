@@ -64,7 +64,7 @@ if (lp_brightness != 1.0)
 `lp_brightness` ships at 1.25, so it is live at the default. The checkerboard
 figure is the synthetic worst case, and the effect is exactly 0 at an integer
 scale; a source-resolution `colour-mini` pass in front removes it for 1 point of
-frame time. Full evidence in `docs/optimized.md`.
+frame time. Full evidence in `docs/optimized/overview.md`.
 
 **It cost 2 ops and saved 6 SFU** — the guarded `pow` is gone at gamma 1.00.
 

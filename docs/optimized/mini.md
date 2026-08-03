@@ -50,7 +50,7 @@ front.
 | `pixel-turbo → lcd-mini` | 2 | 271 | 2 | *10.9* | *66%* |
 | `pixel-turbo → crt-mini` | 2 | 317 | 2 | *12.4* | *74%* |
 
-All predicted; see `docs/optimized.md`.
+All predicted; see `docs/optimized/overview.md`.
 
 **A chain is not cheaper than the turbo shader that does the same thing.**
 `pixel-turbo → lcd-mini` is 66% against `lcd-turbo`'s 64%, and `pixel-turbo →
@@ -69,7 +69,7 @@ What the split buys is choice, and there are three worth naming:
 3. **Grading in the right place.** `colour-mini` at *source* resolution in front
    of the scaler costs 0.2 ms and removes the moiré exception the turbo line
    takes. This is the important one, and it has its own section in
-   `docs/optimized.md`.
+   `docs/optimized/overview.md`.
 
 ## `lcd-mini` is the one that gets structurally cheaper
 
