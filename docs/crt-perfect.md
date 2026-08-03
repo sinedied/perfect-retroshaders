@@ -295,6 +295,11 @@ there.
 
 ## v12: brightness before the blend
 
+***Superseded.*** *v12 was archived and the release stayed at v10 — the fix
+below is correct on every metric and bleaches highlights, which no metric here
+can see. The section is kept because the diagnosis is right and the measurement
+stands; the verdict is in [the next section](#brightness-three-forms-and-which-one-is-allowed-to-wash-out).*
+
 Reported from a device: at `cp_brightness` above 1.0, SNES content aspect-scaled
 to 1024x768 shows a pattern — **without scrolling**, so this one is static and
 `moire` sees it rather than `crawl`. At brightness 1.0 it is absent, and
@@ -347,44 +352,76 @@ deliberately differs from every earlier version everywhere, curvature or not,
 because the brightness path changed. The comparison now pins brightness to 1.0,
 where the two are the same arithmetic and the claim still means what it meant.
 
-## v13: the per-tap clamp was better on every number and wrong in use
+## Brightness: three forms, and which one is allowed to wash out
 
 v12 clamps brightness on each tap, where the clamp is per source pixel and so
-cannot vary with coverage. It is strictly the best of the three formulations
-this repository has tried, and flat in brightness on both metrics:
+cannot vary with coverage. On the numbers it is the best of everything tried:
 
 | form | crawl @1.25 | crawl @2.0 | moiré @1.25 | moiré @2.0 |
 |---|---:|---:|---:|---:|
-| v10, gain on the pattern, one end clamp | 0.295 | **1.496** | 0.466 | 7.347 |
-| v12, gain per tap, clamped there | 0.094 | 0.077 | 0.494 | 0.494 |
+| **A** — in the pattern gain, one end clamp *(v10, shipped)* | 0.295 | **1.496** | 0.466 | 7.347 |
+| **B** — clamp the blended content, then the pattern | 0.176 | 0.231 | **3.292** | 13.125 |
+| **C** — clamp per tap *(v12)* | 0.094 | 0.077 | 0.494 | 0.494 |
 
-**It was still reported as unusable**, and the mechanism is plain once looked
-for. `sb = pow(brightness, 0.5/gamma)` scales each tap and clamps it *before*
-the mask and scanlines are applied. At 1.25 every tap above 0.89 becomes flat
-white and its structure is gone; the pattern then darkens an already-flat
-highlight. The slider bleaches the picture instead of brightening it, and no
-metric here can see that because a bleached frame has no beat and no crawl.
+Limits are 0.35 crawl and 0.40 moiré. C is flat in brightness on both, and it
+was still reported as unusable: *"the brightness slider doesn't work for me
+visually, it just washes out everything."*
 
-v10 multiplies brightness into the pattern gain and clamps **once, at the very
-end, on the product**, so a highlight keeps its detail until the product itself
-exceeds 1. v13 is v12 with that restored:
+**The mechanism.** `sb = pow(brightness, 0.5/gamma)` scales each tap and clamps
+it *before* the mask and scanlines are applied. At 1.25 every tap above 0.89
+becomes flat white and its structure is gone; the pattern then modulates blank
+paper instead of a picture. No metric here can see that, because a bleached
+frame has no beat and no crawl.
+
+### B was tried, and it is C wearing a different hat
+
+The obvious middle road is to clamp the *blended* content rather than each tap,
+so the clamp is post-blend but still ahead of the pattern:
 
 ```glsl
-vec3 gain = sqrt(max(mask * (scan * cp_brightness), 0.0));
-FragColor  = vec4(clamp(color * gain * tube, 0.0, 1.0), 1.0);
+color = min(color * sqrt(cp_brightness), 1.0);   // B
+vec3 gain = sqrt(max(mask * scan, 0.0));
 ```
 
-Gamma stays **before** the pattern, which is where v10 has it — v11 was the only
-version that put it after, and v12 had already moved it back.
+A control probe with the same multiply and **no** intermediate clamp reproduced
+v10 to 1/255, which is the proof that the two forms are algebraically identical
+and the clamp is the only variable.
 
-**v13 measures exactly like the release**: 428 ops against v12's 449, moiré
-0.334 worst, and the same two exceptions the shipped shader carries. The 21 ops
-the per-tap clamp cost are gone with it.
+B is not a middle road. Mean absolute difference over four real screenshots:
 
-The crawl comes back, and that is the price: 1.496 at brightness 2.00 against
-v12's 0.077. At the shipped 1.25 it is 0.295, inside the 0.35 limit. The header
-now says so — brightness above 1.00 clips, and a clip beats unless the output is
-a whole multiple of the source.
+| brightness | B vs **C** (per tap) | B vs **A** (shipped) |
+|---:|---:|---:|
+| 1.25 | **0.11 levels** | 4.12 levels |
+| 2.00 | **0.39 levels** | 13.82 levels |
 
-**v12 stays archived as the negative control** for the crawl property, and as
-the record that the best-measuring answer was not the right one.
+**B reproduces v12 to a tenth of a level.** Both clamp the content at the same
+threshold before the pattern; per-tap versus post-blend only moves transition
+pixels, which is invisible. So B buys the rejected look *and* pays 7x the moiré
+for it — 3.292 against 0.466. Rejected.
+
+### The real trade, stated once
+
+A gain above 1 has to clip somewhere. The only choice is what loses its detail:
+
+- **A washes out the pattern.** At brightness 2.00 a white field goes flat — the
+  scanlines vanish, because the product saturates and there is nothing left for
+  the mask to modulate.
+- **B and C wash out the picture.** The content clips first, so highlights
+  become flat white and the pattern is drawn onto blank paper.
+
+**A is shipped**, because the picture is the point and the pattern is decoration
+over it. The cost is the crawl at high brightness — 1.496 at 2.00 against v12's
+0.077 — which is why the parameter is documented as one to leave alone off an
+integer scale.
+
+### v13, withdrawn
+
+A `crt-perfect-v13` briefly existed, built by reverting v12's brightness and
+gamma to where v10 has them. That lands on v10 exactly: the two files are
+byte-identical bar three comment lines, 428 ops each, and the device measured
+them 15.884 ms and 15.863 ms — the same shader twice, 0.02 ms apart.
+
+It was withdrawn rather than kept. **Reverting a change to its predecessor's
+form does not need a new iteration; it needs the predecessor.** The gate did not
+catch it, because nothing checks that a new iteration differs from an existing
+one. Worth remembering: `diff` against the version you think you are undoing.

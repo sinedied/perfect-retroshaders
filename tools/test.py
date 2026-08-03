@@ -88,8 +88,16 @@ def goldens(names, ctx, progs, report, cases, record=False):
                 changed.append(f"{name} {key}")
             table.setdefault(name, {})[key] = got
     if record:
+        # Drop hashes for shaders that no longer exist. Recording merges into
+        # what is already there, so without this a withdrawn iteration keeps its
+        # block for ever - crt-perfect-v13's survived being deleted, and a
+        # golden nothing can ever render again is only rot.
+        stale = [k for k in table if k not in c.SHADERS_DECLARED]
+        for k in stale:
+            del table[k]
         c.write_goldens(table)
-        report.note(f"recorded {sum(len(v) for v in table.values())} goldens")
+        report.note(f"recorded {sum(len(v) for v in table.values())} goldens"
+                    + (f", dropped {len(stale)} stale" if stale else ""))
         return report
     report.check(not changed, "goldens unchanged",
                  f"{len(changed)} moved: " + ", ".join(changed[:4])

@@ -234,15 +234,13 @@ cfg = "dmg-dot-matrix-adjust.cfg"
 
 
 # The unreleased *-perfect iterations. v12 and v8 clamp brightness per tap,
-# which is flat on every metric and bleaches highlights; v13 and v9a put the
-# released form back. v9b and v9c are the grid arms.
+# which is flat on every metric and bleaches highlights. crt went back to the
+# released v10, which is why there is no crt row here beyond v12 - the
+# crt-perfect row above measures the head. v9a is lcd's equivalent revert, and
+# v9b and v9c are the grid arms.
 [[pipeline]]
 label = "crt-perfect-v12"
 cfg = "crt-perfect-v12.cfg"
-
-[[pipeline]]
-label = "crt-perfect-v13"
-cfg = "crt-perfect-v13.cfg"
 
 [[pipeline]]
 label = "lcd-perfect-v8"
@@ -818,29 +816,6 @@ moire_allow = [
 ]
 
 [[shader]]
-name = "crt-perfect-v13.glsl"
-family = "crt-perfect"
-role = ["current"]
-pattern = "output-locked"
-# Brightness is back in the pattern gain, where v10 has it, with the one clamp
-# on the whole product. v12 clamped each tap instead, which is flat on every
-# metric and washes every highlight to white before the mask can shape it - the
-# owner reported it as the slider doing nothing but bleaching the picture.
-#
-# So the ceilings below are the SHIPPED release's again, and they are earned
-# rather than inherited: this version has the release's brightness.
-crawl_allow = [
-    { case = [240, 160, 1024, 682], value = 1.45 },
-    { case = [160, 144, 853, 768], value = 0.95 },
-    { case = [256, 224, 1024, 768], value = 1.55 }
-]
-moire_allow = [
-    { case = [480, 272,  640, 480], value = 0.466 },
-    { case = [256, 224, 1024, 768], value = 0.434 },
-]
-neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
-
-[[shader]]
 name = "crt-perfect-v12.glsl"
 family = "crt-perfect"
 role = ["archive"]
@@ -871,10 +846,16 @@ moire_allow = [
 [[shader]]
 name = "crt-perfect-v10.glsl"
 family = "crt-perfect"
-role = ["archive"]
-# CRAWL, SUPERSEDED BY v12. Brightness multiplies the scanlines and mask as well
-# as the colour and the product is clamped, so above 1.0 the clamp becomes a
-# non-linearity past the blend and beats. Kept as the negative control.
+role = ["current"]
+# The head, and the shipped release: shaders/crt-perfect.glsl names v10 and is
+# byte-identical to it. v11 moved gamma after the pattern and v12 moved
+# brightness onto the taps; both were superseded, and v13 turned out to be this
+# file with three comments added, so it was withdrawn rather than kept.
+#
+# Brightness multiplies the scanlines and mask as well as the colour and the
+# product is clamped, so above 1.0 that clamp is a non-linearity past the blend
+# and beats. That is a known and accepted trade - the alternatives clip the
+# picture instead of the pattern, which is worse. See docs/crt-perfect.md.
 crawl_allow = [
     { case = [240, 160, 1024, 682], value = 1.45 },
     { case = [160, 144, 853, 768], value = 0.95 },
@@ -882,13 +863,12 @@ crawl_allow = [
 ]
 pattern = "output-locked"
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
-# v10 is bit-identical to the released shader at equal parameters - measured
-# both ways, 0.249 and 0.434 to three decimals. Both exceedances are entirely
-# its retuned defaults: scanlines 0.55 -> 0.60 and mask 0.40 -> 0.20 beat harder.
-# Neither was visible before, because the tool used to pick a shader's pattern
-# rule by filename prefix and never matched v6-v10. The 256x224 case has a floor
-# of 0.000, so that one is all shader; the PSP case is the same pre-existing
-# fault the released shader has. Owner's tuning: pinned and surfaced, not changed.
+# Both exceedances are entirely its retuned defaults: scanlines 0.55 -> 0.60 and
+# mask 0.40 -> 0.20 beat harder. Neither was visible before, because the tool
+# used to pick a shader's pattern rule by filename prefix and never matched
+# v6-v10. The 256x224 case has a floor of 0.000, so that one is all shader; the
+# PSP case is the same pre-existing fault the released shader has. Owner's
+# tuning: pinned and surfaced, not changed.
 moire_allow = [
     { case = [480, 272, 640, 480], value = 0.466 },
     { case = [256, 224, 1024, 768], value = 0.434 },
@@ -1442,18 +1422,6 @@ role = ["vendor"]
 "320x240->640x480" = "2a76f43ad8c863d5"
 "480x272->1024x768" = "6bc6e37321fc3dd0"
 "480x272->640x480" = "cc8c4f335f68e1ba"
-
-[golden."crt-perfect-v13.glsl"]
-"160x144->1024x768" = "2070509be3242835"
-"240x160->1024x768" = "08ced6bc8ca20f45"
-"256x192->1024x768" = "17e35cea4cbeaa08"
-"256x192->640x480" = "e7f4e5f23d140c4f"
-"256x224->1024x768" = "fc3e48b9cfec24fa"
-"320x240->1024x768" = "370516b207afc5c8"
-"320x240->1280x720" = "618ac0a5eca82f69"
-"320x240->640x480" = "3585a090a3e354f2"
-"480x272->1024x768" = "682de10fd3304f8e"
-"480x272->640x480" = "bf57cc916774758e"
 
 [golden."crt-perfect-v2.glsl"]
 "160x144->1024x768" = "716692d3ac007c25"

@@ -385,7 +385,7 @@ being washed out. That is visible in a still, not just in a number.
 
 ## v9: brightness back, and three answers to "why is the grid not a grid"
 
-### The brightness half, as in crt-perfect-v13
+### The brightness half, as in crt-perfect v10
 
 v8 clamps brightness on each tap, which is flat on every metric and is the best
 formulation this repository has tried:

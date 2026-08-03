@@ -46,8 +46,14 @@ on one tap instead of four: moiré 0.044 against a limit of 0.40.
 is genuinely the best formulation available — but the clamp lands on the content
 before the pattern, so every highlight above `1/brightness` flattens to white
 and the mask can no longer shape it. That reads as the slider bleaching the
-picture rather than brightening it. `crt-perfect-v13` and `lcd-perfect-v9a` put
-the released form back and take the crawl with it.
+picture rather than brightening it. `crt-perfect` went back to **v10, which is
+the shipped release**, and `lcd-perfect-v9a` put the same form back — both take
+the crawl with it.
+
+*(A `crt-perfect-v13` existed briefly. It turned out to be v10 with three
+comment lines and byte-identical code, so it was withdrawn rather than kept.
+Reverting v12's brightness and gamma to where v10 has them lands exactly on v10,
+which is the whole point and was worth noticing sooner.)*
 
 ## What v2 changed, kept
 
@@ -203,15 +209,17 @@ misses are worth recording:
 |---|---:|---:|---:|---:|---:|
 | `crt-perfect` v10, released | 428 | 8 | 4 | **15.9** | **95%** |
 | `crt-perfect` v12, per-tap clamp | 449 | 8 | 4 | **16.2** | **97%** |
-| **`crt-perfect` v13, head** | **428** | **8** | **4** | **15.9** | **95%** |
+| **`crt-perfect` v10, head and release** | **428** | **8** | **4** | **15.9** | **95%** |
 | `lcd-perfect` v6, released | 334 | 17 | 4 | **15.0** | **90%** |
 | `lcd-perfect` v8, per-tap clamp | 351 | 17 | 4 | **15.7** | **94%** |
 | **`lcd-perfect` v9a, head** | 338 | 17 | 4 | **15.3** | **92%** |
 | `lcd-perfect` v9b, lcd1x phase | 336 | 17 | 4 | **14.8** | **89%** |
 | **`lcd-perfect` v9c, gap aperture** | **432** | **12** | 4 | **14.1** | **84%** |
 
-`crt-perfect-v13` measures exactly like the release, to 0.02 ms — the per-tap
-clamp was costing 21 ops and 0.3 ms as well as bleaching highlights.
+`crt-perfect` v10 and v12 differ by 21 ops and 0.3 ms, so the per-tap clamp was
+costing time as well as bleaching highlights. The withdrawn v13 was measured
+separately at 15.863 ms against v10's 15.884 — the same file twice, 0.02 ms
+apart, which is a free reading of the run's own reproducibility.
 
 **`v9c` is the fastest of the whole `lcd-perfect` family, and I predicted it
 would be the slowest.** 432 ops against v9a's 338, and it measures **14.1 ms
@@ -310,7 +318,7 @@ to compare against and the column is left blank.
 | `lcd-turbo` | **3.400** | 2.205 | 0.879 | 2.976 | 27/255 |
 | `lcd-perfect` v9a | 0.222 | — | 0.116 | — | — |
 | `crt-turbo` | **7.256** | *33.057* | 1.001 | 4.513 | 27/255 |
-| `crt-perfect` v13 | 0.334 | *32.216* | 0.093 | — | — |
+| `crt-perfect` v10 | 0.334 | *32.216* | 0.093 | — | — |
 | `colour-mini` | 0.182 | 2.005 | 0.021 | 0.571 | — |
 | `dmg-mini` | 0.435 | 1.485 | 0.161 | 1.711 | — |
 | `lcd-mini` | **1.062** | 1.427 | 0.646 | 2.993 | — |
@@ -360,7 +368,7 @@ limits are 0.35 crawl and 0.40 moiré:
 | `lcd-perfect` v6 / **v9a** | gain on the blend, clamped | 0.222 | **0.541** | 0.432 | 3.291 |
 | `lcd-perfect` v8 | gain per tap, clamped there | 0.065 | 0.062 | 0.158 | 0.158 |
 | `lcd-turbo` v2 | folded into the gamma exponent | 0.063 | 0.061 | **1.860** | 5.236 |
-| `crt-perfect` v10 / **v13** | gain on the blend, clamped | 0.295 | **1.496** | 0.466 | 7.347 |
+| **`crt-perfect` v10**, the release | gain on the blend, clamped | 0.295 | **1.496** | 0.466 | 7.347 |
 | `crt-perfect` v12 | gain per tap, clamped there | 0.094 | 0.077 | 0.494 | 0.494 |
 | `crt-turbo` v2 | folded into the gamma exponent | 0.101 | 0.107 | **4.169** | 11.248 |
 
@@ -457,8 +465,8 @@ Per-shader design records:
 | `docs/optimized/lcd-mini.md` | the one mini that gets structurally cheaper |
 | `docs/optimized/dmg-mini.md` | two taps, and the golden path it has to beat |
 
-The released line's records stay in `docs/` — `docs/crt-perfect.md` for v13 and
-`docs/lcd-perfect.md` for the three v9 grid arms.
+The released line's records stay in `docs/` — `docs/crt-perfect.md` for the
+brightness forms and `docs/lcd-perfect.md` for the three v9 grid arms.
 
 ## The device run
 
