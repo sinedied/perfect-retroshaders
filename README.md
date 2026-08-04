@@ -98,12 +98,12 @@ Even with color correction enabled, pixel-perfect is still nearly 2x faster than
 <details>
 <summary><em>Comparison details</em></summary>
 
-res-independent-scanlines is a much simpler shader — scanlines and nothing else — so it is the cheaper of the two, but it doesn't provide uniform pixel scaling and produces moire patterns at non-integer scaling factors. crt-perfect also adds RGB mask simulation and controls for compensating for the brightness loss of scanlines.
+res-independent-scanlines is far cheaper — it draws one sine wave and nothing else — but it doesn't provide uniform pixel scaling and produces moire patterns at non-integer scaling factors. crt-perfect scales the image, adds RGB mask simulation and band-limits both patterns so they hold at any scale, and that is what the difference buys.
 
 | Pipeline                                | Perf. |
 | --------------------------------------- | ----- |
 | 1 pass · crt-perfect.glsl               | 100%  |
-| 1 pass · res-independent-scanlines.glsl | —     |
+| 1 pass · res-independent-scanlines.glsl | 366%  |
 
 </details>
 
@@ -112,15 +112,12 @@ res-independent-scanlines is a much simpler shader — scanlines and nothing els
 <details>
 <summary><em>Comparison details</em></summary>
 
-The "old-tv" preset from NextUI adds barrel distortion in addition to scanlines. crt-perfect does all of that in a single pass — anti-aliased barrel distortion, uniform pixel scaling and brightness + gamma correction — plus the RGB mask.
+The "old-tv" preset from NextUI adds barrel distortion in addition to scanlines, and it is the cheaper option: two thin passes still cost less than one crt-perfect with everything enabled. What crt-perfect gives you for the difference is uniform pixel scaling, an RGB mask, band-limited patterns and brightness + gamma correction, in a single pass.
 
 | Pipeline                                                           | Perf. |
 | ------------------------------------------------------------------ | ----- |
 | 1 pass · crt-perfect.glsl                                          | 100%  |
-| 2 passes · barrel-distortion.glsl → res-independent-scanlines.glsl | —     |
-
-> [!NOTE]
-> The two figures above are pending: they are the only comparisons here whose pipelines have not yet been run on the device, and the previous values were measured on a desktop GPU against the older four-tap `crt-perfect`. A dash means not measured, rather than a number nobody has checked.
+| 2 passes · barrel-distortion.glsl → res-independent-scanlines.glsl | 240%  |
 
 </details>
 
@@ -289,7 +286,7 @@ All figures here and in the comparison tables above are measured **on the device
 | **`unflat-mini`** | **4.1** | **297%** | **25%** |
 | **`dmg-mini`** | **7.4** | **167%** | **44%** |
 | **`lcd-mini`** | **7.9** | **156%** | **47%** |
-| **`crt-mini`** | **7.9** | **155%** | **48%** |
+| **`crt-mini`** | **8.0** | **154%** | **48%** |
 
 Every shader here fits in a frame at its defaults, and the four `-perfect` ones do it while also scaling the image which is the expensive part. The `-mini` versions skip the scaling, so they cost less and leave you the choice of scaler.
 

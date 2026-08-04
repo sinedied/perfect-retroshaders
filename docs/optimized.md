@@ -73,48 +73,58 @@ higher is cheaper. **frame** is the share of one 60fps frame (16.67 ms).
 
 | Shader | ops | SFU | tex | device ms | vs pix. | frame |
 |---|---:|---:|---:|---:|---:|---:|
-| **`pixel-perfect` v8** *(released)*, defaults | 53 | 0 | 1 | 4.3 | 283% | **26%** |
+| **`pixel-perfect` v8** *(released)*, defaults | 53 | 0 | 1 | 4.4 | 282% | **26%** |
 | &nbsp;&nbsp;all on | 82 | 6 | 1 | 6.6 | 186% | **40%** |
 | `pixel-perfect` v7 *(superseded, four taps)* | 112 | 0 | 4 | — | — | — |
 | **`colour-mini` v3** *(released)* | 20 | 0 | 1 | 3.1 | 396% | **19%** |
-| &nbsp;&nbsp;all on | 49 | 6 | 1 | 5.1 | 240% | **31%** |
+| &nbsp;&nbsp;all on | 49 | 6 | 1 | 5.1 | 243% | **30%** |
 | **`crt-perfect` v14** *(released)*, defaults | 292 | 8 | 1 | 12.1 | 101% | **73%** |
 | &nbsp;&nbsp;all on | 357 | 14 | 1 | 15.0 | 82% | **90%** |
-| `crt-turbo` v4a *(arm not taken)* | 296 | 8 | 1 | 12.6 | 98% | **76%** |
+| `crt-turbo` v4a *(arm not taken)* | 296 | 8 | 1 | 12.6 | 98% | **75%** |
 | `crt-perfect` v10 *(superseded, four taps)* | 428 | 8 | 4 | — | — | — |
-| **`crt-mini` v5** *(released)*, defaults | 247 | 8 | 1 | 7.9 | 155% | **48%** |
+| **`crt-mini` v5** *(released)*, defaults | 247 | 8 | 1 | 8.0 | 154% | **48%** |
 | &nbsp;&nbsp;all on | 251 | 14 | 1 | 10.1 | 122% | **61%** |
 | `crt-mini` v4 *(superseded, had curvature)* | 259 | 8 | 1 | 10.5 | 117% | **63%** |
-| **`unflat-mini` v1** *(released)* | 25 | 0 | 1 | 4.1 | 297% | **25%** |
-| **`lcd-perfect` v10** *(released)*, defaults | 275 | 17 | 1 | 11.9 | 104% | **71%** |
+| **`unflat-mini` v1** *(released)* | 25 | 0 | 1 | 4.2 | 296% | **25%** |
+| **`lcd-perfect` v10** *(released)*, defaults | 275 | 17 | 1 | 11.9 | 103% | **71%** |
 | &nbsp;&nbsp;all on | 280 | 23 | 1 | 13.4 | 92% | **80%** |
 | `lcd-perfect` v6 *(superseded, four taps)* | 334 | 17 | 4 | — | — | — |
 | **`lcd-mini` v4** *(released)*, defaults | 209 | 13 | 1 | 7.9 | 156% | **47%** |
 | &nbsp;&nbsp;all on | 214 | 19 | 1 | 9.4 | 131% | **56%** |
-| **`dmg-perfect` v11** *(released)*, defaults | 168 | 6 | 1 | 8.4 | 146% | **50%** |
-| &nbsp;&nbsp;all on | 273 | 6 | 2 | 12.4 | 99% | **75%** |
+| **`dmg-perfect` v11** *(released)*, defaults | 168 | 6 | 1 | 8.4 | 147% | **50%** |
+| &nbsp;&nbsp;all on | 273 | 6 | 2 | 12.5 | 98% | **75%** |
 | `dmg-perfect` v10c *(superseded, four taps)* | 267 | 6 | 4 | — | — | — |
-| **`dmg-mini` v3** *(released)*, defaults | 148 | 6 | 1 | 7.3 | 167% | **44%** |
+| **`dmg-mini` v3** *(released)*, defaults | 148 | 6 | 1 | 7.4 | 167% | **44%** |
 | &nbsp;&nbsp;all on | 253 | 6 | 2 | 11.5 | 107% | **69%** |
 | | | | | | | |
-| `sharp-shimmerless` | 49 | 0 | 1 | 3.9 | 317% | **23%** |
+| `sharp-shimmerless` | 49 | 0 | 1 | 3.9 | 319% | **23%** |
 | `dmg_dot_matrix` | 78 | 6 | 1 | 5.2 | 238% | **31%** |
-| `barrel-distortion` | 81 | 0 | 1 | 4.4 | 280% | **26%** |
-| `shimmerless → scanlines` | 101 | 1 | 2 | 5.8 | 214% | **34%** |
-| `shimmerless → lcd1x` | 96 | 2 | 2 | 6.3 | 194% | **38%** |
+| `barrel-distortion` | 81 | 0 | 1 | 4.4 | 279% | **26%** |
+| `shimmerless → scanlines` | 101 | 1 | 2 | 5.7 | 214% | **34%** |
+| `shimmerless → lcd1x` | 96 | 2 | 2 | 6.3 | 195% | **38%** |
 | `shimmerless → lcd3x` | 117 | 4 | 2 | 6.8 | 180% | **41%** |
 | `pixellate` | 240 | 30 | 4 | 12.3 | 100% | **74%** |
 | `image-adjustment` | 345 | 6 | 2 | 12.0 | 102% | **72%** |
 | `dmg_dot_matrix → adjust` | 423 | 12 | 3 | 15.7 | 78% | **94%** |
-| `crt-mini → unflat-mini` | 272 | 8 | 2 | 10.4 | 118% | **62%** |
+| `crt-mini → unflat-mini` | 272 | 8 | 2 | 10.4 | 118% | **63%** |
 | `pixel-perfect → crt-mini` | 300 | 8 | 2 | 13.7 | 90% | **82%** |
+| `res-independent-scanlines` | 52 | 1 | 1 | 3.3 | 371% | **20%** |
+| `barrel → scanlines` | 133 | 1 | 2 | 6.3 | 197% | **38%** |
 
-Device figures are from `docs/device-results.tsv`, 77 pipelines, self-test
-passed. Run-to-run reproducibility on the repeated rows is ±0.2%, and the worst
+Device figures are from `docs/device-results.tsv`, 79 pipelines, self-test
+passed. Run-to-run reproducibility on the repeated rows is ±0.35%, and the worst
 per-case IQR was 2.5%. **A dash means not measured, not zero** — the superseded
 iterations and the two-pass references were run at their defaults only.
 
-Four rows to read twice:
+Five rows to read twice:
+
+- **The vendor CRT stacks are cheaper than `crt-perfect`, and the README used to
+  say the opposite.** `res-independent-scanlines` is **3.3 ms** against
+  `crt-perfect`'s 12.1, and the two-pass `barrel → scanlines` is **6.3 ms**
+  against 15.0 with everything on. The old figures were desktop-measured and had
+  the second one **the wrong way round**. They buy their speed by doing almost
+  nothing - one sine, no scaling, no mask, no band-limiting - which is the
+  honest way to state the trade, and it is now stated that way.
 
 - **Moving curvature out of `crt-mini` took it from 10.5 ms to 7.9**, a 24% cut
   for deleting a block that was switched off. That is the clearest measurement

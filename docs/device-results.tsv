@@ -2,84 +2,86 @@
 # renderer	PowerVR Rogue GE8300
 # version	OpenGL ES 3.2 build 1.19@6345021
 # method	slope of wall clock over two batch sizes, each sized to about 20 ms of work, median of 11 interleaved passes after 5 discarded
-# sensors	cpu 50009 mC, gpu 50679 mC, cpu clock 600000 kHz
+# sensors	cpu 44113 mC, gpu 44582 mC, cpu clock 600000 kHz
 # ms is one whole frame: every pass plus the final blit.
 # frag_ms is the fragment shaders alone, with the render passes around them removed.
 pipeline	passes	ms	iqr_pct	budget_pct	relative_pct	frag_ms
-pixellate	1	12.2870	0.2	73.7	100.0	11.0529
-pixellate -> lcd3x	2	15.2058	0.0	91.2	80.8	14.0635
-pixel-perfect	1	4.3413	0.3	26.0	283.0	2.7250
-crt-perfect	1	12.1278	0.3	72.8	101.3	10.6623
-lcd-perfect	1	11.8667	0.3	71.2	103.5	10.4549
-dmg-perfect	1	8.3923	0.2	50.4	146.4	6.8428
-sharp-shimmerless	1	3.8772	0.6	23.3	316.9	2.1295
-shimmerless -> lcd1x	2	6.3265	0.8	38.0	194.2	4.5678
-shimmerless -> lcd3x	2	6.8180	1.2	40.9	180.2	5.1573
-shimmerless -> scanlines	2	5.7550	2.9	34.5	213.5	3.6314
-shimmerless -> adjust	2	14.4241	0.3	86.5	85.2	13.0840
-shimmerless -> lcd1x -> adjust	3	16.7130	0.2	100.3	73.5	15.5174
-image-adjustment	1	12.0132	0.3	72.1	102.3	10.9596
-barrel-distortion	1	4.3864	0.6	26.3	280.1	2.5535
-dmg_dot_matrix	1	5.1541	0.6	30.9	238.4	3.4938
-dmg_dot_matrix -> adjust	2	15.7060	0.3	94.2	78.2	14.4465
-crt-perfect-v12	1	16.1964	0.3	97.2	75.9	15.1917
-lcd-perfect-v8	1	15.7324	0.1	94.4	78.1	14.5312
-lcd-perfect-v9a	1	15.2357	0.1	91.4	80.6	13.9434
-lcd-perfect-v9b	1	14.8311	0.2	89.0	82.8	13.5708
-lcd-perfect-v9c	1	14.0947	0.3	84.6	87.2	12.7997
-pixel-turbo-v1	1	4.4282	1.0	26.6	277.5	2.7386
-pixel-turbo-v2	1	4.6609	0.6	28.0	263.6	2.8898
-pixel-perfect-v8	1	4.5333	0.6	27.2	271.0	2.7513
-dmg-turbo-v1	1	8.4324	0.5	50.6	145.7	6.8437
-dmg-turbo-v2	1	8.4064	0.1	50.4	146.2	6.8434
-dmg-perfect-v11	1	8.3857	0.4	50.3	146.5	6.8495
-lcd-turbo-v1	1	12.7649	0.3	76.6	96.3	11.3411
-lcd-turbo-v2	1	13.8600	0.3	83.2	88.7	12.5352
-lcd-turbo-v3	1	12.5771	0.2	75.5	97.7	11.1951
-lcd-perfect-v10	1	11.8692	0.2	71.2	103.5	10.4439
-crt-turbo-v1	1	9.2619	0.3	55.6	132.7	7.6965
-crt-turbo-v2	1	14.2924	0.2	85.8	86.0	13.0891
-crt-turbo-v4a	1	12.5991	0.7	75.6	97.5	11.2844
-crt-perfect-v14	1	12.0269	0.2	72.2	102.2	10.6736
-crt-turbo-v3	1	13.0425	0.3	78.3	94.2	11.7160
-colour-mini-v2	1	3.0748	0.8	18.4	399.6	1.2509
-colour-mini-v3	1	3.1053	2.2	18.6	395.7	1.0986
-dmg-mini-v2	1	7.4101	0.4	44.5	165.8	5.7318
-dmg-mini-v3	1	7.3467	0.3	44.1	167.2	5.7413
-lcd-mini-v2	1	9.8444	0.3	59.1	124.8	8.3072
-lcd-mini-v3	1	8.5545	0.3	51.3	143.6	6.9758
-lcd-mini-v4	1	7.8772	0.2	47.3	156.0	6.2064
-crt-mini-v2	1	12.2970	0.3	73.8	99.9	10.9643
-crt-mini-v5	1	7.9443	0.5	47.7	154.7	6.3416
-unflat-mini-v1	1	4.1394	0.8	24.8	296.8	2.4202
-crt-mini -> unflat-mini	2	10.4191	0.9	62.5	117.9	8.7891
-crt-mini-v4	1	10.4806	0.2	62.9	117.2	9.1710
-crt-mini-v3	1	10.9873	0.1	65.9	111.8	9.6188
-pixel-perfect -> colour-mini	2	6.3256	0.3	38.0	194.2	3.7857
-pixel-perfect -> dmg-mini	2	10.1174	0.2	60.7	121.4	8.4808
-pixel-perfect -> lcd-mini	2	11.2189	0.2	67.3	109.5	9.6927
-pixel-perfect -> crt-mini	2	13.6622	0.1	82.0	89.9	12.3575
-shimmerless -> lcd-mini	2	10.6029	0.3	63.6	115.9	9.0934
-colour-mini -> pixel-perfect	2	4.6556	1.2	27.9	263.9	2.8392
-colour-mini -> pixel-perfect -> lcd-mini	3	11.6406	0.4	69.8	105.6	9.8274
-pixel-perfect all-on	1	6.5952	0.4	39.6	186.3	5.1075
-crt-perfect all-on	1	15.0023	0.3	90.0	81.9	13.8129
-lcd-perfect all-on	1	13.4033	0.1	80.4	91.7	12.0846
-dmg-perfect all-on	1	12.4492	0.4	74.7	98.7	11.2231
-pixel-perfect-v8 all-on	1	6.6779	0.7	40.1	184.0	5.1330
-crt-turbo-v4a all-on	1	15.7569	0.3	94.5	78.0	14.5955
-lcd-perfect-v10 all-on	1	13.4021	0.2	80.4	91.7	12.0762
-dmg-perfect-v11 all-on	1	12.4772	0.2	74.9	98.5	11.2189
-colour-mini-v3 all-on	1	5.1158	1.0	30.7	240.2	3.4735
-crt-mini-v5 all-on	1	10.1048	0.7	60.6	121.6	8.5747
-lcd-mini-v4 all-on	1	9.4092	0.2	56.5	130.6	7.8594
-dmg-mini-v3 all-on	1	11.4999	0.2	69.0	106.8	10.1359
-lcdprobe-fp16	1	10.7344	0.3	64.4	114.5	9.2467
-lcdprobe-fp16mix	1	11.5102	0.2	69.1	106.7	10.0097
-crtprobe-fp16	1	11.3475	0.2	68.1	108.3	10.0665
-crtprobe-fp16mix	1	12.2929	0.2	73.8	100.0	11.1291
-dmg-turboprobe-fp16	1	7.4770	0.4	44.9	164.3	5.9680
-crtprobe-nowarp	1	10.5395	0.3	63.2	116.6	9.0305
-crtprobe-both	1	10.0215	0.3	60.1	122.6	8.4387
-dmg-turboprobe-noshadow	1	8.2690	0.4	49.6	148.6	6.7862
-dmg-miniprobe-noshadow	1	7.1669	0.2	43.0	171.4	5.5802
+pixellate	1	12.2969	0.3	73.8	100.0	11.0454
+pixellate -> lcd3x	2	15.2051	0.2	91.2	80.9	14.0737
+pixel-perfect	1	4.3564	0.5	26.1	282.3	2.7391
+crt-perfect	1	12.1259	0.1	72.8	101.4	10.6713
+lcd-perfect	1	11.9074	0.6	71.4	103.3	10.4482
+dmg-perfect	1	8.3710	0.4	50.2	146.9	6.8549
+sharp-shimmerless	1	3.8563	0.7	23.1	318.9	2.1371
+shimmerless -> lcd1x	2	6.3148	0.7	37.9	194.7	4.5498
+shimmerless -> lcd3x	2	6.8351	0.8	41.0	179.9	5.1448
+shimmerless -> scanlines	2	5.7445	1.3	34.5	214.1	3.6230
+shimmerless -> adjust	2	14.4163	0.3	86.5	85.3	13.0961
+shimmerless -> lcd1x -> adjust	3	16.7098	0.2	100.3	73.6	15.5345
+image-adjustment	1	12.0187	0.2	72.1	102.3	10.9588
+res-independent-scanlines	1	3.3168	1.5	19.9	370.7	1.5242
+barrel -> scanlines	2	6.2578	0.6	37.5	196.5	4.0562
+barrel-distortion	1	4.4015	0.7	26.4	279.4	2.5611
+dmg_dot_matrix	1	5.1622	0.4	31.0	238.2	3.4978
+dmg_dot_matrix -> adjust	2	15.7021	0.7	94.2	78.3	14.4346
+crt-perfect-v12	1	16.2021	0.1	97.2	75.9	15.1830
+lcd-perfect-v8	1	15.7288	0.2	94.4	78.2	14.5286
+lcd-perfect-v9a	1	15.2435	0.1	91.5	80.7	13.9576
+lcd-perfect-v9b	1	14.8182	0.1	88.9	83.0	13.5723
+lcd-perfect-v9c	1	14.1047	1.1	84.6	87.2	12.8009
+pixel-turbo-v1	1	4.4389	0.5	26.6	277.0	2.7239
+pixel-turbo-v2	1	4.6398	0.8	27.8	265.0	2.8940
+pixel-perfect-v8	1	4.5154	0.6	27.1	272.3	2.7401
+dmg-turbo-v1	1	8.4181	0.4	50.5	146.1	6.8448
+dmg-turbo-v2	1	8.3891	0.2	50.3	146.6	6.8535
+dmg-perfect-v11	1	8.3869	0.4	50.3	146.6	6.8414
+lcd-turbo-v1	1	12.7578	0.3	76.5	96.4	11.3399
+lcd-turbo-v2	1	13.8679	0.1	83.2	88.7	12.5538
+lcd-turbo-v3	1	12.5729	0.2	75.4	97.8	11.2191
+lcd-perfect-v10	1	11.8605	0.3	71.2	103.7	10.4378
+crt-turbo-v1	1	9.2650	1.6	55.6	132.7	7.6933
+crt-turbo-v2	1	14.2999	0.3	85.8	86.0	13.0889
+crt-turbo-v4a	1	12.5678	0.4	75.4	97.8	11.2601
+crt-perfect-v14	1	12.0066	0.2	72.0	102.4	10.6782
+crt-turbo-v3	1	13.0030	0.3	78.0	94.6	11.7200
+colour-mini-v2	1	3.0776	1.3	18.5	399.6	1.2501
+colour-mini-v3	1	3.1061	1.5	18.6	395.9	1.1130
+dmg-mini-v2	1	7.4012	0.5	44.4	166.1	5.7423
+dmg-mini-v3	1	7.3594	0.3	44.2	167.1	5.7288
+lcd-mini-v2	1	9.8524	0.4	59.1	124.8	8.3108
+lcd-mini-v3	1	8.5754	0.3	51.5	143.4	6.9552
+lcd-mini-v4	1	7.8925	0.8	47.4	155.8	6.2001
+crt-mini-v2	1	12.2895	0.1	73.7	100.1	10.9690
+crt-mini-v5	1	7.9853	1.0	47.9	154.0	6.3620
+unflat-mini-v1	1	4.1553	1.1	24.9	295.9	2.4180
+crt-mini -> unflat-mini	2	10.4289	0.2	62.6	117.9	8.7890
+crt-mini-v4	1	10.5007	0.2	63.0	117.1	9.1604
+crt-mini-v3	1	11.0168	0.1	66.1	111.6	9.6168
+pixel-perfect -> colour-mini	2	6.3307	0.5	38.0	194.2	3.7830
+pixel-perfect -> dmg-mini	2	10.1239	0.2	60.7	121.5	8.4705
+pixel-perfect -> lcd-mini	2	11.2325	0.3	67.4	109.5	9.7189
+pixel-perfect -> crt-mini	2	13.6829	0.2	82.1	89.9	12.3565
+shimmerless -> lcd-mini	2	10.5904	0.3	63.5	116.1	9.1022
+colour-mini -> pixel-perfect	2	4.6571	1.0	27.9	264.0	2.8634
+colour-mini -> pixel-perfect -> lcd-mini	3	11.6968	1.6	70.2	105.1	9.8431
+pixel-perfect all-on	1	6.6010	0.5	39.6	186.3	5.1190
+crt-perfect all-on	1	15.0031	0.2	90.0	82.0	13.7985
+lcd-perfect all-on	1	13.3762	0.2	80.3	91.9	12.0719
+dmg-perfect all-on	1	12.4893	0.2	74.9	98.5	11.2092
+pixel-perfect-v8 all-on	1	6.6610	0.3	40.0	184.6	5.1226
+crt-turbo-v4a all-on	1	15.7823	0.2	94.7	77.9	14.6164
+lcd-perfect-v10 all-on	1	13.3847	0.5	80.3	91.9	12.0749
+dmg-perfect-v11 all-on	1	12.4726	0.3	74.8	98.6	11.1993
+colour-mini-v3 all-on	1	5.0697	0.7	30.4	242.6	3.4695
+crt-mini-v5 all-on	1	10.1165	0.2	60.7	121.6	8.6003
+lcd-mini-v4 all-on	1	9.4112	0.4	56.5	130.7	7.8551
+dmg-mini-v3 all-on	1	11.5091	0.2	69.1	106.8	10.1334
+lcdprobe-fp16	1	10.7526	0.4	64.5	114.4	9.2601
+lcdprobe-fp16mix	1	11.5308	0.3	69.2	106.6	10.0137
+crtprobe-fp16	1	11.3170	0.1	67.9	108.7	10.0712
+crtprobe-fp16mix	1	12.2850	0.6	73.7	100.1	11.1399
+dmg-turboprobe-fp16	1	7.4992	0.4	45.0	164.0	5.9582
+crtprobe-nowarp	1	10.5803	0.3	63.5	116.2	9.0561
+crtprobe-both	1	10.0258	0.3	60.2	122.7	8.4401
+dmg-turboprobe-noshadow	1	8.2854	0.2	49.7	148.4	6.8010
+dmg-miniprobe-noshadow	1	7.1329	0.4	42.8	172.4	5.5821
