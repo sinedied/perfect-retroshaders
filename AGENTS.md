@@ -337,7 +337,14 @@ Every one of these produced a confident, wrong number. Details in
   32×32 — halving per doubling, which is the signature of reference noise, not
   shader error. Extrapolate it away and show the convergence.
 - **A metric that assumes an axis-aligned pattern is invalid on a warped image.**
-  A row-mean profile reported a healthy corner collapsing 10×.
+  A row-mean profile reported a healthy corner collapsing 10×. `unflat-mini`
+  made this structural rather than incidental - it warps by default, and read
+  33.892 of moire against a 0.40 limit while drawing exactly what it should.
+  A shader declaring `warps = true` is exempt from the moire gate and from the
+  never-extinguishes contract, because neither can say anything true about it:
+  the moire band is derived from the source and output sizes, and the corner
+  mask is meant to reach black. **Exempt the metric, do not grant the shader a
+  number** - a 33.892 allowance would look like a measurement and is not one.
 - **Aliasing relocates pattern energy, it does not remove it.** A strength or
   uniformity metric reads an aliased pattern as perfectly healthy — the naive
   implementation measured *more* uniform than the correct one. Check the

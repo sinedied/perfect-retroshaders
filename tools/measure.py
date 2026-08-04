@@ -783,6 +783,12 @@ def run(names, report, ctx=None, progs=None, cases=None, verbose=False):
     cases = cases or c.CASES
 
     for name in names:
+        # The moire band is derived from the source and output sizes, so it
+        # assumes the image sits on the pixel grid. A warp is exactly the thing
+        # that breaks that, and the metric then measures the resampling.
+        if c.declared(name).get("warps"):
+            report.note(f"{name}: moire not applicable, the shader warps")
+            continue
         worst, worst_at = 0.0, ""
         for case in cases:
             r = moire(ctx, progs, name, case)

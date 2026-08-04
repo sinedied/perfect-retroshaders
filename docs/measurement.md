@@ -505,3 +505,28 @@ everything up" set reads the sum and cannot say which moved.
 that clips harder scores *better* on any frame-difference metric. That is why the
 gate now measures at a fixed brightness rather than searching for a worst case:
 the worst case by this metric is not the worst case by eye.
+
+
+## A warp is not a pattern, and two gates cannot see it
+
+`unflat-mini` bends the whole image and nothing else. It reads **33.892 of
+moire against a limit of 0.40** at its shipped 0.07 curvature, and takes a lit
+field to black in the corners - both while drawing precisely what it is meant
+to draw.
+
+Neither number is about the shader:
+
+- **The moire band is derived from the source and output sizes**, which is the
+  fix for the fixed-window bug recorded above. That derivation assumes the image
+  is still on the pixel grid. A warp resamples it off the grid, so the band then
+  measures the resampling - the very thing the shader exists to do.
+- **The never-extinguishes contract** exists to catch a grid whose dark line
+  lands exactly on a matrix line. The corner mask reaches black on purpose, and
+  there is no grid.
+
+So the declaration is `warps = true`, and it exempts the shader from both.
+**Exempting the metric is the honest move; granting the shader a 33.892
+allowance is not** - an allowance reads as a measured tolerance somebody
+accepted, and nobody measured anything here. At `um_curvature = 0.00` the shader
+is a pass-through, both gates apply normally, and the scaler anchor still holds
+it to `pixel-perfect` within 1/255.

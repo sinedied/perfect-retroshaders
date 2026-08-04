@@ -16,7 +16,7 @@ performance and brightness.**
 I'm sure everyone has their own idea of what a "perfect" retro shader is, but for me, it has to meet a few criteria:
 
 - Good enough to give a **nice retro look without compromising performance**. It runs fast on cheap handheld devices (Trimui Brick, H700, etc).
-- **Reduce brightness loss, avoid moire patterns, and other artifacts** that can be annoying at non-integer scaling factors.
+- **Limit brightness loss, avoid moire patterns, and other artifacts** that can be annoying at non-integer scaling factors.
 - **Good defaults but tweakable** to appeal both non-technical users and shader enthusiasts alike. They're optimized for single-pass pipelines and handle pixel perfect upscaling, no need for complex setups.
 
 All shaders provided here follow these principles, and were tested on a real device to ensure they meet the performance and visual quality goals. I even built a [custom lab](https://sinedied.github.io/retroshader-lab/) to experiment and pixel-peep them against many popular alternatives.
@@ -32,20 +32,13 @@ All shaders provided here follow these principles, and were tested on a real dev
 
 > [!IMPORTANT]
 > **These shaders need a `LINEAR` filter, in addition to rendering at the screen resolution.**
-> They scale from a single filtered tap, so with `NEAREST` the pattern still draws and nothing *looks* broken, while the picture underneath it is plain nearest-neighbour. In a minarch/NextUI preset that is `minarch_shader1_filter = LINEAR`, with `minarch_shader1_upscale = screen`.
+> They scale from a single filtered tap, so with `NEAREST` the pattern still draws and nothing *looks* broken, while the picture underneath it is plain nearest-neighbour.
 
-> [!IMPORTANT]
-> **Upgrading from an earlier release? Delete your shader cache.**
-> The host caches compiled shaders at `SDCARD_PATH/.shadercache/` keyed on the *filename only*, with no content hash — so after copying these files it will keep running the old ones. Delete the `.shadercache` folder after every copy.
-
-> [!NOTE]
-> All shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to work at non-integer scaling factors with almost no visible artifacts/patterns, though the image will still look better at integer scales.
+These shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to work at non-integer scaling factors with almost no visible artifacts/patterns, though the image will still look better at integer scales.
 
 ### Composable versions
 
-The same looks with **no scaler of their own**, so you can pick your own — or
-stack them. Each one draws its pattern over whatever it is given, at 1:1, which
-makes them cheaper than the shaders above and lets you combine effects.
+The same looks with **no scaler of their own**, so you can pick your own or stack them. Each one draws its pattern over whatever it is given, at 1:1, which makes them cheaper than the shaders above and lets you combine effects.
 
 | Shader                                             | Description                                                                     |
 | -------------------------------------------------- | --------------------------------------------------------------------------------- |
@@ -55,9 +48,10 @@ makes them cheaper than the shaders above and lets you combine effects.
 | [`colour-mini.glsl`](shaders/colour-mini.glsl)     | **Colour only.** White balance, brightness, contrast, saturation, gamma         |
 | [`unflat-mini.glsl`](shaders/unflat-mini.glsl)     | **Screen curvature.** Barrel distortion with rounded corners, nothing else      |
 
-Put a scaler in front of them — `pixel-perfect` is the matching one — or use
-them on their own and let the sampler do the upscale. A typical stack is
-`pixel-perfect` → `crt-mini` → `unflat-mini`. They need `LINEAR` too.
+Put a scaler in front of them like `pixel-perfect` or use them on their own and let the sampler do the upscale.
+
+> [!IMPORTANT]
+> dmg-mini and unflat-mini **need a `LINEAR` filter for their rendering to work as designed.**
 
 > [!NOTE]
 > Composing costs a little quality against the single-pass shaders: `unflat-mini` bends a picture whose pattern has already been drawn, so the pattern is resampled and softens by about 6% against `crt-perfect` doing both at once. Everything else composes exactly.
@@ -200,7 +194,7 @@ A clean upscale: every source pixel becomes an even block, with no shimmer and n
 
 | Parameter               | Range        | Default |                               |
 | ----------------------- | ------------ | ------- | ----------------------------- |
-| Brightness              | 0.50 – 2.00  | 1.00    | Output gain.                  |
+| Brightness              | 0.50 – 4.00  | 1.00    | Output gain.                  |
 | Contrast                | 0.00 – 2.00  | 1.00    |                               |
 | Saturation              | 0.00 – 2.00  | 1.00    | Colour intensity.             |
 | Gamma                   | 0.50 – 2.00  | 1.00    | Output gamma.                 |
@@ -208,7 +202,7 @@ A clean upscale: every source pixel becomes an even block, with no shimmer and n
 | Magenta / green balance | −1.00 – 1.00 | 0.00    | Green above 0, magenta below. |
 
 > [!NOTE]
-> Output matches the well-known `pixellate` shader to within 1 level out of 255 at default params, and runs faster.
+> Output matches the well-known `pixellate` shader at default params, and runs faster.
 
 #### crt-perfect
 
@@ -269,14 +263,12 @@ An original Game Boy look: the dot matrix grid with its pale gaps, over a clean 
 > - **Dot shadow** lifts the dots off the panel, as if lit from above. It is off by default. Only driven pixels cast one.
 
 > [!NOTE]
-> Brightness and gamma are the two controls applied after the image is scaled, so they are the two worth a light touch. The defaults keep the clipping in the highlights, where it reads like a real screen; pushing brightness much past 1.50 can start to show a faint pattern on dense content at some scales.
+> Brightness and gamma are the two controls applied after the image is scaled, so they are the two worth a light touch. The defaults keep the clipping in the highlights, where it reads like a real screen. Pushing brightness much past 1.50 can start to show a faint pattern on dense content at some scales.
 
 ## Performance
 
 Measured **on the device** — a Trimui Brick, PowerVR Rogue GE8300, 320x240 into
-1024x768 — not estimated from a desktop GPU. `Frame` is the share of one 60fps
-frame (16.67 ms) the shader alone uses; whatever is left has to run the
-emulator. Two rows per shader: as it ships, and with every effect turned up.
+1024x768. `Frame` is the share of one 60fps frame (16.67 ms) the shader alone uses; whatever is left has to run the emulator. Two rows per shader: as it ships, and with every effect turned up.
 
 | Shader | GPU ms | vs `pixellate` | Frame |
 | --- | ---: | ---: | ---: |
@@ -296,27 +288,7 @@ emulator. Two rows per shader: as it ships, and with every effect turned up.
 | **`lcd-mini`** | **7.9** | **156%** | **47%** |
 | **`crt-mini`** | **7.9** | **155%** | **48%** |
 
-Every shader here fits in a frame at its defaults, and the four `-perfect` ones
-do it while also scaling the image — which is the expensive part. The `-mini`
-versions skip the scaling, so they cost less and leave you the choice of scaler.
-
-A few things worth knowing if you are tuning for headroom:
-
-- **Curvature is the one expensive option, and it costs even when it is off.**
-  Carrying the code makes work that would otherwise be computed once per frame
-  happen per pixel. `crt-mini` dropped from 10.5 ms to **7.9 ms** simply by
-  moving curvature out into `unflat-mini`.
-- **Which is why the split is worth it.** `crt-mini` → `unflat-mini` with
-  curvature actually *on* costs **10.4 ms** — less than the old single-pass
-  version cost with curvature turned **off**. If you want the bend, compose it.
-- **Everything else is genuinely free when off.** The slot mask, the Game Boy
-  cast shadow and the colour controls cost nothing measurable unless used.
-- **But a stack is not automatically cheaper.** Each pass re-reads the whole
-  screen: `pixel-perfect` → `crt-mini` is 13.7 ms against `crt-perfect`'s 12.1.
-  Compose for flexibility and for curvature, not for speed in general.
-
-Full method, the instrument's self-test and every number behind this table are
-in [`docs/device-perf.md`](docs/device-perf.md).
+Every shader here fits in a frame at its defaults, and the four `-perfect` ones do it while also scaling the image which is the expensive part. The `-mini` versions skip the scaling, so they cost less and leave you the choice of scaler.
 
 ## Related
 

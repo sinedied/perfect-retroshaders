@@ -1,4 +1,4 @@
-// unflat-mini v1 - barrel distortion and a tube edge, behind any scaler.
+// unflat-mini v1 - barrel distortion and a tube edge.
 // -----------------------------------------------------------------------------
 // Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied
@@ -23,16 +23,12 @@
 // the corners curve away.
 //
 // Notes:
-// - Needs a LINEAR filter, set in the preset. Under NEAREST the bend has
-//   nothing to interpolate and the whole picture goes ragged.
-// - Draws no pattern of its own. Put it after a shader that does - crt-mini is
-//   the matching one - or use it alone to bend a plain upscale.
-// - Render at the output resolution, 1:1 with the display.
-// - It resamples whatever it is given, so a pattern drawn by an earlier pass is
-//   softened by the bend. Curvature built into a single-pass shader avoids
-//   that; this is the price of composing.
+// - Needs a LINEAR filter, set in the preset. The bend resamples the picture,
+//   and under NEAREST there is nothing to interpolate.
+// - Draws no pattern of its own. Use it after a shader that does like crt-mini,
+//   or use it alone to bend the image.
 
-#pragma parameter um_curvature "Screen curvature"  0.00 0.00 0.30 0.01
+#pragma parameter um_curvature "Screen curvature"  0.07 0.00 0.30 0.01
 #pragma parameter um_corner    "Corner softness"   1.00 0.00 4.00 0.25
 
 #if defined(VERTEX)
@@ -111,23 +107,18 @@ COMPAT_VARYING vec4 TEX0;
 uniform COMPAT_PRECISION float um_curvature;
 uniform COMPAT_PRECISION float um_corner;
 #else
-#define um_curvature 0.00
+#define um_curvature 0.07
 #define um_corner 1.00
 #endif
 
 void main()
 {
-    // The warp is c * (1 + k*r2); the divisor is the whole design decision.
-    // (1 + k) is the edge-midpoint value, so an image edge lands exactly on the
-    // screen edge and nothing is ever cropped, while the corners fall outside
-    // the image and become the tube's rounded corners. The corner value
-    // (1 + 2k) instead crops the entire border and reads as a lens bump; no
-    // divisor at all leaves black on all four sides. Both axes use the same
-    // constant, so it is symmetric at any aspect ratio.
     vec2  uv   = vTexCoord;
     float tube = 1.0;
 
     if (um_curvature > 0.0) {
+        // Dividing by the edge-midpoint value keeps the image edges on the
+        // screen edges, so only the corners curve away and nothing is cropped.
         float norm = 1.0 / (1.0 + um_curvature);
         vec2  c    = uv * 2.0 - 1.0;
         vec2  cc   = c * c;
@@ -135,9 +126,8 @@ void main()
 
         uv = c * (1.0 + um_curvature * r2) * norm * 0.5 + 0.5;
 
-        // The corners reach past the image and must be masked: the sampler
-        // clamps to edge, which would stretch the border texel across the
-        // whole corner.
+        // The corners now sample past the image, where the sampler would
+        // stretch the border texel; mask them instead.
         vec2 e  = max(um_corner, 1e-4) / OutputSize;
         vec2 aa = clamp(uv / e, 0.0, 1.0) * clamp((1.0 - uv) / e, 0.0, 1.0);
         tube = aa.x * aa.y;

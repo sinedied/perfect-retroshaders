@@ -849,6 +849,21 @@ passthrough = true
 # pattern of the caller's choosing can sit in front of it. It resamples what it
 # is given, so a pattern drawn earlier is softened by the bend - the price of
 # composing, measured in docs/unflat-mini.md.
+#
+# WARPS, and that exempts it from two gates rather than granting it a number.
+# Both assume the image is on the pixel grid, which is the one thing this shader
+# is for undoing - see the axis-aligned entry in docs/measurement.md:
+#
+#   moire       reads 33.892 at the shipped 0.07, against a 0.40 limit. The band
+#               is derived from the source and output sizes, so on a resampled
+#               image it measures the resampling. Not a defect it can report.
+#   extinguish  the corner mask takes the corners to black by design. The
+#               contract exists to catch a GRID landing on a matrix line, and
+#               this shader has no grid.
+#
+# At um_curvature 0.00 it is a pass-through and both gates apply normally, which
+# is what the scaler anchor still checks it against.
+warps = true
 neutral = { um_curvature = 0.0 }
 
 [[shader]]
@@ -2808,25 +2823,25 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->640x480" = "01fea07c6e9b2681"
 
 [golden."unflat-mini-v1.glsl"]
-"160x144->1024x768" = "712be4b3018752e0"
-"240x160->1024x768" = "99a868c80a338afc"
-"256x192->1024x768" = "46aa1509e9400a9b"
-"256x192->640x480" = "de29cb063a673f41"
-"256x224->1024x768" = "a49d1c1146aa6afe"
-"320x240->1024x768" = "c10493efdfb5a10d"
-"320x240->1280x720" = "0aedddc73dee2f86"
-"320x240->640x480" = "e241213df0d19636"
-"480x272->1024x768" = "b9344b959262013f"
-"480x272->640x480" = "5f05d33a0e9fff73"
+"160x144->1024x768" = "c5fd1a6fc352af06"
+"240x160->1024x768" = "c9290471fe861ffe"
+"256x192->1024x768" = "a5109f47ab879553"
+"256x192->640x480" = "2d19642dbb10042f"
+"256x224->1024x768" = "16645664abcadec9"
+"320x240->1024x768" = "fe62378084407b64"
+"320x240->1280x720" = "91b8632452bbf9a5"
+"320x240->640x480" = "db62d9740b8a0aea"
+"480x272->1024x768" = "ec648f44ce90a0a4"
+"480x272->640x480" = "1f43a0fbd066cc64"
 
 [golden."unflat-mini.glsl"]
-"160x144->1024x768" = "712be4b3018752e0"
-"240x160->1024x768" = "99a868c80a338afc"
-"256x192->1024x768" = "46aa1509e9400a9b"
-"256x192->640x480" = "de29cb063a673f41"
-"256x224->1024x768" = "a49d1c1146aa6afe"
-"320x240->1024x768" = "c10493efdfb5a10d"
-"320x240->1280x720" = "0aedddc73dee2f86"
-"320x240->640x480" = "e241213df0d19636"
-"480x272->1024x768" = "b9344b959262013f"
-"480x272->640x480" = "5f05d33a0e9fff73"
+"160x144->1024x768" = "c5fd1a6fc352af06"
+"240x160->1024x768" = "c9290471fe861ffe"
+"256x192->1024x768" = "a5109f47ab879553"
+"256x192->640x480" = "2d19642dbb10042f"
+"256x224->1024x768" = "16645664abcadec9"
+"320x240->1024x768" = "fe62378084407b64"
+"320x240->1280x720" = "91b8632452bbf9a5"
+"320x240->640x480" = "db62d9740b8a0aea"
+"480x272->1024x768" = "ec648f44ce90a0a4"
+"480x272->640x480" = "1f43a0fbd066cc64"

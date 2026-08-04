@@ -34,9 +34,8 @@
 // - Render at the output resolution, 1:1 with the display.
 // - At min. pitch 2.00 the mask becomes 2 colours: use 2.50 or more to keep
 //   the triads visible.
-// - Brightness above 1.00 clips, and a clip beats against the pixel grid unless
-//   the output is a whole multiple of the source. Off an integer scale, prefer
-//   gamma.
+// - Brightness above 1.00 clips, may create pattern artifacts against the
+//   pixel grid unless the output is an integer scale.
 
 #pragma parameter cp_scanlines  "Scanline visibility"        0.60 0.00 1.00 0.05
 #pragma parameter cp_rgb_mask   "RGB mask visibility"        0.20 0.00 1.00 0.05
@@ -143,15 +142,15 @@ uniform COMPAT_PRECISION float cp_curvature;
 #define cp_curvature 0.00
 #endif
 
-// Exact average of a unit-amplitude sinusoid of frequency f, in cycles per output
-// pixel, over one pixel-wide box. Reaches zero at one cycle per pixel.
+// Average of a unit sinusoid of frequency f, in cycles per output pixel, over
+// one pixel-wide box. Reaches zero at one cycle per pixel.
 float boxSinc(float f)
 {
     float x = PI * max(f, 1e-4);
     return sin(x) / x;
 }
 
-// Nothing above Nyquist can be represented, so fade the pattern out entirely there,
+// Nothing above Nyquist can be drawn, so fade the pattern out entirely there -
 // amplitude and darkening together, leaving no uniform dimming behind.
 float nyquistFade(float f)
 {
@@ -160,18 +159,13 @@ float nyquistFade(float f)
 
 void main()
 {
-    // Barrel distortion. The warp is c * (1 + k*r2); the divisor is the whole
-    // design decision. (1 + k) is the edge-midpoint value, so an image edge
-    // lands exactly on the screen edge and nothing is ever cropped, while the
-    // corners fall outside the image and become the tube's rounded corners.
-    // The corner value (1 + 2k) instead crops the entire border and reads as a
-    // lens bump; no divisor at all leaves black on all four sides. Both axes
-    // use the same constant, so it is symmetric at any aspect ratio.
     vec2  uv   = vTexCoord;
     float tube = 1.0;
     float noWarp = 1.0;
 
     if (cp_curvature > 0.0) {
+        // Dividing by the edge-midpoint value keeps the image edges on the
+        // screen edges, so only the corners curve away and nothing is cropped.
         float norm = 1.0 / (1.0 + cp_curvature);
         vec2  c    = uv * 2.0 - 1.0;
         vec2  cc   = c * c;
@@ -180,57 +174,37 @@ void main()
         uv  = c * (1.0 + cp_curvature * r2) * norm * 0.5 + 0.5;
         noWarp = 0.0;
 
-        // The corners reach past the image and must be masked: the sampler
-        // clamps to edge, which would stretch the border texel across the
-        // whole corner. A linear ramp one output pixel wide, where crt-perfect
-        // uses a smoothstep pair - indistinguishable at that width.
+        // The corners now sample past the image, where the sampler would
+        // stretch the border texel; mask them instead.
         vec2 e  = outsize.zw;
         vec2 aa = clamp(uv / e, 0.0, 1.0) * clamp((1.0 - uv) / e, 0.0, 1.0);
         tube = aa.x * aa.y;
     }
 
-    // Source texels. h is uniform-derived and stays that way: v4a multiplies in
-    // the warp's Jacobian here, which is exact under curvature but makes h - and
-    // everything downstream of it - per-fragment whether curvature is on or off.
-    // Dropping it costs a little corner contrast when curvature is used, and
-    // buys the hoist back for everyone who never uses it.
+    // h is deliberately independent of the warp: it keeps everything below it
+    // uniform across the draw, which the driver can then compute once.
     vec2 p = uv * TextureSize;
     vec2 h = max(0.4995 * InputSize / OutputSize, 1e-6);
 
-    // B is the nearest texel boundary; w is the share of the footprint on its
-    // low side. One LINEAR tap does what four NEAREST taps and three mix() did:
-    // a bilinear fetch at t returns mix(T[i], T[i+1], fract(t*TextureSize-0.5)),
-    // so this texcoord asks the texture unit for exactly mix(T[B], T[B-1], w).
+    // B is the nearest texel boundary and w the share of the footprint on its
+    // low side, handed to the texture unit: one LINEAR tap returns the blend.
     vec2 B = floor(p + 0.5);
     vec2 w = clamp((B - p + h) / (2.0 * h), 0.0, 1.0);
     vec3 color = COMPAT_TEXTURE(Source, (B + 0.5 - w) / TextureSize).rgb;
 
-    // The branch is uniform across the draw, so a gamma of 1 costs nothing.
     // The base is clamped because pow(0, g) is undefined and returns NaN on
-    // real drivers, and black texels are everywhere.
+    // real drivers. 1e-8, not 1e-5, which would lift pure black to 1/255.
     if (abs(cp_gamma - 1.0) > 0.001) {
         color = pow(max(color, 1e-8), vec3(cp_gamma));
     }
 
-    // Positioned in tube space, so the patterns curve with the glass. Their
-    // pitch is the flat one - see the note below the floor.
     float scanSrcPitch = OutputSize.y / max(InputSize.y, 1.0);
     float scanPitch    = max(scanSrcPitch, cp_min_pitch);
     float scanLocked   = (1.0 - smoothstep(cp_min_pitch * 1.001, cp_min_pitch * 1.02, scanSrcPitch)) * noWarp;
     float scanFreq     = 1.0 / scanPitch;
 
-    // Pitch and band-limit are computed as though the screen were flat, on two
-    // counts. It keeps the pattern locked to the source - one cycle per source
-    // line - which is what makes scanlines read as scanlines; scaling the pitch
-    // by the frame's worst magnification turned 240 source lines into 201. And
-    // it keeps the argument uniform, so the driver hoists boxSinc's sin and
-    // nyquistFade's smoothstep out of the fragment shader. Making it vary per
-    // pixel cost 16.5 points of frame time, paid even with curvature off.
-    //
-    // The magnified corners therefore run slightly stronger than their true box
-    // average. Still above two output pixels per cycle at every setting, so it
-    // is over-contrast rather than aliasing - and curvature is a distortion by
-    // construction. See docs/crt-perfect.md.
+    // The flat pitch, used even under curvature: it holds the pattern to one
+    // cycle per source line, and keeps this uniform across the draw.
     float scanLocal    = scanFreq;
 
     float scanAmp = cp_scanlines * mix(nyquistFade(scanLocal), 1.0, scanLocked);
@@ -266,10 +240,9 @@ void main()
         mask.b  = max(3.0 * dc - mask.r - mask.g, 0.0);
     }
 
-        // Brightness rides the pattern, so the one clamp below lands on the whole
-    // product, exactly as crt-perfect v10 does it. Clamping the content instead
-    // flattens every highlight to white before the mask can shape it, and beats
-    // 15x harder: 7.256 against 0.480. See docs/crt-perfect.md.
+    // Brightness rides the pattern, so the clamp below lands on the product.
+    // Clamping the picture instead flattens highlights before the mask shapes
+    // them.
     vec3 gain = sqrt(max(mask * (scan * cp_brightness), 0.0));
 
     FragColor = vec4(clamp(color * gain * tube, 0.0, 1.0), 1.0);

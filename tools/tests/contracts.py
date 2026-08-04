@@ -55,6 +55,10 @@ def run(names, ctx, progs, report, cases=None):
                      ", ".join(bad))
 
     for name in names:
+        # A shader that warps takes its corners to black on purpose, and this
+        # contract is about a grid landing on a matrix line. It has no grid.
+        if c.declared(name).get("warps"):
+            continue
         worst, at = 0, ""
         for case in cases:
             sw, sh, ow, oh = case

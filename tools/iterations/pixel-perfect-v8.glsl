@@ -1,4 +1,4 @@
-// pixel-perfect v8 - uniform pixel blocks and colour controls, at minimal cost.
+// pixel-perfect v8 - uniform pixel blocks and colour controls.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
@@ -14,7 +14,7 @@
 // -----------------------------------------------------------------------------
 // PARAMETERS
 //
-//   pp_brightness    0.50 - 2.00  Output gain. 1.00 disables it.
+//   pp_brightness    0.50 - 4.00  Output gain. 1.00 disables it.
 //   pp_contrast      0.00 - 2.00  Contrast. 1.00 disables it.
 //   pp_saturation    0.00 - 2.00  Colour intensity. 1.00 disables it.
 //   pp_gamma         0.50 - 2.00  Output gamma. 1.00 disables it.
@@ -26,14 +26,13 @@
 // else, plus simple colour controls for tuning it to a screen.
 //
 // Notes:
-// - Needs a LINEAR filter, set in the preset. Under NEAREST it is ordinary
-//   nearest-neighbour and the blocks get ragged edges.
+// - Needs a LINEAR filter, set in the preset. Under NEAREST the scale becomes
+//   ordinary nearest-neighbour and the picture gets ragged edges.
 // - Render at the output resolution, 1:1 with the display.
-// - Brightness above 1.00 clips, and a clip beats against the pixel grid unless
-//   the output is a whole multiple of the source. Off an integer scale, prefer
-//   gamma.
+// - Brightness above 1.00 clips, may create pattern artifacts against the
+//   pixel grid unless the output is an integer scale.
 
-#pragma parameter pp_brightness  "Brightness"               1.00  0.50 2.00 0.05
+#pragma parameter pp_brightness  "Brightness"               1.00  0.50 4.00 0.05
 #pragma parameter pp_contrast    "Contrast"                 1.00  0.00 2.00 0.05
 #pragma parameter pp_saturation  "Saturation"               1.00  0.00 2.00 0.05
 #pragma parameter pp_gamma       "Gamma"                    1.00  0.50 2.00 0.05
@@ -142,23 +141,14 @@ void main()
     vec2 B = floor(p + 0.5);
     vec2 w = clamp((B - p + h) / (2.0 * h), 0.0, 1.0);
 
-    // One LINEAR tap does what four NEAREST taps and three mix() did. A
-    // bilinear fetch at t returns mix(T[i], T[i+1], fract(t*TextureSize - 0.5)),
-    // so this texcoord asks the texture unit for exactly mix(T[B], T[B-1], w).
+    // One LINEAR tap, handed w: this texcoord asks the texture unit for
+    // exactly mix(T[B], T[B-1], w).
     vec3 col = COMPAT_TEXTURE(Texture, (B + 0.5 - w) / TextureSize).rgb;
 
-    // The balance goes first, so saturation sees the tinted colour and 0 really
-    // is monochrome. Applied last it would put colour back into an image
-    // saturation had just flattened. It is a separate multiply either way,
-    // since dot(col*t, LUMA) is not t*dot(col, LUMA).
-    //
-    // Brightness, contrast and saturation then fold into one affine map, using
-    // the fact that LUMA sums to 1. Folded, not three steps: that makes it
-    // exactly col*1.0 + 0.0 at the defaults, where the literal chain rounds. Do
-    // not un-fold it. Affine is also what makes grading safe after the blend.
-    //
-    // Tested separately, not summed, or a warm temperature could cancel a cool
-    // tint.
+    // Balance first, so saturation sees the tinted colour and 0 really is
+    // monochrome. Brightness, contrast and saturation then fold into one affine
+    // map - do not un-fold it, or the defaults stop being exactly col * 1.0.
+    // Tested separately, not summed, or warm could cancel a cool tint.
     if (pp_brightness != 1.0 || pp_contrast != 1.0 || pp_saturation != 1.0
         || pp_temperature != 0.0 || pp_tint != 0.0) {
         // Warm/cool trades red against blue, tint trades green against both.
@@ -172,11 +162,8 @@ void main()
             + (dot(col, LUMA) * (ga * (1.0 - pp_saturation)) + gb);
     }
 
-    // The branch is uniform across the draw, so a gamma of 1 costs nothing. The
-    // base is clamped because pow(0, g) is undefined and returns NaN on real
-    // drivers, and black texels are everywhere; 1e-8 is small enough that pure
-    // black still encodes to 0 even at the lowest gamma, where 1e-5 would lift
-    // it to 1/255.
+    // The base is clamped because pow(0, g) is undefined and returns NaN on
+    // real drivers. 1e-8, not 1e-5, which would lift pure black to 1/255.
     if (abs(pp_gamma - 1.0) > 0.001) {
         col = pow(max(col, 1e-8), vec3(pp_gamma));
     }
