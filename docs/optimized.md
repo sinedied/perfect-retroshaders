@@ -29,7 +29,7 @@ band-limiting. It is what a user pays before choosing anything, and for the
 | **`crt-turbo` v4a** | 289 | one tap + band-limit **(floor)** → curvature **(69%)** → slot mask **(20%)** → brightness · gamma **(5%)** → scanlines **(1%)** → RGB mask **(1%)** |
 | `crt-turbo` v4b | 285 | as v4a, with the warp's Jacobian pinned: curvature **(65%)** → slot mask **(23%)** → brightness · gamma **(6%)** → scanlines **(2%)** → RGB mask **(2%)** |
 | `crt-mini` v2 · v3 · **v4** | 252 | one tap at 1:1 + band-limit **(floor)** → curvature **(65%)** → slot mask **(23%)** → brightness · gamma **(6%)** → scanlines **(2%)** → RGB mask **(2%)** |
-| `lcd-perfect` *(released)* | 249 | four taps, aperture-weighted **(floor)** → RGB stripes + cast correction **(87%)** → mesh **(7%)** → gamma **(6%)** |
+| `lcd-perfect` *(released, v6)* | 249 | four taps, aperture-weighted **(floor)** → RGB stripes + cast correction **(87%)** → mesh **(8%)** → brightness **(1%)** → gamma **(7%)** |
 | `lcd-turbo` v1 · v2 · v3 | 192 | one tap, aperture-weighted **(floor)** → RGB stripes + cast correction **(88%)** → mesh **(7%)** → brightness · gamma **(6%)** |
 | **`lcd-turbo` v4** | 190 | one tap, aperture-weighted **(floor)** → RGB stripes + cast correction **(87%)** → mesh **(8%)** → brightness **(1%)** → gamma **(7%)** |
 | `lcd-mini` v2 · v3 | 122 | one tap at 1:1 **(floor)** → RGB stripes + cast correction **(88%)** → mesh **(7%)** → brightness · gamma **(6%)** |
@@ -55,7 +55,9 @@ Reading it:
   is not optional — without it the stripes tint the picture.
 - **`lcd`'s brightness is 1 op in v4**, against a guarded clamp in v3. It
   multiplies into the pattern gain, which is where the released shader has it,
-  so there is nothing to branch on and nothing to clamp separately.
+  so there is nothing to branch on and nothing to clamp separately. The three
+  `lcd` rows now read identically apart from the floor, which is the whole point
+  of v4: same shader, cheaper scaler.
 
 ## 2. Performance
 
