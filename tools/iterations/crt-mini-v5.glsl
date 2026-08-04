@@ -1,4 +1,4 @@
-// crt-perfect v14 - scanlines, an RGB mask and curvature, pixel-perfect scale.
+// crt-mini v5 - scanlines and an RGB mask, behind any scaler.
 // -----------------------------------------------------------------------------
 // Author:  sinedied
 // Licence: MIT - Copyright (c) 2026 sinedied
@@ -20,17 +20,19 @@
 //   cp_mask_type   0 / 1 / 2    Off, aperture grille, slot grille.
 //   cp_mask_size   0.25 - 2.00  Mask triads per source pixel.
 //   cp_min_pitch   2.00 - 6.00  Smallest pattern pitch, in output pixels.
-//   cp_curvature   0.00 - 0.15  Screen curvature. 0 disables it.
 //   cp_brightness  0.25 - 4.00  Output gain. 1.00 disables it.
 //   cp_gamma       0.50 - 2.00  Output gamma. 1.00 disables it.
 // -----------------------------------------------------------------------------
-// A CRT look: soft scanlines and an RGB shadow mask over a clean pixel scale,
-// with optional screen curvature. Reads like a small tube TV, sharp rather than
-// blurry, and neither pattern beats against the pixel grid at any scale.
+// A CRT look: soft scanlines and an RGB shadow mask. Reads like a small tube
+// TV, and neither pattern beats against the pixel grid at any scale.
 //
 // Notes:
-// - Needs a LINEAR filter, set in the preset. Under NEAREST the scale becomes
-//   ordinary nearest-neighbour and the picture gets ragged edges.
+// - Needs a LINEAR filter, set in the preset. Under NEAREST every tap stops
+//   interpolating: the pattern still draws, so nothing looks broken, but the
+//   picture underneath it is nearest-neighbour.
+// - Draws the patterns and nothing else. Put a scaler in front of it -
+//   pixel-perfect is the matching one - or accept the sampler's own upscale.
+// - For screen curvature, add unflat-mini after this one.
 // - Render at the output resolution, 1:1 with the display.
 // - At min. pitch 2.00 the mask becomes 2 colours: use 2.50 or more to keep
 //   the triads visible.
@@ -43,7 +45,6 @@
 #pragma parameter cp_mask_type  "Mask 0=off 1=grille 2=slot" 1.00 0.00 2.00 1.00
 #pragma parameter cp_mask_size  "Mask triads per pixel"      1.00 0.25 2.00 0.25
 #pragma parameter cp_min_pitch  "Min. pitch in px"           3.00 2.00 6.00 0.25
-#pragma parameter cp_curvature  "Screen curvature"           0.00 0.00 0.15 0.01
 #pragma parameter cp_brightness "Brightness"                 1.25 0.25 4.00 0.05
 #pragma parameter cp_gamma      "Gamma"                      1.00 0.50 2.00 0.05
 
@@ -118,7 +119,6 @@ COMPAT_VARYING vec4 TEX0;
 
 #define Source Texture
 #define vTexCoord TEX0.xy
-#define outsize vec4(OutputSize, 1.0 / OutputSize)
 
 #define PI  3.141592654
 #define TAU 6.283185307
@@ -131,7 +131,6 @@ uniform COMPAT_PRECISION float cp_mask_size;
 uniform COMPAT_PRECISION float cp_brightness;
 uniform COMPAT_PRECISION float cp_min_pitch;
 uniform COMPAT_PRECISION float cp_gamma;
-uniform COMPAT_PRECISION float cp_curvature;
 #else
 #define cp_scanlines 0.60
 #define cp_rgb_mask 0.20
@@ -140,7 +139,6 @@ uniform COMPAT_PRECISION float cp_curvature;
 #define cp_brightness 1.25
 #define cp_min_pitch 3.00
 #define cp_gamma 1.00
-#define cp_curvature 0.00
 #endif
 
 // Exact average of a unit-amplitude sinusoid of frequency f, in cycles per output
@@ -160,50 +158,10 @@ float nyquistFade(float f)
 
 void main()
 {
-    // Barrel distortion. The warp is c * (1 + k*r2); the divisor is the whole
-    // design decision. (1 + k) is the edge-midpoint value, so an image edge
-    // lands exactly on the screen edge and nothing is ever cropped, while the
-    // corners fall outside the image and become the tube's rounded corners.
-    // The corner value (1 + 2k) instead crops the entire border and reads as a
-    // lens bump; no divisor at all leaves black on all four sides. Both axes
-    // use the same constant, so it is symmetric at any aspect ratio.
-    vec2  uv   = vTexCoord;
-    float tube = 1.0;
-    float noWarp = 1.0;
+    vec2 uv = vTexCoord;
 
-    if (cp_curvature > 0.0) {
-        float norm = 1.0 / (1.0 + cp_curvature);
-        vec2  c    = uv * 2.0 - 1.0;
-        vec2  cc   = c * c;
-        float r2   = cc.x + cc.y;
-
-        uv  = c * (1.0 + cp_curvature * r2) * norm * 0.5 + 0.5;
-        noWarp = 0.0;
-
-        // The corners reach past the image and must be masked: the sampler
-        // clamps to edge, which would stretch the border texel across the
-        // whole corner. A linear ramp one output pixel wide, where crt-perfect
-        // uses a smoothstep pair - indistinguishable at that width.
-        vec2 e  = outsize.zw;
-        vec2 aa = clamp(uv / e, 0.0, 1.0) * clamp((1.0 - uv) / e, 0.0, 1.0);
-        tube = aa.x * aa.y;
-    }
-
-    // Source texels. h is uniform-derived and stays that way: v4a multiplies in
-    // the warp's Jacobian here, which is exact under curvature but makes h - and
-    // everything downstream of it - per-fragment whether curvature is on or off.
-    // Dropping it costs a little corner contrast when curvature is used, and
-    // buys the hoist back for everyone who never uses it.
-    vec2 p = uv * TextureSize;
-    vec2 h = max(0.4995 * InputSize / OutputSize, 1e-6);
-
-    // B is the nearest texel boundary; w is the share of the footprint on its
-    // low side. One LINEAR tap does what four NEAREST taps and three mix() did:
-    // a bilinear fetch at t returns mix(T[i], T[i+1], fract(t*TextureSize-0.5)),
-    // so this texcoord asks the texture unit for exactly mix(T[B], T[B-1], w).
-    vec2 B = floor(p + 0.5);
-    vec2 w = clamp((B - p + h) / (2.0 * h), 0.0, 1.0);
-    vec3 color = COMPAT_TEXTURE(Source, (B + 0.5 - w) / TextureSize).rgb;
+    // Straight through: behind a scaler this is 1:1 and exact.
+    vec3 color = COMPAT_TEXTURE(Source, uv).rgb;
 
     // The branch is uniform across the draw, so a gamma of 1 costs nothing.
     // The base is clamped because pow(0, g) is undefined and returns NaN on
@@ -212,11 +170,9 @@ void main()
         color = pow(max(color, 1e-8), vec3(cp_gamma));
     }
 
-    // Positioned in tube space, so the patterns curve with the glass. Their
-    // pitch is the flat one - see the note below the floor.
     float scanSrcPitch = OutputSize.y / max(InputSize.y, 1.0);
     float scanPitch    = max(scanSrcPitch, cp_min_pitch);
-    float scanLocked   = (1.0 - smoothstep(cp_min_pitch * 1.001, cp_min_pitch * 1.02, scanSrcPitch)) * noWarp;
+    float scanLocked   = (1.0 - smoothstep(cp_min_pitch * 1.001, cp_min_pitch * 1.02, scanSrcPitch)) ;
     float scanFreq     = 1.0 / scanPitch;
 
     // Pitch and band-limit are computed as though the screen were flat, on two
@@ -244,7 +200,7 @@ void main()
 
     float maskSrcPitch = OutputSize.x / max(InputSize.x * cp_mask_size, 1.0);
     float maskPitch    = max(maskSrcPitch, cp_min_pitch);
-    float maskLocked   = (1.0 - smoothstep(cp_min_pitch * 1.001, cp_min_pitch * 1.02, maskSrcPitch)) * noWarp;
+    float maskLocked   = (1.0 - smoothstep(cp_min_pitch * 1.001, cp_min_pitch * 1.02, maskSrcPitch)) ;
     float maskFreq     = 1.0 / maskPitch;
     float maskLocal    = maskFreq;
 
@@ -272,7 +228,7 @@ void main()
     // 15x harder: 7.256 against 0.480. See docs/crt-perfect.md.
     vec3 gain = sqrt(max(mask * (scan * cp_brightness), 0.0));
 
-    FragColor = vec4(clamp(color * gain * tube, 0.0, 1.0), 1.0);
+    FragColor = vec4(clamp(color * gain, 0.0, 1.0), 1.0);
 }
 
 #endif

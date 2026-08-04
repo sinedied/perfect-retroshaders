@@ -1,4 +1,4 @@
-// lcd-turbo v4 - an LCD matrix and RGB stripes over a one-tap pixel scale.
+// lcd-perfect v10 - an LCD matrix and RGB stripes over a pixel-perfect scale.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //

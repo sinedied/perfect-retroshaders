@@ -1,4 +1,4 @@
-// lcd-perfect v10 - an LCD matrix and RGB stripes over a pixel-perfect scale.
+// lcd-mini v4 - an LCD matrix and RGB stripes, to sit behind any scaler.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
@@ -22,14 +22,17 @@
 //   lp_brightness  0.25 - 4.00  Output gain. 1.00 disables it.
 //   lp_gamma       0.50 - 2.00  Output gamma. 1.00 disables it.
 // -----------------------------------------------------------------------------
-// A handheld LCD look: a soft backlit mesh with RGB subpixel stripes, over a
-// clean pixel scale. Reads like a Game Boy Color or GBA screen in good light -
-// a gentle grid rather than a hard black matrix, and it stays even at every
-// scale instead of breaking into a pattern.
+// A handheld LCD look: a soft backlit mesh with RGB subpixel stripes. Reads
+// like a Game Boy Color or GBA screen in good light - a gentle grid rather
+// than a hard black matrix, and it stays even at every scale instead of
+// breaking into a pattern.
 //
 // Notes:
-// - Needs a LINEAR filter, set in the preset. Under NEAREST the scale becomes
-//   ordinary nearest-neighbour and the picture gets ragged edges.
+// - Needs a LINEAR filter, set in the preset. Under NEAREST every tap stops
+//   interpolating: the pattern still draws, so nothing looks broken, but the
+//   picture underneath it is nearest-neighbour.
+// - Draws the panel and nothing else. Put a scaler in front of it - pixel-turbo
+//   is the matching one - or accept the sampler's own smooth upscale.
 // - Render at the output resolution, 1:1 with the display.
 // - Row/column balance sets which axis dominates. Real panels are row-dominant;
 //   0.80 or so matches lcd1x.
@@ -157,9 +160,11 @@ vec2 nyquistFade(vec2 f)
 
 void main()
 {
-    vec2 p = TEX0.xy * TextureSize;
+    // Source pixels, from InputSize rather than TextureSize: a later pass is
+    // handed the ORIGINAL source size in InputSize, so TextureSize cannot be
+    // trusted here.
+    vec2 p = TEX0.xy * InputSize;
     vec2 d = max(InputSize / OutputSize, 1e-6);
-    vec2 B = floor(p + 0.5);
 
     // Cells per period: one, until a cell is too small to carry a line, then a
     // WHOLE number of cells rather than a fixed size in output pixels - that is
@@ -189,46 +194,26 @@ void main()
     vec2 t  = p / N;
     vec2 hh = 0.4995 * f;
 
-    // The aperture integral, differenced over the footprint: the exact box
-    // filter. Both ends are symmetric about X at a half-width Y that depends
-    // only on the sizes, so by the angle-sum identities one sin and one cos of
-    // X do the work of four, and the stripes below ride the same pair.
+    // The aperture integral over the footprint: the exact box filter. Both ends
+    // are symmetric about X, so one cos of X does the work of two, and the
+    // stripes below ride the same pair. q is uniform-only and hoists out.
     //
-    // Alo reuses that product, so it must take the UNCLAMPED difference or the
-    // two stop agreeing exactly where the clamp bites.
+    // There is no blend here, so the aperture-WEIGHTED blend lcd-turbo needs -
+    // Alo, AB and a third sine - goes with it. That machinery exists because the
+    // mesh's dark line and the scaler's soft transition pixel sit on the same
+    // cell boundary and correlate; with no scaler underneath there is no
+    // transition pixel to correlate with.
     vec2 X    = TAU * (t - phase);
     vec2 sinX = sin(X);
     vec2 cosX = cos(X);
-
-    vec2 Y    = TAU * hh;
-    vec2 sinY = sin(Y);
-    vec2 cosY = cos(Y);
-    vec2 k    = amp / TAU;
-
-    vec2 Iraw = 2.0 * hh - k * (2.0 * cosX * sinY);
-    vec2 Alo  = t - 0.5 * Iraw - (k * cosY) * sinX;
-    vec2 I    = max(Iraw, 1e-6);
+    vec2 q    = amp * sin(TAU * hh) / (TAU * hh);
 
     // Peak-normalised, so the flat top lands at 1 and nothing meets the clamp.
-    vec2 g = I * (1.0 / (2.0 * hh * (1.0 + amp)));
+    vec2 g = max(1.0 - q * cosX, 0.0) / (1.0 + amp);
     float gain = g.x * g.y;
 
-    // While the mesh tracks the cells its dark line sits on the cell boundary,
-    // where the scaler's soft transition pixel also sits, so the two correlate
-    // and the blend must be weighted by aperture rather than by area. Weighting
-    // by area instead measured 1.890 of moire against a limit of 0.40, so this
-    // is kept whatever it costs.
-    //
-    // The one sine left that does not share X: taken at the boundary B.
-    vec2 Bt  = B / N;
-    vec2 AB  = Bt - k * sin(TAU * (Bt - phase));
-    vec2 w   = clamp((AB - Alo) / I, 0.0, 1.0);
-
-    // One LINEAR tap, and the weights above are what it is handed. A bilinear
-    // fetch at t returns mix(T[i], T[i+1], fract(t*TextureSize - 0.5)), so this
-    // texcoord asks the texture unit for exactly mix(T[B], T[B-1], w) - which
-    // works for any separable weight pair, not only an area average.
-    vec3 color = COMPAT_TEXTURE(Texture, (B + 0.5 - w) / TextureSize).rgb;
+    // Straight through: behind a scaler this is 1:1 and exact.
+    vec3 color = COMPAT_TEXTURE(Texture, TEX0.xy).rgb;
 
     // Three sinusoids 120 degrees apart, summing to exactly 3 at every pixel,
     // so they are luminance neutral and blue costs no third cosine. They ride

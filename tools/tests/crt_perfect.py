@@ -14,6 +14,12 @@ FLAT = "crt-perfect-v5b.glsl"
 FAMILY = "crt-perfect"
 CURVED = ["crt-perfect-v6.glsl", "crt-perfect-v8.glsl",
           "crt-perfect-v9.glsl", "crt-perfect-v10.glsl"]
+# The bit-identical claim is about the four-tap line and stays pinned to it. It
+# was written when the current shader shared FLAT's scaler; from v14 the current
+# is a one-tap scale, so it reads 1/255 against a four-tap reference everywhere
+# off an integer scale - that is the scaler, not a curvature fault, and asserting
+# equality would only be testing which scaler is in the file.
+EXACT = "crt-perfect-v10.glsl"
 # Normalised its warp by the corner value, which put the entire image border
 # off-screen. Kept as the control for the border check.
 CROPS_THE_BORDER = "crt-perfect-v7.glsl"
@@ -140,9 +146,17 @@ def run(names, ctx, progs, report, cases=None, family=FAMILY):
         report.check(d <= c.TOLERANCE, f"{name} with curvature off is the flat "
                      f"shader", f"{d}/255")
 
+    p = {k: v for k, v in c.defaults(CURRENT).items() if k in base}
     b = c.render(ctx, progs, CURRENT, src, 512, 384,
+                 params=dict(p, cp_curvature=0.0))
+    ref = c.render(ctx, progs, FLAT, src, 512, 384, params=p)
+    d = int(np.abs(ref.astype(int) - b.astype(int)).max())
+    report.check(d <= c.TOLERANCE, f"{CURRENT} with curvature off is the flat "
+                 f"shader", f"{d}/255")
+
+    b = c.render(ctx, progs, EXACT, src, 512, 384,
                  params=dict(base, cp_curvature=0.0))
     d = int(np.abs(a.astype(int) - b.astype(int)).max())
-    report.check(d == 0, f"{CURRENT} with curvature off is EXACTLY the flat "
+    report.check(d == 0, f"{EXACT} with curvature off is EXACTLY the flat "
                  f"shader", f"{d}/255")
     return report

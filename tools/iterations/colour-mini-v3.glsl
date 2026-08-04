@@ -1,4 +1,4 @@
-// pixel-turbo v3 - uniform pixel blocks and colour controls, from one tap.
+// colour-mini v3 - colour controls only, to sit behind any scaler.
 // -----------------------------------------------------------------------------
 // Licence: MIT - Copyright (c) 2026 sinedied
 //
@@ -21,14 +21,19 @@
 //   pp_temperature  -1.00 - 1.00  Warm above 0, cool below. 0.00 is off.
 //   pp_tint         -1.00 - 1.00  Green above 0, magenta below. 0.00 is off.
 // -----------------------------------------------------------------------------
-// A clean upscale: every source pixel becomes an even block, with no shimmer
-// and no blur. The plain, fast default when you want the picture and nothing
-// else, plus simple colour controls for tuning it to a screen.
+// Brightness, contrast, saturation, gamma and white balance, and nothing
+// else. Drops in behind whatever scaler you like - or in front of nothing at
+// all - so you can tune a picture to a screen without paying for effects you
+// do not want.
 //
 // Notes:
-// - Needs a LINEAR filter, set in the preset. Under NEAREST it is ordinary
-//   nearest-neighbour and the blocks get ragged edges.
-// - Render at the output resolution, 1:1 with the display.
+// - Needs a LINEAR filter, set in the preset. Under NEAREST every tap stops
+//   interpolating: the pattern still draws, so nothing looks broken, but the
+//   picture underneath it is nearest-neighbour.
+// - Draws no pattern and does no scaling: it passes the picture through
+//   untouched at its default settings.
+// - Put a scaler in front of it for sharp pixel blocks. On its own it is a
+//   plain smooth upscale.
 // - Brightness above 1.00 clips, and a clip beats against the pixel grid unless
 //   the output is a whole multiple of the source. Off an integer scale, prefer
 //   gamma.
@@ -131,21 +136,11 @@ const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
 void main()
 {
-    // Source texels. The max() guards an unset InputSize, which is 0 and would
-    // make h a zero divisor below.
-    vec2 p = TEX0.xy * TextureSize;
-    vec2 h = max(0.4995 * InputSize / OutputSize, 1e-6);
-
-    // B is the nearest texel boundary; w is the share of the footprint on its
-    // low side. Clamps to 0 or 1 wherever the footprint sits inside one texel,
-    // which is what keeps the blocks flat.
-    vec2 B = floor(p + 0.5);
-    vec2 w = clamp((B - p + h) / (2.0 * h), 0.0, 1.0);
-
-    // One LINEAR tap does what four NEAREST taps and three mix() did. A
-    // bilinear fetch at t returns mix(T[i], T[i+1], fract(t*TextureSize - 0.5)),
-    // so this texcoord asks the texture unit for exactly mix(T[B], T[B-1], w).
-    vec3 col = COMPAT_TEXTURE(Texture, (B + 0.5 - w) / TextureSize).rgb;
+    // Straight through. Behind a scaler this is 1:1 and exact; in front of
+    // nothing it is the sampler's own upscale. TextureSize is deliberately not
+    // used - a later pass is handed the ORIGINAL source size in it, not the
+    // size of the texture it is sampling.
+    vec3 col = COMPAT_TEXTURE(Texture, TEX0.xy).rgb;
 
     // The balance goes first, so saturation sees the tinted colour and 0 really
     // is monochrome. Applied last it would put colour back into an image

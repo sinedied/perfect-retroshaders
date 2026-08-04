@@ -26,12 +26,41 @@ All shaders provided here follow these principles, and were tested on a real dev
 | Shader                                             | Description                                                                                                   |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | [`pixel-perfect.glsl`](shaders/pixel-perfect.glsl) | **Sharp pixel upscaling.** Uniform pixel blocks, no shimmer, colour controls                                  |
-| [`crt-perfect.glsl`](shaders/crt-perfect.glsl)     | **CRT.** Scanlines, RGB mask, pixel-perfect scaling                                                           |
+| [`crt-perfect.glsl`](shaders/crt-perfect.glsl)     | **CRT.** Scanlines, RGB mask, optional screen curvature, pixel-perfect scaling                                |
 | [`lcd-perfect.glsl`](shaders/lcd-perfect.glsl)     | **LCD.** Black-matrix grid, RGB subpixel stripes, pixel-perfect scaling                                       |
 | [`dmg-perfect.glsl`](shaders/dmg-perfect.glsl)     | **Game Boy DMG.** Dot-matrix grid with light gaps, optional cast shadow, white balance, pixel-perfect scaling |
 
 > [!IMPORTANT]
+> **These shaders need a `LINEAR` filter, in addition to rendering at the screen resolution.**
+> They scale from a single filtered tap, so with `NEAREST` the pattern still draws and nothing *looks* broken, while the picture underneath it is plain nearest-neighbour. In a minarch/NextUI preset that is `minarch_shader1_filter = LINEAR`, with `minarch_shader1_upscale = screen`.
+
+> [!IMPORTANT]
+> **Upgrading from an earlier release? Delete your shader cache.**
+> The host caches compiled shaders at `SDCARD_PATH/.shadercache/` keyed on the *filename only*, with no content hash — so after copying these files it will keep running the old ones. Delete the `.shadercache` folder after every copy.
+
+> [!NOTE]
 > All shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to work at non-integer scaling factors with almost no visible artifacts/patterns, though the image will still look better at integer scales.
+
+### Composable versions
+
+The same looks with **no scaler of their own**, so you can pick your own — or
+stack them. Each one draws its pattern over whatever it is given, at 1:1, which
+makes them cheaper than the shaders above and lets you combine effects.
+
+| Shader                                             | Description                                                                     |
+| -------------------------------------------------- | --------------------------------------------------------------------------------- |
+| [`crt-mini.glsl`](shaders/crt-mini.glsl)           | **CRT pattern.** Scanlines and RGB mask, no scaling, no curvature               |
+| [`lcd-mini.glsl`](shaders/lcd-mini.glsl)           | **LCD pattern.** Grid and RGB subpixel stripes, no scaling                      |
+| [`dmg-mini.glsl`](shaders/dmg-mini.glsl)           | **Game Boy pattern.** Dot-matrix grid and optional cast shadow, no scaling      |
+| [`colour-mini.glsl`](shaders/colour-mini.glsl)     | **Colour only.** White balance, brightness, contrast, saturation, gamma         |
+| [`unflat-mini.glsl`](shaders/unflat-mini.glsl)     | **Screen curvature.** Barrel distortion with rounded corners, nothing else      |
+
+Put a scaler in front of them — `pixel-perfect` is the matching one — or use
+them on their own and let the sampler do the upscale. A typical stack is
+`pixel-perfect` → `crt-mini` → `unflat-mini`. They need `LINEAR` too.
+
+> [!NOTE]
+> Composing costs a little quality against the single-pass shaders: `unflat-mini` bends a picture whose pattern has already been drawn, so the pattern is resampled and softens by about 6% against `crt-perfect` doing both at once. Everything else composes exactly.
 
 ### Screenshots
 
@@ -244,27 +273,47 @@ An original Game Boy look: the dot matrix grid with its pale gaps, over a clean 
 
 ## Performance
 
-Measured against [`pixellate`](tools/vendor/pixellate.glsl), the shader most people already use for clean upscaling, at 320x240 into 1024x768. Two rows per shader: as it ships, and with every effect it has turned up.
+Measured **on the device** — a Trimui Brick, PowerVR Rogue GE8300, 320x240 into
+1024x768 — not estimated from a desktop GPU. `Frame` is the share of one 60fps
+frame (16.67 ms) the shader alone uses; whatever is left has to run the
+emulator. Two rows per shader: as it ships, and with every effect turned up.
 
-| Shader                         | Active instructions | SFU slots | Texture taps | Speed vs `pixellate` |
-| ------------------------------ | ------------------- | --------- | ------------ | -------------------- |
-| `pixellate` (baseline)         | 240                 | 30        | 4            | 100%                 |
-| **`pixel-perfect`**, defaults  | **112**             | **0**     | 4            | **127%**             |
-| `pixel-perfect`, everything on | 141                 | 6         | 4            | 123%                 |
-| `dmg-perfect`, defaults        | 267                 | 6         | 4            | 97%                  |
-| `dmg-perfect`, everything on   | 443                 | 6         | 8            | 78%                  |
-| `lcd-perfect`, defaults        | 334                 | 17        | 4            | 94%                  |
-| `lcd-perfect`, everything on   | 339                 | 23        | 4            | 94%                  |
-| `crt-perfect`, defaults        | 428                 | 8         | 4            | 93%                  |
-| `crt-perfect`, everything on   | 503                 | 14        | 4            | 86%                  |
+| Shader | GPU ms | vs `pixellate` | Frame |
+| --- | ---: | ---: | ---: |
+| `pixellate` *(the usual clean upscaler, for reference)* | 12.3 | 100% | 74% |
+| **`pixel-perfect`**, defaults | **4.5** | **272%** | **27%** |
+| `pixel-perfect`, everything on | 6.7 | 185% | 40% |
+| **`dmg-perfect`**, defaults | **8.4** | **147%** | **50%** |
+| `dmg-perfect`, everything on | 12.5 | 99% | 75% |
+| **`lcd-perfect`**, defaults | **11.8** | **104%** | **71%** |
+| `lcd-perfect`, everything on | 13.4 | 92% | 80% |
+| **`crt-perfect`**, defaults | **12.0** | **102%** | **72%** |
+| `crt-perfect`, everything on | TBD | TBD | TBD |
+| | | | |
+| **`colour-mini`** | **3.1** | **391%** | **19%** |
+| **`unflat-mini`** | **TBD** | **TBD** | **TBD** |
+| **`dmg-mini`** | **7.3** | **168%** | **44%** |
+| **`lcd-mini`** | **7.9** | **156%** | **47%** |
+| **`crt-mini`** | **TBD** | **TBD** | **TBD** |
 
-`pixel-perfect` is a drop-in replacement for `pixellate` that produces the same image with better performance. The three effect shaders do considerably more and still stay within a tenth of it at their defaults, because the expensive part of all four is the same scaler underneath.
+Every shader here fits in a frame at its defaults, and the four `-perfect` ones
+do it while also scaling the image — which is the expensive part. The `-mini`
+versions skip the scaling, so they cost less and leave you the choice of scaler.
 
-*Active instructions* are what survives once the parameters are fixed at those settings and the branches they control are resolved: every optional feature sits behind a check on its own parameter, so a control left alone can be skipped rather than computed and thrown away. That is why the two rows differ, and why turning curvature or the dot shadow off costs almost nothing. A driver compiling against live uniforms may keep more than this, so read the two rows as the span between them rather than as a literal count.
+A few things worth knowing if you are tuning for headroom:
 
-*SFU slots* are the subset of that work which needs the special-function unit — `pow`, `sqrt`, `sin`, `cos` — counted per component, with `pow` costing two because it compiles to a log and an exp. It is a separate and much narrower pipe than ordinary arithmetic, so on a small mobile GPU it can bind before the instruction count does. The two columns disagree here: `pixellate` spends 30 slots on its gamma round trip where `pixel-perfect` at its defaults spends none, yet the gap in measured time is nothing like 30 to 0. Timings on this desktop GPU track the instruction count; a handheld may weigh the other column more heavily.
+- **Curvature is the one expensive option.** On `crt-perfect` it costs about 3.5
+  ms even with the slider at zero, because of what carrying the code does to the
+  rest of the shader. If you never use it, `crt-mini` behind a scaler is cheaper.
+- **Everything else is genuinely free when off.** The slot mask, the Game Boy
+  cast shadow and the colour controls all cost nothing measurable unless you
+  turn them on.
+- **The `-mini` shaders are cheaper, but a stack of two is not.** Each pass
+  re-reads the whole screen, so `pixel-perfect` → `crt-mini` costs more than
+  `crt-perfect` alone. Compose for flexibility, not for speed.
 
-Speed is throughput: 127% means the same GPU time buys 27% more frames than `pixellate` does. The counts come from the compiled shader; the timings are from a desktop GPU, not a handheld, so consider them a rough guide rather than a prediction.
+Full method, the instrument's self-test and every number behind this table are
+in [`docs/device-perf.md`](docs/device-perf.md).
 
 ## Related
 

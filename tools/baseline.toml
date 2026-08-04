@@ -132,18 +132,8 @@ crt-perfect = [
     { cp_rgb_mask = 1.00, cp_brightness = 1.00 },
 ]
 
-# Same two regimes for the *-turbo line, and measured at the same settings so
-# the pair is comparable. The turbo shaders cannot clamp per source pixel - one
-# tap means the texture unit has already blended - so brightness is a curve
-# rather than a gain there, and this is where that has to prove itself.
-lcd-turbo = [
-    { lp_subpixels = 0.20, lp_brightness = 2.00 },
-    { lp_subpixels = 1.00, lp_brightness = 1.00 },
-]
-crt-turbo = [
-    { cp_rgb_mask = 0.20, cp_brightness = 2.00 },
-    { cp_rgb_mask = 1.00, cp_brightness = 1.00 },
-]
+# The *-turbo line used to declare its own copy of these two. It is the same
+# regime and it is now the same family, so one set covers both.
 
 # The device benchmark's one case. Everything tools/device measures runs at this
 # size: a 320x240 source into a 1024x768 output, which is the Brick's panel and
@@ -277,8 +267,8 @@ label = "pixel-turbo-v2"
 cfg = "pixel-turbo-v2.cfg"
 
 [[pipeline]]
-label = "pixel-turbo-v3"
-cfg = "pixel-turbo-v3.cfg"
+label = "pixel-perfect-v8"
+cfg = "pixel-perfect-v8.cfg"
 
 [[pipeline]]
 label = "dmg-turbo-v1"
@@ -289,8 +279,8 @@ label = "dmg-turbo-v2"
 cfg = "dmg-turbo-v2.cfg"
 
 [[pipeline]]
-label = "dmg-turbo-v3"
-cfg = "dmg-turbo-v3.cfg"
+label = "dmg-perfect-v11"
+cfg = "dmg-perfect-v11.cfg"
 
 [[pipeline]]
 label = "lcd-turbo-v1"
@@ -305,8 +295,8 @@ label = "lcd-turbo-v3"
 cfg = "lcd-turbo-v3.cfg"
 
 [[pipeline]]
-label = "lcd-turbo-v4"
-cfg = "lcd-turbo-v4.cfg"
+label = "lcd-perfect-v10"
+cfg = "lcd-perfect-v10.cfg"
 
 [[pipeline]]
 label = "crt-turbo-v1"
@@ -321,8 +311,8 @@ label = "crt-turbo-v4a"
 cfg = "crt-turbo-v4a.cfg"
 
 [[pipeline]]
-label = "crt-turbo-v4b"
-cfg = "crt-turbo-v4b.cfg"
+label = "crt-perfect-v14"
+cfg = "crt-perfect-v14.cfg"
 
 [[pipeline]]
 label = "crt-turbo-v3"
@@ -365,6 +355,18 @@ label = "crt-mini-v2"
 cfg = "crt-mini-v2.cfg"
 
 [[pipeline]]
+label = "crt-mini-v5"
+cfg = "crt-mini-v5.cfg"
+
+[[pipeline]]
+label = "unflat-mini-v1"
+cfg = "unflat-mini-v1.cfg"
+
+[[pipeline]]
+label = "crt-mini -> unflat-mini"
+cfg = "crt-mini-unflat-mini.cfg"
+
+[[pipeline]]
 label = "crt-mini-v4"
 cfg = "crt-mini-v4.cfg"
 
@@ -378,19 +380,19 @@ cfg = "crt-mini-v3.cfg"
 # mini-alone rows above they price a second pass, which one measurement so far
 # put at nothing and which the whole line depends on.
 [[pipeline]]
-label = "pixel-turbo -> colour-mini"
+label = "pixel-perfect -> colour-mini"
 cfg = "pixel-turbo-colour-mini.cfg"
 
 [[pipeline]]
-label = "pixel-turbo -> dmg-mini"
+label = "pixel-perfect -> dmg-mini"
 cfg = "pixel-turbo-dmg-mini.cfg"
 
 [[pipeline]]
-label = "pixel-turbo -> lcd-mini"
+label = "pixel-perfect -> lcd-mini"
 cfg = "pixel-turbo-lcd-mini.cfg"
 
 [[pipeline]]
-label = "pixel-turbo -> crt-mini"
+label = "pixel-perfect -> crt-mini"
 cfg = "pixel-turbo-crt-mini.cfg"
 
 [[pipeline]]
@@ -403,11 +405,11 @@ cfg = "shimmerless-lcd-mini.cfg"
 # source pixel it does not. These two price what that costs, which is one pass
 # and nothing else.
 [[pipeline]]
-label = "colour-mini -> pixel-turbo"
+label = "colour-mini -> pixel-perfect"
 cfg = "colour-mini-pixel-turbo.cfg"
 
 [[pipeline]]
-label = "colour-mini -> pixel-turbo -> lcd-mini"
+label = "colour-mini -> pixel-perfect -> lcd-mini"
 cfg = "colour-mini-pixel-turbo-lcd-mini.cfg"
 
 
@@ -431,28 +433,28 @@ label = "dmg-perfect all-on"
 cfg = "dmg-perfect-allon.cfg"
 
 [[pipeline]]
-label = "pixel-turbo-v3 all-on"
-cfg = "pixel-turbo-v3-allon.cfg"
+label = "pixel-perfect-v8 all-on"
+cfg = "pixel-perfect-v8-allon.cfg"
 
 [[pipeline]]
 label = "crt-turbo-v4a all-on"
 cfg = "crt-turbo-v4a-allon.cfg"
 
 [[pipeline]]
-label = "lcd-turbo-v4 all-on"
-cfg = "lcd-turbo-v4-allon.cfg"
+label = "lcd-perfect-v10 all-on"
+cfg = "lcd-perfect-v10-allon.cfg"
 
 [[pipeline]]
-label = "dmg-turbo-v3 all-on"
-cfg = "dmg-turbo-v3-allon.cfg"
+label = "dmg-perfect-v11 all-on"
+cfg = "dmg-perfect-v11-allon.cfg"
 
 [[pipeline]]
 label = "colour-mini-v3 all-on"
 cfg = "colour-mini-v3-allon.cfg"
 
 [[pipeline]]
-label = "crt-mini-v4 all-on"
-cfg = "crt-mini-v4-allon.cfg"
+label = "crt-mini-v5 all-on"
+cfg = "crt-mini-v5-allon.cfg"
 
 [[pipeline]]
 label = "lcd-mini-v4 all-on"
@@ -517,7 +519,7 @@ role = ["released"]
 [[shader]]
 name = "pixel-perfect-v7.glsl"
 family = "pixel-perfect"
-role = ["current"]
+role = ["archive"]
 equivalent_to = "pixellate.glsl"
 # At a neutral grade it must still be the plain scaler.
 neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
@@ -549,8 +551,8 @@ neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamm
 # renders.
 
 [[shader]]
-name = "pixel-turbo-v3.glsl"
-family = "pixel-turbo"
+name = "pixel-perfect-v8.glsl"
+family = "pixel-perfect"
 role = ["current"]
 sampler = "linear"
 # No exceptions at all: brightness is pixel-perfect's folded affine again, so
@@ -559,15 +561,15 @@ neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamm
 
 [[shader]]
 name = "pixel-turbo-v2.glsl"
-family = "pixel-turbo"
+family = "pixel-perfect"
 role = ["archive"]
 sampler = "linear"
 neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
 
 [[shader]]
 name = "crt-turbo-v4a.glsl"
-family = "crt-turbo"
-role = ["current"]
+family = "crt-perfect"
+role = ["archive"]
 sampler = "linear"
 pattern = "output-locked"
 # Brightness is crt-perfect v10's again: multiplied into the pattern gain with
@@ -588,9 +590,9 @@ crawl_allow = [
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
 
 [[shader]]
-name = "crt-turbo-v4b.glsl"
-family = "crt-turbo"
-role = ["archive"]
+name = "crt-perfect-v14.glsl"
+family = "crt-perfect"
+role = ["current"]
 sampler = "linear"
 pattern = "output-locked"
 # The cheap arm. v4a multiplies the warp's Jacobian into h, which is exact under
@@ -613,7 +615,7 @@ neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma
 
 [[shader]]
 name = "crt-turbo-v3.glsl"
-family = "crt-turbo"
+family = "crt-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "output-locked"
@@ -642,7 +644,7 @@ neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma
 
 [[shader]]
 name = "crt-turbo-v2.glsl"
-family = "crt-turbo"
+family = "crt-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "output-locked"
@@ -672,8 +674,8 @@ crawl_allow = [
 neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
 
 [[shader]]
-name = "lcd-turbo-v4.glsl"
-family = "lcd-turbo"
+name = "lcd-perfect-v10.glsl"
+family = "lcd-perfect"
 role = ["current"]
 sampler = "linear"
 pattern = "whole-cell"
@@ -712,7 +714,7 @@ neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1
 
 [[shader]]
 name = "lcd-turbo-v3.glsl"
-family = "lcd-turbo"
+family = "lcd-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "whole-cell"
@@ -734,7 +736,7 @@ neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1
 
 [[shader]]
 name = "lcd-turbo-v2.glsl"
-family = "lcd-turbo"
+family = "lcd-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "whole-cell"
@@ -755,8 +757,8 @@ crawl_allow = [
 neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
 
 [[shader]]
-name = "dmg-turbo-v3.glsl"
-family = "dmg-turbo"
+name = "dmg-perfect-v11.glsl"
+family = "dmg-perfect"
 role = ["current"]
 sampler = "linear"
 # NOT the brightness change - dp_brightness ships at 1.00 and, as in the
@@ -771,7 +773,7 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 
 [[shader]]
 name = "dmg-turbo-v2.glsl"
-family = "dmg-turbo"
+family = "dmg-perfect"
 role = ["archive"]
 sampler = "linear"
 # NOT the midtone lift - dp_brightness ships at 1.00, so the lift is off. These
@@ -815,9 +817,44 @@ passthrough = true
 neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
 
 [[shader]]
-name = "crt-mini-v4.glsl"
+name = "crt-mini-v5.glsl"
 family = "crt-mini"
 role = ["current"]
+sampler = "linear"
+passthrough = true
+pattern = "output-locked"
+# v4 with the curvature block removed, because curvature is its own shader now:
+# unflat-mini. The block was not merely optional - it wrote jac and noWarp, and
+# those made three hoistable quantities per-fragment, which is why it cost 3.58ms
+# on crt-turbo with the slider at zero. Same patterns, same brightness.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 0.802 },
+    { case = [256, 224, 1024, 768], value = 0.671 },
+    { case = [256, 192, 1024, 768], value = 0.434 },
+    { case = [240, 160, 1024, 768], value = 0.554 },
+    { case = [160, 144, 1024, 768], value = 0.498 },
+    { case = [480, 272, 1024, 768], value = 1.115 },
+    { case = [480, 272,  640, 480], value = 1.275 },
+    { case = [320, 240, 1280, 720], value = 0.427 },
+]
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0 }
+
+[[shader]]
+name = "unflat-mini-v1.glsl"
+family = "unflat-mini"
+role = ["current"]
+sampler = "linear"
+passthrough = true
+# The barrel warp and the tube edge, lifted out of crt-mini so a scaler and a
+# pattern of the caller's choosing can sit in front of it. It resamples what it
+# is given, so a pattern drawn earlier is softened by the bend - the price of
+# composing, measured in docs/unflat-mini.md.
+neutral = { um_curvature = 0.0 }
+
+[[shader]]
+name = "crt-mini-v4.glsl"
+family = "crt-mini"
+role = ["archive"]
 sampler = "linear"
 passthrough = true
 pattern = "output-locked"
@@ -934,14 +971,14 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 
 [[shader]]
 name = "pixel-turbo-v1.glsl"
-family = "pixel-turbo"
+family = "pixel-perfect"
 role = ["archive"]
 sampler = "linear"
 neutral = { pp_brightness = 1.0, pp_contrast = 1.0, pp_saturation = 1.0, pp_gamma = 1.0, pp_temperature = 0.0, pp_tint = 0.0 }
 
 [[shader]]
 name = "crt-turbo-v1.glsl"
-family = "crt-turbo"
+family = "crt-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "output-locked"
@@ -961,7 +998,7 @@ neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma
 
 [[shader]]
 name = "lcd-turbo-v1.glsl"
-family = "lcd-turbo"
+family = "lcd-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "whole-cell"
@@ -982,7 +1019,7 @@ neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1
 
 [[shader]]
 name = "dmg-turbo-v1.glsl"
-family = "dmg-turbo"
+family = "dmg-perfect"
 role = ["archive"]
 sampler = "linear"
 # The shadow's caster luma is a second LINEAR tap: dot() is linear, so the four
@@ -1069,7 +1106,7 @@ moire_allow = [
 [[shader]]
 name = "crt-perfect-v10.glsl"
 family = "crt-perfect"
-role = ["current"]
+role = ["archive"]
 # The head, and the shipped release: shaders/crt-perfect.glsl names v10 and is
 # byte-identical to it. v11 moved gamma after the pattern and v12 moved
 # brightness onto the taps; both were superseded, and v13 turned out to be this
@@ -1103,6 +1140,41 @@ family = "lcd-perfect"
 role = ["archive"]
 pattern = "whole-cell"
 neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
+name = "crt-mini.glsl"
+family = "crt-mini"
+# The shipped copy. Its header says which iteration it is, and check.py asserts
+# the two files are byte-identical; everything else is inherited from the source.
+role = ["released"]
+
+[[shader]]
+name = "lcd-mini.glsl"
+family = "lcd-mini"
+# The shipped copy. Its header says which iteration it is, and check.py asserts
+# the two files are byte-identical; everything else is inherited from the source.
+role = ["released"]
+
+[[shader]]
+name = "dmg-mini.glsl"
+family = "dmg-mini"
+# The shipped copy. Its header says which iteration it is, and check.py asserts
+# the two files are byte-identical; everything else is inherited from the source.
+role = ["released"]
+
+[[shader]]
+name = "colour-mini.glsl"
+family = "colour-mini"
+# The shipped copy. Its header says which iteration it is, and check.py asserts
+# the two files are byte-identical; everything else is inherited from the source.
+role = ["released"]
+
+[[shader]]
+name = "unflat-mini.glsl"
+family = "unflat-mini"
+# The shipped copy. Its header says which iteration it is, and check.py asserts
+# the two files are byte-identical; everything else is inherited from the source.
+role = ["released"]
 
 [[shader]]
 name = "lcd-perfect.glsl"
@@ -1222,7 +1294,7 @@ neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1
 [[shader]]
 name = "lcd-perfect-v6.glsl"
 family = "lcd-perfect"
-role = ["current"]
+role = ["archive"]
 pattern = "whole-cell"
 # THE HEAD AGAIN, AND WHAT THE RELEASE COPIES. v8 and v9 were built to fix two
 # things in it and the owner prefers it with both: brightness multiplies the
@@ -1338,7 +1410,7 @@ moire_allow = [
     { case = [480, 272, 1024, 768], value = 0.422 },
     { case = [480, 272,  640, 480], value = 0.485 },
 ]
-role = ["current"]
+role = ["archive"]
 neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
 
 
@@ -1569,7 +1641,7 @@ role = ["vendor"]
 # that is switched OFF, which ops@def cannot see. Archive, so they are gated.
 [[shader]]
 name = "lcdprobe-fp16.glsl"
-family = "lcd-turbo"
+family = "lcd-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "whole-cell"
@@ -1590,7 +1662,7 @@ neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1
 
 [[shader]]
 name = "lcdprobe-fp16mix.glsl"
-family = "lcd-turbo"
+family = "lcd-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "whole-cell"
@@ -1609,7 +1681,7 @@ neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1
 
 [[shader]]
 name = "crtprobe-fp16.glsl"
-family = "crt-turbo"
+family = "crt-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "output-locked"
@@ -1627,7 +1699,7 @@ neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma
 
 [[shader]]
 name = "crtprobe-fp16mix.glsl"
-family = "crt-turbo"
+family = "crt-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "output-locked"
@@ -1648,7 +1720,7 @@ neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma
 
 [[shader]]
 name = "dmg-turboprobe-fp16.glsl"
-family = "dmg-turbo"
+family = "dmg-perfect"
 role = ["archive"]
 sampler = "linear"
 # The fp16 ceiling on dmg-turbo, a third data point. As lcdprobe-fp16.
@@ -1660,7 +1732,7 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 
 [[shader]]
 name = "crtprobe-nowarp.glsl"
-family = "crt-turbo"
+family = "crt-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "output-locked"
@@ -1668,7 +1740,7 @@ neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma
 
 [[shader]]
 name = "crtprobe-both.glsl"
-family = "crt-turbo"
+family = "crt-perfect"
 role = ["archive"]
 sampler = "linear"
 pattern = "output-locked"
@@ -1676,7 +1748,7 @@ neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma
 
 [[shader]]
 name = "dmg-turboprobe-noshadow.glsl"
-family = "dmg-turbo"
+family = "dmg-perfect"
 role = ["archive"]
 sampler = "linear"
 neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
@@ -1715,6 +1787,18 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->1024x768" = "b9344b959262013f"
 "480x272->640x480" = "5f05d33a0e9fff73"
 
+[golden."colour-mini.glsl"]
+"160x144->1024x768" = "712be4b3018752e0"
+"240x160->1024x768" = "99a868c80a338afc"
+"256x192->1024x768" = "46aa1509e9400a9b"
+"256x192->640x480" = "de29cb063a673f41"
+"256x224->1024x768" = "a49d1c1146aa6afe"
+"320x240->1024x768" = "c10493efdfb5a10d"
+"320x240->1280x720" = "0aedddc73dee2f86"
+"320x240->640x480" = "e241213df0d19636"
+"480x272->1024x768" = "b9344b959262013f"
+"480x272->640x480" = "5f05d33a0e9fff73"
+
 [golden."crt-mini-v2.glsl"]
 "160x144->1024x768" = "c3ef396dedac2212"
 "240x160->1024x768" = "d3f1f59a6a46af58"
@@ -1740,6 +1824,30 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->640x480" = "4bf44473ea0cd93d"
 
 [golden."crt-mini-v4.glsl"]
+"160x144->1024x768" = "a6328ac7cb285332"
+"240x160->1024x768" = "dabc211aed78af49"
+"256x192->1024x768" = "8e20a2e5dd1115ab"
+"256x192->640x480" = "ba45b6dda5395b51"
+"256x224->1024x768" = "31547bd951450fbb"
+"320x240->1024x768" = "ae98d7f659c73782"
+"320x240->1280x720" = "80b99d220060459e"
+"320x240->640x480" = "47dff67331dab3db"
+"480x272->1024x768" = "74725963c7c349ec"
+"480x272->640x480" = "38ca2ae638223975"
+
+[golden."crt-mini-v5.glsl"]
+"160x144->1024x768" = "a6328ac7cb285332"
+"240x160->1024x768" = "dabc211aed78af49"
+"256x192->1024x768" = "8e20a2e5dd1115ab"
+"256x192->640x480" = "ba45b6dda5395b51"
+"256x224->1024x768" = "31547bd951450fbb"
+"320x240->1024x768" = "ae98d7f659c73782"
+"320x240->1280x720" = "80b99d220060459e"
+"320x240->640x480" = "47dff67331dab3db"
+"480x272->1024x768" = "74725963c7c349ec"
+"480x272->640x480" = "38ca2ae638223975"
+
+[golden."crt-mini.glsl"]
 "160x144->1024x768" = "a6328ac7cb285332"
 "240x160->1024x768" = "dabc211aed78af49"
 "256x192->1024x768" = "8e20a2e5dd1115ab"
@@ -1798,6 +1906,18 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "320x240->640x480" = "2a76f43ad8c863d5"
 "480x272->1024x768" = "6bc6e37321fc3dd0"
 "480x272->640x480" = "cc8c4f335f68e1ba"
+
+[golden."crt-perfect-v14.glsl"]
+"160x144->1024x768" = "f5b88aca236033f8"
+"240x160->1024x768" = "ae172f97b2d4941d"
+"256x192->1024x768" = "17e35cea4cbeaa08"
+"256x192->640x480" = "e7f4e5f23d140c4f"
+"256x224->1024x768" = "28ef1a516a85b512"
+"320x240->1024x768" = "61cf8fd5dfb5330b"
+"320x240->1280x720" = "618ac0a5eca82f69"
+"320x240->640x480" = "3585a090a3e354f2"
+"480x272->1024x768" = "a3f678153575d6e0"
+"480x272->640x480" = "d8a31e6d857edce1"
 
 [golden."crt-perfect-v2.glsl"]
 "160x144->1024x768" = "716692d3ac007c25"
@@ -1908,16 +2028,16 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->640x480" = "bf57cc916774758e"
 
 [golden."crt-perfect.glsl"]
-"160x144->1024x768" = "2070509be3242835"
-"240x160->1024x768" = "08ced6bc8ca20f45"
+"160x144->1024x768" = "f5b88aca236033f8"
+"240x160->1024x768" = "ae172f97b2d4941d"
 "256x192->1024x768" = "17e35cea4cbeaa08"
 "256x192->640x480" = "e7f4e5f23d140c4f"
-"256x224->1024x768" = "fc3e48b9cfec24fa"
-"320x240->1024x768" = "370516b207afc5c8"
+"256x224->1024x768" = "28ef1a516a85b512"
+"320x240->1024x768" = "61cf8fd5dfb5330b"
 "320x240->1280x720" = "618ac0a5eca82f69"
 "320x240->640x480" = "3585a090a3e354f2"
-"480x272->1024x768" = "682de10fd3304f8e"
-"480x272->640x480" = "bf57cc916774758e"
+"480x272->1024x768" = "a3f678153575d6e0"
+"480x272->640x480" = "d8a31e6d857edce1"
 
 [golden."crt-turbo-v1.glsl"]
 "160x144->1024x768" = "99784ef5c80312f2"
@@ -1967,7 +2087,7 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->1024x768" = "a3f678153575d6e0"
 "480x272->640x480" = "d8a31e6d857edce1"
 
-[golden."crt-turbo-v4b.glsl"]
+[golden."crtprobe-both.glsl"]
 "160x144->1024x768" = "f5b88aca236033f8"
 "240x160->1024x768" = "ae172f97b2d4941d"
 "256x192->1024x768" = "17e35cea4cbeaa08"
@@ -1979,7 +2099,19 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->1024x768" = "a3f678153575d6e0"
 "480x272->640x480" = "d8a31e6d857edce1"
 
-[golden."crtprobe-both.glsl"]
+[golden."crtprobe-fp16.glsl"]
+"160x144->1024x768" = "f5b88aca236033f8"
+"240x160->1024x768" = "ae172f97b2d4941d"
+"256x192->1024x768" = "17e35cea4cbeaa08"
+"256x192->640x480" = "e7f4e5f23d140c4f"
+"256x224->1024x768" = "28ef1a516a85b512"
+"320x240->1024x768" = "61cf8fd5dfb5330b"
+"320x240->1280x720" = "618ac0a5eca82f69"
+"320x240->640x480" = "3585a090a3e354f2"
+"480x272->1024x768" = "a3f678153575d6e0"
+"480x272->640x480" = "d8a31e6d857edce1"
+
+[golden."crtprobe-fp16mix.glsl"]
 "160x144->1024x768" = "f5b88aca236033f8"
 "240x160->1024x768" = "ae172f97b2d4941d"
 "256x192->1024x768" = "17e35cea4cbeaa08"
@@ -2016,6 +2148,18 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->640x480" = "7b0f4de7ac4f74b4"
 
 [golden."dmg-mini-v3.glsl"]
+"160x144->1024x768" = "a1ddd5f79cee002d"
+"240x160->1024x768" = "925f03b5111bae07"
+"256x192->1024x768" = "4a2044d2ccb7b363"
+"256x192->640x480" = "1da3e6779de083f7"
+"256x224->1024x768" = "481c7a252ad0f26b"
+"320x240->1024x768" = "962c0cde7fde8069"
+"320x240->1280x720" = "09a4708d6907b255"
+"320x240->640x480" = "706335ff75cb403d"
+"480x272->1024x768" = "a3baf7c046400c2a"
+"480x272->640x480" = "7b0f4de7ac4f74b4"
+
+[golden."dmg-mini.glsl"]
 "160x144->1024x768" = "a1ddd5f79cee002d"
 "240x160->1024x768" = "925f03b5111bae07"
 "256x192->1024x768" = "4a2044d2ccb7b363"
@@ -2086,6 +2230,18 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "320x240->640x480" = "4b70df91e81661fb"
 "480x272->1024x768" = "db66aeebbfcf266b"
 "480x272->640x480" = "771414784ea228a7"
+
+[golden."dmg-perfect-v11.glsl"]
+"160x144->1024x768" = "e999d2faf969671e"
+"240x160->1024x768" = "2a0ad2d6d918e5eb"
+"256x192->1024x768" = "7990a5b901c9afb0"
+"256x192->640x480" = "f74fc99cb2bd92eb"
+"256x224->1024x768" = "311a6c22e9153f04"
+"320x240->1024x768" = "166f936e32da4c5f"
+"320x240->1280x720" = "5514f206c3fdf08e"
+"320x240->640x480" = "4b70df91e81661fb"
+"480x272->1024x768" = "06da4ac9797b605b"
+"480x272->640x480" = "592d2ab23284bff2"
 
 [golden."dmg-perfect-v2.glsl"]
 "160x144->1024x768" = "d2262d4faade7d59"
@@ -2184,16 +2340,16 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->640x480" = "771414784ea228a7"
 
 [golden."dmg-perfect.glsl"]
-"160x144->1024x768" = "74cca56d82d07df0"
-"240x160->1024x768" = "56813361d5b8398b"
+"160x144->1024x768" = "e999d2faf969671e"
+"240x160->1024x768" = "2a0ad2d6d918e5eb"
 "256x192->1024x768" = "7990a5b901c9afb0"
-"256x192->640x480" = "41ac3c742b8ac72e"
-"256x224->1024x768" = "c29d5a0c1e908140"
-"320x240->1024x768" = "4e401848ea36119f"
-"320x240->1280x720" = "42751732b4bc4e41"
+"256x192->640x480" = "f74fc99cb2bd92eb"
+"256x224->1024x768" = "311a6c22e9153f04"
+"320x240->1024x768" = "166f936e32da4c5f"
+"320x240->1280x720" = "5514f206c3fdf08e"
 "320x240->640x480" = "4b70df91e81661fb"
-"480x272->1024x768" = "db66aeebbfcf266b"
-"480x272->640x480" = "771414784ea228a7"
+"480x272->1024x768" = "06da4ac9797b605b"
+"480x272->640x480" = "592d2ab23284bff2"
 
 [golden."dmg-turbo-v1.glsl"]
 "160x144->1024x768" = "e999d2faf969671e"
@@ -2219,7 +2375,7 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->1024x768" = "06da4ac9797b605b"
 "480x272->640x480" = "592d2ab23284bff2"
 
-[golden."dmg-turbo-v3.glsl"]
+[golden."dmg-turboprobe-fp16.glsl"]
 "160x144->1024x768" = "e999d2faf969671e"
 "240x160->1024x768" = "2a0ad2d6d918e5eb"
 "256x192->1024x768" = "7990a5b901c9afb0"
@@ -2279,6 +2435,18 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->1024x768" = "0e6d3d5a1f8381b6"
 "480x272->640x480" = "d5681369946d28d8"
 
+[golden."lcd-mini.glsl"]
+"160x144->1024x768" = "f00bea578021c251"
+"240x160->1024x768" = "1eda0c3d7f25c3b4"
+"256x192->1024x768" = "8f5472a4b1ff4099"
+"256x192->640x480" = "0d9ac0ff30ae003b"
+"256x224->1024x768" = "8664281d0519b5e2"
+"320x240->1024x768" = "3a2a00af47c1f8e4"
+"320x240->1280x720" = "aef44004c469abd0"
+"320x240->640x480" = "b1b67e7a68333cc4"
+"480x272->1024x768" = "0e6d3d5a1f8381b6"
+"480x272->640x480" = "d5681369946d28d8"
+
 [golden."lcd-perfect-v1.glsl"]
 "160x144->1024x768" = "9c4d71137a4c1aff"
 "240x160->1024x768" = "46c202d6f53c97f3"
@@ -2290,6 +2458,18 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "320x240->640x480" = "009dd078809c4f93"
 "480x272->1024x768" = "d458a92ef24b0b78"
 "480x272->640x480" = "2c2c614ca459ef30"
+
+[golden."lcd-perfect-v10.glsl"]
+"160x144->1024x768" = "dd539d352eb31067"
+"240x160->1024x768" = "e051c12e705547c4"
+"256x192->1024x768" = "daee5d79e0338303"
+"256x192->640x480" = "d3c5231890959de5"
+"256x224->1024x768" = "02dea0a43fb4c6a5"
+"320x240->1024x768" = "6653c211b77fa2e5"
+"320x240->1280x720" = "c6f959e8b98a753c"
+"320x240->640x480" = "66094074cae772a0"
+"480x272->1024x768" = "65c493d29ab093ed"
+"480x272->640x480" = "168fa3564f1812c8"
 
 [golden."lcd-perfect-v2a.glsl"]
 "160x144->1024x768" = "db52baf2f62874a7"
@@ -2424,16 +2604,16 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->640x480" = "9a29e5db3545da06"
 
 [golden."lcd-perfect.glsl"]
-"160x144->1024x768" = "7320fd88c5ca9205"
-"240x160->1024x768" = "f8d5528822c9249e"
+"160x144->1024x768" = "dd539d352eb31067"
+"240x160->1024x768" = "e051c12e705547c4"
 "256x192->1024x768" = "daee5d79e0338303"
-"256x192->640x480" = "beb71fd034ba4877"
-"256x224->1024x768" = "cf674f53abdcaa6d"
-"320x240->1024x768" = "24df9501d32f885e"
-"320x240->1280x720" = "b1cd9ac57aab46f7"
+"256x192->640x480" = "d3c5231890959de5"
+"256x224->1024x768" = "02dea0a43fb4c6a5"
+"320x240->1024x768" = "6653c211b77fa2e5"
+"320x240->1280x720" = "c6f959e8b98a753c"
 "320x240->640x480" = "66094074cae772a0"
-"480x272->1024x768" = "ac867203cbd29d99"
-"480x272->640x480" = "f3c3131b338766bd"
+"480x272->1024x768" = "65c493d29ab093ed"
+"480x272->640x480" = "168fa3564f1812c8"
 
 [golden."lcd-turbo-v1.glsl"]
 "160x144->1024x768" = "ad3b1fdd39e94366"
@@ -2471,7 +2651,19 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->1024x768" = "6dca4d701e9d7523"
 "480x272->640x480" = "ab26409c49680a8c"
 
-[golden."lcd-turbo-v4.glsl"]
+[golden."lcdprobe-fp16.glsl"]
+"160x144->1024x768" = "dd539d352eb31067"
+"240x160->1024x768" = "e051c12e705547c4"
+"256x192->1024x768" = "daee5d79e0338303"
+"256x192->640x480" = "d3c5231890959de5"
+"256x224->1024x768" = "02dea0a43fb4c6a5"
+"320x240->1024x768" = "6653c211b77fa2e5"
+"320x240->1280x720" = "c6f959e8b98a753c"
+"320x240->640x480" = "66094074cae772a0"
+"480x272->1024x768" = "65c493d29ab093ed"
+"480x272->640x480" = "168fa3564f1812c8"
+
+[golden."lcdprobe-fp16mix.glsl"]
 "160x144->1024x768" = "dd539d352eb31067"
 "240x160->1024x768" = "e051c12e705547c4"
 "256x192->1024x768" = "daee5d79e0338303"
@@ -2567,17 +2759,29 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->1024x768" = "ca81cdba01150f6e"
 "480x272->640x480" = "7cc33d9020ae59cc"
 
-[golden."pixel-perfect.glsl"]
-"160x144->1024x768" = "1d186993662c8500"
-"240x160->1024x768" = "12a482322d4c7095"
+[golden."pixel-perfect-v8.glsl"]
+"160x144->1024x768" = "8fadb9103618b7c9"
+"240x160->1024x768" = "6a021d7a7bb36191"
 "256x192->1024x768" = "14fde0bf677a8ec7"
-"256x192->640x480" = "ccae2edd908513ee"
-"256x224->1024x768" = "8682ee72a1627db5"
-"320x240->1024x768" = "fe80c6c6000e8fd1"
+"256x192->640x480" = "dba8d2d5f0603e18"
+"256x224->1024x768" = "9b155a8cec6c345f"
+"320x240->1024x768" = "1bbadaa071700ad2"
 "320x240->1280x720" = "6ef196867a147d60"
 "320x240->640x480" = "4f3e542cb493ab79"
-"480x272->1024x768" = "ca81cdba01150f6e"
-"480x272->640x480" = "7cc33d9020ae59cc"
+"480x272->1024x768" = "4c44e1ce03cdf6ad"
+"480x272->640x480" = "01fea07c6e9b2681"
+
+[golden."pixel-perfect.glsl"]
+"160x144->1024x768" = "8fadb9103618b7c9"
+"240x160->1024x768" = "6a021d7a7bb36191"
+"256x192->1024x768" = "14fde0bf677a8ec7"
+"256x192->640x480" = "dba8d2d5f0603e18"
+"256x224->1024x768" = "9b155a8cec6c345f"
+"320x240->1024x768" = "1bbadaa071700ad2"
+"320x240->1280x720" = "6ef196867a147d60"
+"320x240->640x480" = "4f3e542cb493ab79"
+"480x272->1024x768" = "4c44e1ce03cdf6ad"
+"480x272->640x480" = "01fea07c6e9b2681"
 
 [golden."pixel-turbo-v1.glsl"]
 "160x144->1024x768" = "8fadb9103618b7c9"
@@ -2603,14 +2807,26 @@ neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0,
 "480x272->1024x768" = "4c44e1ce03cdf6ad"
 "480x272->640x480" = "01fea07c6e9b2681"
 
-[golden."pixel-turbo-v3.glsl"]
-"160x144->1024x768" = "8fadb9103618b7c9"
-"240x160->1024x768" = "6a021d7a7bb36191"
-"256x192->1024x768" = "14fde0bf677a8ec7"
-"256x192->640x480" = "dba8d2d5f0603e18"
-"256x224->1024x768" = "9b155a8cec6c345f"
-"320x240->1024x768" = "1bbadaa071700ad2"
-"320x240->1280x720" = "6ef196867a147d60"
-"320x240->640x480" = "4f3e542cb493ab79"
-"480x272->1024x768" = "4c44e1ce03cdf6ad"
-"480x272->640x480" = "01fea07c6e9b2681"
+[golden."unflat-mini-v1.glsl"]
+"160x144->1024x768" = "712be4b3018752e0"
+"240x160->1024x768" = "99a868c80a338afc"
+"256x192->1024x768" = "46aa1509e9400a9b"
+"256x192->640x480" = "de29cb063a673f41"
+"256x224->1024x768" = "a49d1c1146aa6afe"
+"320x240->1024x768" = "c10493efdfb5a10d"
+"320x240->1280x720" = "0aedddc73dee2f86"
+"320x240->640x480" = "e241213df0d19636"
+"480x272->1024x768" = "b9344b959262013f"
+"480x272->640x480" = "5f05d33a0e9fff73"
+
+[golden."unflat-mini.glsl"]
+"160x144->1024x768" = "712be4b3018752e0"
+"240x160->1024x768" = "99a868c80a338afc"
+"256x192->1024x768" = "46aa1509e9400a9b"
+"256x192->640x480" = "de29cb063a673f41"
+"256x224->1024x768" = "a49d1c1146aa6afe"
+"320x240->1024x768" = "c10493efdfb5a10d"
+"320x240->1280x720" = "0aedddc73dee2f86"
+"320x240->640x480" = "e241213df0d19636"
+"480x272->1024x768" = "b9344b959262013f"
+"480x272->640x480" = "5f05d33a0e9fff73"
