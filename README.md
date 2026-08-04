@@ -68,12 +68,12 @@ All configurations shown here ones uses aspect (except the DMG that uses native)
 <details>
 <summary><em>Comparison details</em></summary>
 
-Both pixel-perfect and pixellate produce the same output at default parameters, fixing uneven pixel scaling and shimmer issues, though **pixel-perfect** is almost 2x faster!
+Both pixel-perfect and pixellate produce the same output at default parameters, fixing uneven pixel scaling and shimmer issues, though **pixel-perfect** is nearly 3x faster!
 
 | Pipeline                    | Perf. |
 | --------------------------- | ----- |
 | 1 pass · pixel-perfect.glsl | 100%  |
-| 1 pass · pixellate.glsl     | 57%   |
+| 1 pass · pixellate.glsl     | 35%   |
 
 </details>
 
@@ -82,12 +82,12 @@ Both pixel-perfect and pixellate produce the same output at default parameters, 
 <details>
 <summary><em>Comparison details</em></summary>
 
-Even with color correction enabled, pixel-perfect is still faster than pixellate, while allowing for more control over the output image.
+Even with color correction enabled, pixel-perfect is still nearly 2x faster than pixellate, while allowing for more control over the output image.
 
 | Pipeline                    | Perf. |
 | --------------------------- | ----- |
 | 1 pass · pixel-perfect.glsl | 100%  |
-| 1 pass · pixellate.glsl     | 84%   |
+| 1 pass · pixellate.glsl     | 54%   |
 
 </details>
 
@@ -98,7 +98,7 @@ Even with color correction enabled, pixel-perfect is still faster than pixellate
 <details>
 <summary><em>Comparison details</em></summary>
 
-While res-independant-scanlines is slightly faster than crt-shader, it doesn't provide uniform pixel scaling and produce moire patterns at non-integer scaling factors. crt-perfect also add RGB mask simulation and controls for compensating for the brightness loss of scanlines.
+While res-independent-scanlines is PLACEHOLDER_CRT_CLAIM than crt-perfect, it doesn't provide uniform pixel scaling and produce moire patterns at non-integer scaling factors. crt-perfect also add RGB mask simulation and controls for compensating for the brightness loss of scanlines.
 
 | Pipeline                                | Perf. |
 | --------------------------------------- | ----- |
@@ -133,7 +133,7 @@ lcd-perfect can reproduce the same output as lcd3x or lcd1x coupled with a pixel
 | Pipeline                               | Perf. |
 | -------------------------------------- | ----- |
 | 1 pass · lcd-perfect.glsl              | 100%  |
-| 2 passes · pixellate.glsl → lcd3x.glsl | 72%   |
+| 2 passes · pixellate.glsl → lcd3x.glsl | 78%   |
 
 </details>
 
@@ -147,7 +147,7 @@ You can tune the horizontal/vertical grid balance (tip: 0.8 is lcd1x) with added
 | Pipeline                               | Perf. |
 | -------------------------------------- | ----- |
 | 1 pass · lcd-perfect.glsl              | 100%  |
-| 2 passes · pixellate.glsl → lcd3x.glsl | 87%   |
+| 2 passes · pixellate.glsl → lcd3x.glsl | 88%   |
 
 </details>
 
@@ -163,7 +163,7 @@ Not exactly a fair comparison here as the NextUI "real-gameboy" preset is based 
 | Pipeline                               | Perf. |
 | -------------------------------------- | ----- |
 | 1 pass · dmg-perfect.glsl              | 100%  |
-| 2 passes · pixellate.glsl → lcd3x.glsl | 59%   |
+| 2 passes · pixellate.glsl → lcd3x.glsl | 55%   |
 
 </details>
 
@@ -177,7 +177,7 @@ Even with all features enabled, including the dots cast shadow and colour correc
 | Pipeline                                                 | Perf. |
 | -------------------------------------------------------- | ----- |
 | dmg-perfect-tweaked · 1 pass · dmg-perfect.glsl          | 100%  |
-| pixellate+lcd3x · 2 passes · pixellate.glsl → lcd3x.glsl | 89%  |
+| pixellate+lcd3x · 2 passes · pixellate.glsl → lcd3x.glsl | 82%   |
 
 </details>
 

@@ -219,6 +219,14 @@ label = "image-adjustment"
 cfg = "image-adjustment.cfg"
 
 [[pipeline]]
+label = "res-independent-scanlines"
+cfg = "res-independent-scanlines.cfg"
+
+[[pipeline]]
+label = "barrel -> scanlines"
+cfg = "barrel-scanlines.cfg"
+
+[[pipeline]]
 label = "barrel-distortion"
 cfg = "barrel-distortion.cfg"
 
