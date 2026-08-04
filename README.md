@@ -98,12 +98,12 @@ Even with color correction enabled, pixel-perfect is still nearly 2x faster than
 <details>
 <summary><em>Comparison details</em></summary>
 
-While res-independent-scanlines is PLACEHOLDER_CRT_CLAIM than crt-perfect, it doesn't provide uniform pixel scaling and produce moire patterns at non-integer scaling factors. crt-perfect also add RGB mask simulation and controls for compensating for the brightness loss of scanlines.
+res-independent-scanlines is a much simpler shader — scanlines and nothing else — so it is the cheaper of the two, but it doesn't provide uniform pixel scaling and produces moire patterns at non-integer scaling factors. crt-perfect also adds RGB mask simulation and controls for compensating for the brightness loss of scanlines.
 
 | Pipeline                                | Perf. |
 | --------------------------------------- | ----- |
 | 1 pass · crt-perfect.glsl               | 100%  |
-| 1 pass · res-independent-scanlines.glsl | 119%  |
+| 1 pass · res-independent-scanlines.glsl | —     |
 
 </details>
 
@@ -112,12 +112,15 @@ While res-independent-scanlines is PLACEHOLDER_CRT_CLAIM than crt-perfect, it do
 <details>
 <summary><em>Comparison details</em></summary>
 
-When comparing crt-perfect with the "old-tv" preset from NextUI which adds barrel distortion in addition to scanlines, crt-perfect becomes faster even with all the effects enabled, including anti-aliased barrel distorsion, uniform pixel scaling and brightness + gamma correction.
+The "old-tv" preset from NextUI adds barrel distortion in addition to scanlines. crt-perfect does all of that in a single pass — anti-aliased barrel distortion, uniform pixel scaling and brightness + gamma correction — plus the RGB mask.
 
 | Pipeline                                                           | Perf. |
 | ------------------------------------------------------------------ | ----- |
 | 1 pass · crt-perfect.glsl                                          | 100%  |
-| 2 passes · barrel-distortion.glsl → res-independent-scanlines.glsl | 73%   |
+| 2 passes · barrel-distortion.glsl → res-independent-scanlines.glsl | —     |
+
+> [!NOTE]
+> The two figures above are pending: they are the only comparisons here whose pipelines have not yet been run on the device, and the previous values were measured on a desktop GPU against the older four-tap `crt-perfect`. A dash means not measured, rather than a number nobody has checked.
 
 </details>
 
@@ -267,7 +270,7 @@ An original Game Boy look: the dot matrix grid with its pale gaps, over a clean 
 
 ## Performance
 
-Measured **on the device** — a Trimui Brick, PowerVR Rogue GE8300, 320x240 into
+All figures here and in the comparison tables above are measured **on the device** — a Trimui Brick, PowerVR Rogue GE8300, 320x240 into
 1024x768. `Frame` is the share of one 60fps frame (16.67 ms) the shader alone uses; whatever is left has to run the emulator. Two rows per shader: as it ships, and with every effect turned up.
 
 | Shader | GPU ms | vs `pixellate` | Frame |
