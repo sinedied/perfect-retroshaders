@@ -463,6 +463,26 @@ label = "dmg-mini-v3 all-on"
 cfg = "dmg-mini-v3-allon.cfg"
 
 [[pipeline]]
+label = "lcdprobe-fp16"
+cfg = "lcdprobe-fp16.cfg"
+
+[[pipeline]]
+label = "lcdprobe-fp16mix"
+cfg = "lcdprobe-fp16mix.cfg"
+
+[[pipeline]]
+label = "crtprobe-fp16"
+cfg = "crtprobe-fp16.cfg"
+
+[[pipeline]]
+label = "crtprobe-fp16mix"
+cfg = "crtprobe-fp16mix.cfg"
+
+[[pipeline]]
+label = "dmg-turboprobe-fp16"
+cfg = "dmg-turboprobe-fp16.cfg"
+
+[[pipeline]]
 label = "crtprobe-nowarp"
 cfg = "crtprobe-nowarp.cfg"
 
@@ -1547,6 +1567,97 @@ role = ["vendor"]
 # byte-identical to it at the shipped defaults and verified to have genuinely
 # lost the feature when the parameter is raised. They exist to price a feature
 # that is switched OFF, which ops@def cannot see. Archive, so they are gated.
+[[shader]]
+name = "lcdprobe-fp16.glsl"
+family = "lcd-turbo"
+role = ["archive"]
+sampler = "linear"
+pattern = "whole-cell"
+# THE fp16 CEILING, not a candidate. lcd-turbo-v4 with the whole shader dropped
+# to mediump, which the device is expected to render visibly wrong - the point
+# is what fp16 is worth if correctness is ignored. Desktop-identical to its
+# parent by construction, since every desktop GPU runs mediump at fp32, so it
+# inherits v4's exceptions exactly.
+moire_allow = [
+    { case = [480, 272, 1024, 768], value = 0.435 },
+]
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 2.03 },
+    { case = [160, 144,  853, 768], value = 1.18 },
+    { case = [256, 224, 1024, 768], value = 0.48 },
+]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
+name = "lcdprobe-fp16mix.glsl"
+family = "lcd-turbo"
+role = ["archive"]
+sampler = "linear"
+pattern = "whole-cell"
+# The safe form: mediump by default, with the nine locals that hold a value near
+# t - up to 480, and later differenced - kept highp, plus N, whose ceil() bias of
+# 1e-4 sits below the fp16 ulp at 0.9 and would vanish.
+moire_allow = [
+    { case = [480, 272, 1024, 768], value = 0.435 },
+]
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 2.03 },
+    { case = [160, 144,  853, 768], value = 1.18 },
+    { case = [256, 224, 1024, 768], value = 0.48 },
+]
+neutral = { lp_grid = 0.0, lp_subpixels = 0.0, lp_brightness = 1.0, lp_gamma = 1.0 }
+
+[[shader]]
+name = "crtprobe-fp16.glsl"
+family = "crt-turbo"
+role = ["archive"]
+sampler = "linear"
+pattern = "output-locked"
+# The fp16 ceiling on the op-heaviest shader. As lcdprobe-fp16.
+moire_allow = [
+    { case = [256, 224, 1024, 768], value = 0.442 },
+    { case = [480, 272,  640, 480], value = 0.480 },
+]
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 1.41 },
+    { case = [160, 144,  853, 768], value = 0.92 },
+    { case = [256, 224, 1024, 768], value = 1.50 },
+]
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
+
+[[shader]]
+name = "crtprobe-fp16mix.glsl"
+family = "crt-turbo"
+role = ["archive"]
+sampler = "linear"
+pattern = "output-locked"
+# The safe form. uv, p and B carry the scale; x, y and row are output-space
+# coordinates up to 1024 that get floored or phased, and row's 1e-3 parity bias
+# is far below the fp16 ulp at 768. The two pitches carry the lock smoothstep's
+# 2% window.
+moire_allow = [
+    { case = [256, 224, 1024, 768], value = 0.442 },
+    { case = [480, 272,  640, 480], value = 0.480 },
+]
+crawl_allow = [
+    { case = [240, 160, 1024, 682], value = 1.41 },
+    { case = [160, 144,  853, 768], value = 0.92 },
+    { case = [256, 224, 1024, 768], value = 1.50 },
+]
+neutral = { cp_scanlines = 0.0, cp_rgb_mask = 0.0, cp_brightness = 1.0, cp_gamma = 1.0, cp_curvature = 0.0 }
+
+[[shader]]
+name = "dmg-turboprobe-fp16.glsl"
+family = "dmg-turbo"
+role = ["archive"]
+sampler = "linear"
+# The fp16 ceiling on dmg-turbo, a third data point. As lcdprobe-fp16.
+moire_allow = [
+    { case = [320, 240, 1024, 768], value = 0.458 },
+    { case = [480, 272, 1024, 768], value = 0.400 },
+]
+neutral = { dp_grid = 0.0, dp_shadow = 0.0, dp_brightness = 1.0, dp_gamma = 1.0, dp_temperature = 0.0, dp_tint = 0.0 }
+
 [[shader]]
 name = "crtprobe-nowarp.glsl"
 family = "crt-turbo"
