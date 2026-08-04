@@ -98,7 +98,7 @@ Even with color correction enabled, pixel-perfect is still nearly 2x faster than
 <details>
 <summary><em>Comparison details</em></summary>
 
-res-independent-scanlines is far cheaper — it draws one sine wave and nothing else — but it doesn't provide uniform pixel scaling and produces moire patterns at non-integer scaling factors. crt-perfect scales the image, adds RGB mask simulation and band-limits both patterns so they hold at any scale, and that is what the difference buys.
+res-independent-scanlines is far cheaper, but it doesn't provide uniform pixel scaling and produces moire patterns at non-integer scaling factors. crt-perfect scales the image, adds RGB mask simulation and band-limits both patterns so they hold at any scale, and that is what the difference buys.
 
 | Pipeline                                | Perf. |
 | --------------------------------------- | ----- |
@@ -261,9 +261,6 @@ An original Game Boy look: the dot matrix grid with its pale gaps, over a clean 
 > - **Grid line thickness is in output pixels**, not a fraction of a cell, so the panel reads the same at 640x480 as at 1024x768. 1.00 is a one-pixel line.
 >
 > - **Dot shadow** lifts the dots off the panel, as if lit from above. It is off by default. Only driven pixels cast one.
-
-> [!NOTE]
-> Brightness and gamma are the two controls applied after the image is scaled, so they are the two worth a light touch. The defaults keep the clipping in the highlights, where it reads like a real screen. Pushing brightness much past 1.50 can start to show a faint pattern on dense content at some scales.
 
 ## Performance
 
