@@ -512,7 +512,7 @@ the mini line exists so it does not have to be taken.
 | Hoisting uniform-derived setup into the vertex shader | **Not worth it.** Pinning the sizes to literals — perfect hoisting — removes 23 of `crt-turbo`'s ops (8%) and 6 of `lcd-turbo`'s (2%). The driver very likely already does it, and varyings cost interpolation. |
 | A source-resolution grading pass (v1) | **Reinstated in v2** as `colour-mini @src`, and it matters more in v3: with a plain gain it is the only route to brightness with no exception at all. Measures 0.2 ms. |
 | The lcd grid's half-output-pixel phase | **Kept, with an alternative built.** It lands a sample on the sinusoid's trough, which is what stops every integer pitch losing contrast to sample phase. `lcd-perfect-v9b` phases it on the source-pixel boundary as `lcd1x` does, and `v9c` replaces the sinusoid with a gap aperture. See `docs/lcd-perfect.md`. |
-| `mediump` / fp16 split | **Open, and unmeasurable here.** Rogue GE8300 has native fp16 ALU; every desktop GPU runs `mediump` at fp32 and will report no change. Needs a device run. The scale's `floor()` on a coordinate up to 480 must stay `highp`. |
+| `mediump` / fp16 split | **Measured, and mostly unavailable.** Blanket `mediump` is worth **9.5–10.4%** on three shaders — the driver honours it. But the safe form, with the coordinate chain kept `highp`, gets only **2.1–2.7%**: three quarters of the win is locked behind precision that fp16 cannot carry (the aperture blend weight reads 241 levels wrong, `crt`'s row parity flips on 4.8% of samples). `docs/device-perf.md` has the numbers. Not rejected, but a poor trade for the one change the harness cannot see. |
 
 ## Next levers, reordered by what the device said
 
@@ -532,8 +532,12 @@ by op count and ops are not what costs.
    shader entirely. Pinning those two back recovers 2.82 of the 3.58 ms, and
    **that is now the largest single saving available in this line** — it is
    waiting on a decision, not a measurement.
-3. **`mediump` / fp16**, which is now the obvious follow-on from item 1 rather
-   than an afterthought.
+3. **~~`mediump` / fp16~~ Answered: ~10% exists, ~2.5% is reachable.** Blanket
+   `mediump` saves 9.5–10.4%, so the fp16 ALU is real and the driver uses it;
+   but everything that holds a coordinate has to stay `highp` or the picture
+   comes apart, and what is left is 2.1–2.7%. It is now the *smallest* lever on
+   this list rather than the most promising, and the riskiest, since nothing in
+   the gate can see it.
 4. **`crt-turbo`'s 291-op floor.** Still real, still 72% of the shader — but at
    0.023 ms an op it is worth less than any of the above.
 

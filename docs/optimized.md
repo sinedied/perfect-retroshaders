@@ -81,7 +81,7 @@ higher is cheaper. **frame** is the share of one 60fps frame (16.67 ms).
 |  | all on | 82 | 6 | 1 | 0.0523 | 113% | 6.7 | 184% | **40%** |
 | colour-mini v2 | defaults | 20 | 0 | 1 | — | — | 3.1 | 399% | **18%** |
 |  | all on | 49 | 6 | 1 | — | — | — | — | — |
-| **colour-mini v3** | defaults | 20 | 0 | 1 | 0.0493 | 119% | 3.1 | 395% | **19%** |
+| **colour-mini v3** | defaults | 20 | 0 | 1 | 0.0493 | 119% | 3.1 | 391% | **19%** |
 |  | all on | 49 | 6 | 1 | 0.0488 | 121% | 5.1 | 240% | **31%** |
 | crt-perfect *(released)* | defaults | 428 | 8 | 4 | 0.0650 | 91% | 15.9 | 77% | **95%** |
 |  | all on | 503 | 14 | 4 | 0.0678 | 87% | 19.9 | 62% | **119%** |
@@ -91,7 +91,7 @@ higher is cheaper. **frame** is the share of one 60fps frame (16.67 ms).
 |  | all on | 372 | 14 | 1 | — | — | — | — | — |
 | crt-turbo v3 | defaults | 303 | 8 | 1 | — | — | 13.0 | 95% | **78%** |
 |  | all on | 380 | 14 | 1 | — | — | — | — | — |
-| **crt-turbo v4a** | defaults | 296 | 8 | 1 | 0.0578 | 102% | 12.6 | 97% | **76%** |
+| **crt-turbo v4a** | defaults | 296 | 8 | 1 | 0.0578 | 102% | 12.6 | 98% | **76%** |
 |  | all on | 373 | 14 | 1 | 0.0595 | 99% | 15.8 | 78% | **95%** |
 | crt-turbo v4b | defaults | 292 | 8 | 1 | 0.0570 | 103% | 12.1 | 102% | **72%** |
 |  | all on | 357 | 14 | 1 | 0.0580 | 102% | — | — | — |
@@ -109,7 +109,7 @@ higher is cheaper. **frame** is the share of one 60fps frame (16.67 ms).
 |  | all on | 283 | 23 | 1 | — | — | — | — | — |
 | lcd-turbo v3 | defaults | 286 | 17 | 1 | 0.0585 | 101% | 12.6 | 98% | **75%** |
 |  | all on | 291 | 23 | 1 | 0.0586 | 101% | 14.1 | 87% | **85%** |
-| **lcd-turbo v4** | defaults | 275 | 17 | 1 | 0.0574 | 100% | 11.8 | 104% | **71%** |
+| **lcd-turbo v4** | defaults | 275 | 17 | 1 | 0.0574 | 100% | 11.9 | 104% | **71%** |
 |  | all on | 280 | 23 | 1 | 0.0571 | 101% | 13.4 | 92% | **80%** |
 | lcd-mini v2 | defaults | 218 | 19 | 1 | — | — | 9.8 | 125% | **59%** |
 |  | all on | 217 | 19 | 1 | — | — | — | — | — |
@@ -140,8 +140,8 @@ higher is cheaper. **frame** is the share of one 60fps frame (16.67 ms).
 | `image-adjustment` | — | 345 | 6 | 2 | 0.0572 | 103% | 12.0 | 102% | **72%** |
 | `dmg_dot_matrix → adjust` | — | 423 | 12 | 3 | — | — | 15.7 | 78% | **94%** |
 
-Device figures are from `docs/device-results.tsv`, 69 pipelines, self-test
-passed. **A dash means not measured, not zero** — archived iterations and the
+Device figures are from `docs/device-results.tsv`, 74 pipelines, self-test
+passed. Run-to-run reproducibility on the repeated rows is ±0.17%. **A dash means not measured, not zero** — archived iterations and the
 two-pass references were run at their defaults only.
 
 Desktop worst per-case IQR was 27.7%, so a desktop difference smaller than that

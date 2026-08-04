@@ -447,3 +447,47 @@ uniform-derived value into a varying: it reads a second tap and multiplies
 `col`, both already per-fragment. **This is the case where "a uniform branch is
 free" holds**, and the pair with curvature is what makes the rule usable:
 the cost is not the branch, it is what the branch writes.
+
+## The fourth run: what `mediump` is actually worth
+
+The last item on the levers list with no number against it. Five probes, all
+verified 0/255 against their parents on the desktop first — which proves only
+that the algebra is unchanged, since every desktop GPU runs `mediump` at fp32
+and cannot see the thing being tested at all.
+
+| shader | as shipped | **blanket `mediump`** | **safe form** |
+|---|---:|---:|---:|
+| `lcd-turbo-v4` | 11.859 ms · 71.2% | 10.729 · **64.4%** (−9.5%) | 11.534 · **69.2%** (−2.7%) |
+| `crt-turbo-v4a` | 12.575 ms · 75.5% | 11.333 · **68.0%** (−9.9%) | 12.310 · **73.9%** (−2.1%) |
+| `dmg-turbo-v3` | 8.380 ms · 50.3% | 7.509 · **45.1%** (−10.4%) | — |
+
+**The driver does honour it**, and remarkably consistently: 9.5%, 9.9% and
+10.4% on three shaders with completely different work mixes. Against an IQR of
+0.3–0.8% and ±0.17% reproducibility on the repeated rows, none of this is noise.
+
+**But the safe form gets about a quarter of it.** Three quarters of the win is
+locked behind coordinate precision, and that precision is not negotiable — the
+same three traps already in `AGENTS.md`, now with fp16 numbers on them:
+
+| what | fp16 result |
+|---|---|
+| the aperture blend weight `w = (AB − Alo)/I` | worst error **0.94 — 241 levels.** `AB` and `Alo` both sit near `t`, which reaches 480, and their difference spans 0…0.3. fp16's ulp at 480 is 0.25 |
+| the same weight with the 9 locals kept `highp` | worst error **0.00038 — 0.10 levels**, below the 8-bit quantum |
+| `crt`'s row parity `floor(y·f + 1e-3)`, y ≤ 768 | **4.8% of samples flip** to the wrong row |
+| `N = ceil(min_pitch·d − 1e-4)` | the bias is **10× below the fp16 ulp at 1.0** and stops existing, so the cell period changes |
+
+So the shape of the answer is: **fp16 is worth ~10% and we can have ~2.5% of
+it.** The rest would buy a shader that is fast and wrong.
+
+**One authoring trap, found the hard way.** With `precision mediump float;` as
+the fragment default, the *varying* `COMPAT_VARYING vec4 TEX0;` also becomes
+fp16 — a 0.16-pixel error in the texture coordinate before a single `highp`
+local sees it, which would have silently made the mixed arms measure something
+meaningless. The fragment-stage varying has to be qualified too. Nothing on the
+desktop can catch that, because the desktop renders it identically.
+
+**Whether this is worth an iteration is a judgement, not a measurement.** 2.1%
+on `crt-turbo` does cross the 75% target (75.5 → 73.9), and it composes with
+`v4b`'s Jacobian trade. Against that: it is the one change in this repository
+that the entire harness is blind to, and its failure mode is subtle artifacts on
+hardware nobody is looking at while the goldens stay green.
