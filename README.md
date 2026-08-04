@@ -281,20 +281,20 @@ emulator. Two rows per shader: as it ships, and with every effect turned up.
 | Shader | GPU ms | vs `pixellate` | Frame |
 | --- | ---: | ---: | ---: |
 | `pixellate` *(the usual clean upscaler, for reference)* | 12.3 | 100% | 74% |
-| **`pixel-perfect`**, defaults | **4.5** | **272%** | **27%** |
-| `pixel-perfect`, everything on | 6.7 | 185% | 40% |
-| **`dmg-perfect`**, defaults | **8.4** | **147%** | **50%** |
+| **`pixel-perfect`**, defaults | **4.3** | **283%** | **26%** |
+| `pixel-perfect`, everything on | 6.6 | 186% | 40% |
+| **`dmg-perfect`**, defaults | **8.4** | **146%** | **50%** |
 | `dmg-perfect`, everything on | 12.5 | 99% | 75% |
-| **`lcd-perfect`**, defaults | **11.8** | **104%** | **71%** |
+| **`lcd-perfect`**, defaults | **11.9** | **104%** | **71%** |
 | `lcd-perfect`, everything on | 13.4 | 92% | 80% |
-| **`crt-perfect`**, defaults | **12.0** | **102%** | **72%** |
-| `crt-perfect`, everything on | TBD | TBD | TBD |
+| **`crt-perfect`**, defaults | **12.1** | **101%** | **73%** |
+| `crt-perfect`, everything on | 15.0 | 82% | 90% |
 | | | | |
-| **`colour-mini`** | **3.1** | **391%** | **19%** |
-| **`unflat-mini`** | **TBD** | **TBD** | **TBD** |
-| **`dmg-mini`** | **7.3** | **168%** | **44%** |
+| **`colour-mini`** | **3.1** | **396%** | **19%** |
+| **`unflat-mini`** | **4.1** | **297%** | **25%** |
+| **`dmg-mini`** | **7.4** | **167%** | **44%** |
 | **`lcd-mini`** | **7.9** | **156%** | **47%** |
-| **`crt-mini`** | **TBD** | **TBD** | **TBD** |
+| **`crt-mini`** | **7.9** | **155%** | **48%** |
 
 Every shader here fits in a frame at its defaults, and the four `-perfect` ones
 do it while also scaling the image — which is the expensive part. The `-mini`
@@ -302,15 +302,18 @@ versions skip the scaling, so they cost less and leave you the choice of scaler.
 
 A few things worth knowing if you are tuning for headroom:
 
-- **Curvature is the one expensive option.** On `crt-perfect` it costs about 3.5
-  ms even with the slider at zero, because of what carrying the code does to the
-  rest of the shader. If you never use it, `crt-mini` behind a scaler is cheaper.
+- **Curvature is the one expensive option, and it costs even when it is off.**
+  Carrying the code makes work that would otherwise be computed once per frame
+  happen per pixel. `crt-mini` dropped from 10.5 ms to **7.9 ms** simply by
+  moving curvature out into `unflat-mini`.
+- **Which is why the split is worth it.** `crt-mini` → `unflat-mini` with
+  curvature actually *on* costs **10.4 ms** — less than the old single-pass
+  version cost with curvature turned **off**. If you want the bend, compose it.
 - **Everything else is genuinely free when off.** The slot mask, the Game Boy
-  cast shadow and the colour controls all cost nothing measurable unless you
-  turn them on.
-- **The `-mini` shaders are cheaper, but a stack of two is not.** Each pass
-  re-reads the whole screen, so `pixel-perfect` → `crt-mini` costs more than
-  `crt-perfect` alone. Compose for flexibility, not for speed.
+  cast shadow and the colour controls cost nothing measurable unless used.
+- **But a stack is not automatically cheaper.** Each pass re-reads the whole
+  screen: `pixel-perfect` → `crt-mini` is 13.7 ms against `crt-perfect`'s 12.1.
+  Compose for flexibility and for curvature, not for speed in general.
 
 Full method, the instrument's self-test and every number behind this table are
 in [`docs/device-perf.md`](docs/device-perf.md).

@@ -91,3 +91,30 @@ Against `crt-perfect-v13` the difference is large at brightness 1.00, and that
 number means nothing: it is a shader with a box scaler being compared to one
 without. The comparison that matters is `pixel-turbo → crt-mini` against
 `crt-turbo`, and that is a device measurement, not a harness one.
+
+
+## v5: curvature leaves
+
+`crt-mini` v4 carried the barrel warp behind a uniform guard, which looked free
+and was not. The block writes `noWarp` and, in the scaling shaders, `jac`, and
+those turn `h`, `scanLocked` and `maskLocked` into per-fragment work where the
+driver had been hoisting them out of the fragment shader entirely.
+
+Deleting it:
+
+| | ops @def | device ms | frame |
+|---|---:|---:|---:|
+| v4, curvature present and off | 259 | 10.48 | 63% |
+| **v5, curvature deleted** | **247** | **7.94** | **48%** |
+
+**2.54 ms - 24% - for 12 ops.** The op count is nearly the whole story of what
+the *feature* costs and almost none of the story of what *carrying* it costs,
+which is the same lesson `crt-turbo` taught at 3.58 ms and the reason
+`perf.py --static` is a weak signal for a guarded block.
+
+The warp itself now lives in `unflat-mini`, and the pair composes for less than
+v4 cost with the feature switched off. See `docs/unflat-mini.md`.
+
+Nothing else changed: same patterns, same brightness, same pitch and lock rules.
+The `tube` corner mask went with the warp, since it only ever existed to hide
+what the warp exposed.

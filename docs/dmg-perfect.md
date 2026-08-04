@@ -522,3 +522,25 @@ instead would be design-rule-clean, but the reference gammas *after* its grid mi
 under a light gap the two differ by **21 levels**, which is exactly where a DMG's grid
 is most visible. So the cheap placement is kept and the cost is documented instead:
 gamma 1.40 measures 0.86 beat against 0.12 at 1.00.
+
+
+## v11: the release becomes the one-tap shader
+
+`dmg-perfect` v11 is **dmg-turbo v3**, promoted. The performance line and the released line
+were the same shaders solving the same problem twice, and the one-tap scaler won
+on every measure that mattered:
+
+- **The same picture.** 0/255 against the shader it replaces at every integer
+  scale, and 1/255 elsewhere, which is the scaler's own transition pixels.
+- **Roughly a third less work**, and it fits in a frame at its defaults where
+  the four-tap version did not comfortably.
+- **One texture tap instead of four**, which is why it needs a LINEAR filter.
+  Under NEAREST the pattern still draws and the picture underneath silently
+  becomes nearest-neighbour.
+
+The four-tap line stays in `tools/iterations/` as the archive and as the
+negative controls the property tests need. What it measured, why each version
+existed and what was rejected on the way is above, unchanged.
+
+**Anyone upgrading must delete `.shadercache`**: the host keys compiled shaders
+on filename with no content hash, so it will keep running the old one.

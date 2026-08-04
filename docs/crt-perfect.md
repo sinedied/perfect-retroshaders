@@ -425,3 +425,25 @@ It was withdrawn rather than kept. **Reverting a change to its predecessor's
 form does not need a new iteration; it needs the predecessor.** The gate did not
 catch it, because nothing checks that a new iteration differs from an existing
 one. Worth remembering: `diff` against the version you think you are undoing.
+
+
+## v14: the release becomes the one-tap shader
+
+`crt-perfect` v14 is **crt-turbo v4b**, promoted. The performance line and the released line
+were the same shaders solving the same problem twice, and the one-tap scaler won
+on every measure that mattered:
+
+- **The same picture.** 0/255 against the shader it replaces at every integer
+  scale, and 1/255 elsewhere, which is the scaler's own transition pixels.
+- **Roughly a third less work**, and it fits in a frame at its defaults where
+  the four-tap version did not comfortably.
+- **One texture tap instead of four**, which is why it needs a LINEAR filter.
+  Under NEAREST the pattern still draws and the picture underneath silently
+  becomes nearest-neighbour.
+
+The four-tap line stays in `tools/iterations/` as the archive and as the
+negative controls the property tests need. What it measured, why each version
+existed and what was rejected on the way is above, unchanged.
+
+**Anyone upgrading must delete `.shadercache`**: the host keys compiled shaders
+on filename with no content hash, so it will keep running the old one.

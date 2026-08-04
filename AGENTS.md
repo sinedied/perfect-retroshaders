@@ -16,7 +16,8 @@ does not read GLSL.
 | Path | What |
 |---|---|
 | `shaders/` | **releases only.** Never edit one. Replace only when the owner says so |
-| `tools/iterations/` | every version, including the current candidate. Where the work happens |
+| `tools/iterations/` | every version, including the current candidate. Where the work happens. **A release's source iteration must be here**, not in `optimized/` |
+| `tools/optimized/` | the retired `*-turbo` line and the probes. Kept as history and as controls |
 | `tools/optimized/` | the `*-turbo` line: the same four shaders rebuilt for the device |
 | `tools/baseline.toml` | **the one data file** — every shader's role, sampler and limits |
 | `tools/{check,measure,perf,test,preview}.py` | the five entry points |
@@ -35,7 +36,8 @@ puts a file in `shaders/`. Iterate in `tools/iterations/`; a superseded version
 stays there and keeps compiling, because the per-family tests use them as
 negative controls.
 
-- `shaders/<family>.glsl` — **no version in the filename**
+- `shaders/<family>.glsl` — **no version in the filename**. Nine of them now:
+  four `*-perfect` and five `*-mini`
 - `tools/iterations/<family>-v<N>.glsl` — version in the filename
 - **the version lives in the header of both**, and `check.py` asserts a release
   is byte-identical to the iteration its header names

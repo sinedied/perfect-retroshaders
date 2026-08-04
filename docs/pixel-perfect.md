@@ -358,3 +358,25 @@ transcendentals do not decide moire, the gamma round-trip does.** One tap and fo
 measure identically; `pixellate`'s own default mode is 3.5–5.7 against their 0.000.
 `sharp-shimmerless` has no knob to get that wrong because it has **no parameters at
 all** — which is also why it cannot be the shader this repo ships.
+
+
+## v8: the release becomes the one-tap shader
+
+`pixel-perfect` v8 is **pixel-turbo v3**, promoted. The performance line and the released line
+were the same shaders solving the same problem twice, and the one-tap scaler won
+on every measure that mattered:
+
+- **The same picture.** 0/255 against the shader it replaces at every integer
+  scale, and 1/255 elsewhere, which is the scaler's own transition pixels.
+- **Roughly a third less work**, and it fits in a frame at its defaults where
+  the four-tap version did not comfortably.
+- **One texture tap instead of four**, which is why it needs a LINEAR filter.
+  Under NEAREST the pattern still draws and the picture underneath silently
+  becomes nearest-neighbour.
+
+The four-tap line stays in `tools/iterations/` as the archive and as the
+negative controls the property tests need. What it measured, why each version
+existed and what was rejected on the way is above, unchanged.
+
+**Anyone upgrading must delete `.shadercache`**: the host keys compiled shaders
+on filename with no content hash, so it will keep running the old one.
