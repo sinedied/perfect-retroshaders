@@ -16,7 +16,7 @@ performance and brightness.**
 I'm sure everyone has their own idea of what a "perfect" retro shader is, but for me, it has to meet a few criteria:
 
 - Good enough to give a **nice retro look without compromising performance**. It runs fast on cheap handheld devices (Trimui Brick, H700, etc).
-- **Avoid brightness loss, moire patterns, and other artifacts** that can be annoying at non-integer scaling factors.
+- **Reduce brightness loss, avoid moire patterns, and other artifacts** that can be annoying at non-integer scaling factors.
 - **Good defaults but tweakable** to appeal both non-technical users and shader enthusiasts alike. They're optimized for single-pass pipelines and handle pixel perfect upscaling, no need for complex setups.
 
 All shaders provided here follow these principles, and were tested on a real device to ensure they meet the performance and visual quality goals. I even built a [custom lab](https://sinedied.github.io/retroshader-lab/) to experiment and pixel-peep them against many popular alternatives.
