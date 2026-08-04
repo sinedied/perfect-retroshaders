@@ -91,3 +91,56 @@ The crawl exception at full stripe depth (1.270 at GBA, 0.790 at GBC) is
 bit-identical at brightness 1.00, which is where that regime is measured. It is
 the stripe's aperture error, which `lcd-perfect-v7` fixed at +40% ops and was
 rejected for. Nothing here made it worse.
+
+
+## v4: the released shader, one tap
+
+The `*-turbo` line had drifted from what ships. `lcd-turbo-v3` carried
+`lcd-perfect-v9a`'s peak-normalised stripe and its own brightness — a clamp on
+the content before the pattern — while the release, **v6**, has neither. The
+owner prefers v6 with both of its known issues, so v4 goes back to it.
+
+Two edits:
+
+```glsl
+stripe = vec3(rg, 3.0 - rg.x - rg.y);              // was  / (1.0 + ac)
+vec3 m = sqrt(max(stripe * (gain * lp_brightness), 0.0));
+// the guarded  min(color * lp_brightness, 1.0)  block is gone
+```
+
+`lcd-turbo-v3` was `lcd-perfect-v9a` with four taps replaced by one and nothing
+else, so after these two edits **the only remaining difference from the release
+is the scaler.** Measured as such:
+
+| | vs released `lcd-perfect`, integer scales, brightness 0.25 → 4.00 |
+|---|---|
+| v3 | **137/255** |
+| **v4** | **0/255** |
+
+Not "within tolerance" — identical. Off an integer scale, where the one-tap and
+four-tap scalers genuinely differ, v4 reads 1/255 at the defaults against v3's
+47/255.
+
+### What it cost and what it bought
+
+| | moiré exceptions | crawl exceptions | ops @def | device |
+|---|---:|---:|---:|---:|
+| v3 | 6, worst 3.400 | 2 | 286 | 12.6 ms, 75% |
+| **v4** | **1**, worst 0.435 | 3, inherited from v6 | **275** | **11.8 ms, 71%** |
+
+The crawl exceptions are the price and they are not new: they are
+`lcd-perfect`'s own, within 0.07 of v6's figures, and they are the clamp on the
+product that the owner chose over bleaching the picture. `docs/lcd-perfect.md`
+has why.
+
+**It got faster by doing less.** Brightness is 1 op in v4 — a multiply into the
+pattern gain — where v3 had a guarded clamp, and the stripe lost a divide. That
+is 11 ops and 0.72 ms on the device, which makes v4 **the first lcd head to
+clear the 75% target**.
+
+### The `lcd-mini` v4 result
+
+The same two edits, and it comes out with **no exceptions at all**: v3 carried
+six for moiré, worst 1.062, and the worst case here reads 0.110 against a limit
+of 0.40. 209 ops and 47% of a frame. Nothing to declare is the strongest result
+the harness can produce.

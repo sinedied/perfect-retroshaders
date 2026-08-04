@@ -11,12 +11,50 @@ and **the released shaders are not touched.**
 | `*-mini` | the pattern only, no scaler, composable behind anything | you want to pick your own scaler, or chain a source-resolution colour pass |
 
 Target: **≤ 75% of a frame (12.5 ms) at the shipped defaults.** Measured on the
-device: six of the eight meet it. **`lcd-turbo` lands at 76% and `crt-turbo-v4a`
-at 76%** — both miss, and both still halve what they replace. `crt-turbo-v4b`
-clears it at 72%, for one line of fidelity under curvature.
+device: seven of the eight meet it. **`lcd-turbo-v4` clears it at 71%** and
+`crt-turbo-v4a` sits exactly on it at 75%; `crt-turbo-v4b` has room at 72%, for
+one line of fidelity under curvature. Every one of them halves what it
+replaces.
 
 **Every device figure on this page is measured**, from the run in
 `docs/device-results.tsv`. See [the device run](#the-device-run).
+
+## What v6 changed
+
+**The lcd line goes back to the released shader.** `lcd-perfect`'s release is
+**v6**, and the owner prefers it over every arm built since — including the one
+that fixes the stripe peaking near 2. So `lcd-turbo-v4` and `lcd-mini-v4` adopt
+its brightness *and* its stripe, and `lcd-perfect`'s head moves back onto v6.
+
+`lcd-turbo-v3` was `lcd-perfect-v9a` with four taps replaced by one and nothing
+else, so two edits leave the scaler as the only difference from the release:
+
+```glsl
+stripe = vec3(rg, 3.0 - rg.x - rg.y);              // was  / (1.0 + ac)
+vec3 m = sqrt(max(stripe * (gain * lp_brightness), 0.0));
+```
+
+| | vs the release, integer scales, brightness 0.25 → 4.00 | moiré exceptions | device |
+|---|---:|---:|---:|
+| `lcd-turbo-v3` | 137/255 | 6, worst 3.400 | 12.6 ms, 75% |
+| **`lcd-turbo-v4`** | **0/255** | **1**, worst 0.435 | **11.8 ms, 71%** |
+| `lcd-mini-v3` | — | 6, worst 1.062 | 8.6 ms, 51% |
+| **`lcd-mini-v4`** | — | **none** | **7.9 ms, 47%** |
+
+0/255 is identity, not tolerance. **And it got faster by doing less**: brightness
+is one multiply into the pattern gain where v3 had a guarded clamp, and the
+stripe lost a divide — 11 ops, 0.72 ms, and the first lcd head to clear the 75%
+target.
+
+The crawl exceptions are the price, and they are `lcd-perfect`'s own to within
+0.07. That is the trade the owner chose: a gain above 1 has to clip somewhere,
+and clipping the pattern beats while clipping the picture bleaches. Same choice
+as `crt-perfect`'s, recorded in `docs/crt-perfect.md`.
+
+**`lcd-mini-v4` declares no exceptions at all**, which is the strongest result
+the harness can produce. Standalone the mini has no scaler, so v3's clamp was
+beating against its own pattern rather than a footprint; moving the gain out of
+the content removed it.
 
 ## What v5 changed
 

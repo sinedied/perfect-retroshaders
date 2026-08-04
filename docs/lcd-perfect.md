@@ -501,3 +501,34 @@ choosing an arm.
 
 `v9c` also crawls more at equal brightness (0.256 against v9a's 0.066 at 1.00):
 a harder edge gives the end clamp more to bite on.
+
+## The head goes back to v6
+
+The owner picked the arm, and it is none of them: **the released v6 is still the
+preferred shader**, stripe normalisation issue and all. `current` moves back
+onto it and v9a becomes an archive arm.
+
+That makes v8 and v9 a family of experiments that all found real things and none
+of which shipped:
+
+| version | what it fixed | why it is not the head |
+|---|---|---|
+| v7 | the stripes' aperture error, properly | +40% ops |
+| v8 | the clamp, by clamping per tap | bleaches every highlight above `1/b` |
+| v9a | the stripe peaking near 2 | the owner prefers the un-normalised look |
+| v9b | the grid phase, on the source boundary as `lcd1x` does | not picked |
+| v9c | the aperture, a gap instead of a sinusoid — and it is the fastest | not picked |
+
+**v6's two known issues are therefore deliberate**, and both are the same
+trade seen elsewhere in this repo:
+
+- **Brightness multiplies the pattern and the product is clamped**, which is a
+  non-linearity after the blend and beats as a colour band that walks with the
+  scroll. Absent at brightness 1.00, worse with every step above, and absent at
+  an integer scale at any brightness. The alternative bleaches the picture
+  instead of the pattern; `crt-perfect`'s A/B/C table above is the same choice.
+- **The stripe is not peak-normalised**, so at full depth it reaches about 2 and
+  the clamp sees it. v9a's one-line fix is `/(1.0 + ac)`.
+
+`lcd-turbo-v4` and `lcd-mini-v4` are built on v6 and measure 0/255 against it at
+every integer scale and every brightness. See `docs/optimized/lcd-turbo.md`.

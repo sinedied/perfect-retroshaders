@@ -83,3 +83,19 @@ Against `lcd-perfect-v9a` the difference is large,
 and that number means nothing: it is a shader with a box scaler being compared
 to one without. The comparison that matters is `pixel-turbo → lcd-mini` against
 `lcd-turbo`, and that is a device measurement, not a harness one.
+
+
+## v4: no exceptions at all
+
+The same two edits as `lcd-turbo-v4` — the stripe un-normalised, brightness into
+the pattern gain — and the exception list empties. v3 declared six moiré
+exceptions, worst 1.062; v4 declares none, with the worst case at 0.110 against
+a limit of 0.40.
+
+That is not luck. v3's brightness clamped the content before the pattern, and a
+clamp after the blend is the design rule's one prohibition; moving the gain into
+the pattern removes the clamp from the beating path entirely. Standalone the
+mini has no scaler, so there was never a footprint for it to beat against on the
+picture side — what it was beating against was its own pattern.
+
+209 ops, 13 SFU, 1 tap, **47% of a frame** on the device, against v3's 51%.

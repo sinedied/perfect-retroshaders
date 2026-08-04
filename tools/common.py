@@ -377,6 +377,17 @@ def check_pipelines():
     labels = [e["label"] for e in PIPELINES]
     for dup in {l for l in labels if labels.count(l) > 1}:
         errors.append(f"{dup}: declared twice")
+
+    # And the other direction. A cfg nobody declares is not measured and not
+    # deleted, so it reads as a live configuration while contributing nothing -
+    # the same silent drop-out the shader matrix is checked for. Two of these
+    # were left behind by one head change before anything looked.
+    declared = {e["cfg"] for e in PIPELINES}
+    folder = os.path.dirname(pipeline_cfg(PIPELINES[0])) if PIPELINES else None
+    if folder and os.path.isdir(folder):
+        for fn in sorted(os.listdir(folder)):
+            if fn.endswith(".cfg") and fn not in declared:
+                errors.append(f"{fn}: on disk but not declared in baseline.toml")
     return errors
 
 
