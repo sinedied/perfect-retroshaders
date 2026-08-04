@@ -114,7 +114,7 @@ uniform COMPAT_PRECISION vec2 OutputSize;
 uniform COMPAT_PRECISION vec2 TextureSize;
 uniform COMPAT_PRECISION vec2 InputSize;
 uniform sampler2D Texture;
-COMPAT_VARYING vec4 TEX0;
+COMPAT_VARYING COMPAT_PRECISION vec4 TEX0;
 
 #define Source Texture
 #define vTexCoord TEX0.xy
