@@ -16,11 +16,13 @@ does not read GLSL.
 | Path | What |
 |---|---|
 | `shaders/` | **releases only.** Never edit one. Replace only when the owner says so |
+| `shaders/slang/` | **generated.** RetroArch `.slang` + `.slangp` builds of the releases. Never edit by hand - `toslang.py` writes them and `check.py` regenerates and compares |
 | `tools/iterations/` | every version, including the current candidate. Where the work happens. **A release's source iteration must be here**, not in `optimized/` |
 | `tools/optimized/` | the retired `*-turbo` line and the probes. Kept as history and as controls |
 | `tools/optimized/` | the `*-turbo` line: the same four shaders rebuilt for the device |
 | `tools/baseline.toml` | **the one data file** — every shader's role, sampler and limits |
 | `tools/{check,measure,perf,test,preview}.py` | the five entry points |
+| `tools/toslang.py` | the released shaders as RetroArch `.slang`. Run it after any release |
 | `tools/common.py` | paths, shader text, GL, sources, reporting |
 | `tools/tests/` | per-family behavioural properties, each with its control |
 | `tools/vendor/` | third-party shaders, comparison only, not ours and not edited |
@@ -56,6 +58,14 @@ clothes.
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 brew install glslang          # glslangValidator + spirv-dis, not a Python package
 ```
+
+`glslang` now earns its keep twice: the op counts, and compiling every `.slang`
+to SPIR-V. **The desktop harness cannot render slang at all** - moderngl gives
+GL 4.1 and slang is `#version 450` with descriptor sets - so a `.slang` is
+proved equivalent by three things instead of a pixel diff: its `main()` is
+byte-identical to the release, the generator is mechanical, and both stages
+compile. That is weaker than a render, and worth remembering before trusting it
+with a change the generator does not make.
 
 Versions are pinned. Several gates are exact byte comparisons between two GPU
 renders, and the golden hashes are only meaningful against a fixed stack.

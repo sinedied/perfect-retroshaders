@@ -1,0 +1,7 @@
+# pixel-perfect, one pass. shader0 is relative to this file.
+shaders = 1
+
+shader0 = ../pixel-perfect.slang
+filter_linear0 = true
+scale_type0 = viewport
+scale0 = 1.0

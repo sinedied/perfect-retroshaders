@@ -34,6 +34,8 @@ All shaders provided here follow these principles, and were tested on a real dev
 > **These shaders need a `LINEAR` filter, in addition to rendering at the screen resolution.**
 > They scale from a single filtered tap, so with `NEAREST` the pattern still draws and nothing *looks* broken, while the picture underneath it is plain nearest-neighbour.
 
+**Using RetroArch?** Take the [`shaders/slang/`](shaders/slang/) versions instead — current RetroArch builds use the slang format, not the legacy GLSL one. They are the same shaders, translated: identical maths, identical parameters. Load a preset from [`shaders/slang/presets/`](shaders/slang/presets/) rather than the `.slang` file on its own, because the preset is what sets the `LINEAR` filter the note above is about.
+
 These shaders are designed to output at the final display resolution, as the upscaling is done internally. They are made to work at non-integer scaling factors with almost no visible artifacts/patterns, though the image will still look better at integer scales.
 
 ### Composable versions

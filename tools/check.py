@@ -19,6 +19,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common as c
+import toslang
 
 WIDTH = 80
 SEP = "// " + "-" * (WIDTH - 3)
@@ -262,6 +263,36 @@ def run(names, report, also_compile=None):
     report.check(not errors, "device pipelines resolve",
                  f"{len(c.PIPELINES)} pipelines" if not errors
                  else "; ".join(errors))
+
+    # shaders/slang is generated. Regenerating and comparing is the same check
+    # the releases get against their iterations, for the same reason: a hand
+    # edit there is invisible until somebody regenerates and loses it.
+    errors = toslang.differences()
+    report.check(not errors, "shaders/slang is what toslang.py generates",
+                 f"{len(toslang.build())} files" if not errors
+                 else "; ".join(errors))
+
+    # And it has to be valid Vulkan GLSL, which the desktop harness cannot say:
+    # it renders GL 4.1 and these are #version 450 with descriptor sets.
+    errors = []
+    for fn in sorted(os.listdir(toslang.SLANG)) if os.path.isdir(toslang.SLANG) else []:
+        if not fn.endswith(".slang"):
+            continue
+        for stage, body in zip(("vert", "frag"),
+                               toslang.stages(open(os.path.join(toslang.SLANG, fn)).read())):
+            with tempfile.NamedTemporaryFile("w", suffix="." + stage,
+                                             delete=False) as t:
+                t.write(body)
+                path = t.name
+            r = subprocess.run(["glslangValidator", "-V", "--target-env", "vulkan1.0",
+                                path, "-o", os.devnull],
+                               capture_output=True, text=True)
+            os.unlink(path)
+            if r.returncode:
+                first = [l for l in (r.stdout + r.stderr).split("\n") if "ERROR" in l]
+                errors.append(f"{fn} {stage}: {first[0] if first else 'failed'}")
+    report.check(not errors, "every .slang compiles to SPIR-V",
+                 "" if not errors else "; ".join(errors[:3]))
     return report
 
 
